@@ -14,7 +14,14 @@ const info = std.log.info;
 
 const bus = @import("bus.zig");
 
+const cop0 = @import("cop0.zig");
+
+const Cop0Reg = cop0.Cop0Reg;
+
 const exts = @import("../common/extend.zig").exts;
+
+/// Enable/disable disassembler
+const doDisasm = true;
 
 const resetVector: u32 = 0xBFC0_0000;
 
@@ -28,6 +35,22 @@ const CpuReg = enum(u5) {
     S4 = 20, S5 = 21, S6 = 22, S7 = 23,
     T8 = 24, T9 = 25, K0 = 26, K1 = 27,
     GP = 28, SP = 29, S8 = 30, RA = 31,
+};
+
+/// Opcodes
+const Opcode = enum(u6) {
+    Special = 0x00,
+    Cop0    = 0x10,
+};
+
+/// SPECIAL instructions
+const Special = enum(u6) {
+    Sll = 0x00,
+};
+
+/// COP instructions
+const CopOpcode = enum(u5) {
+    Mf = 0x00,
 };
 
 /// EE Core General-purpose register
@@ -45,6 +68,7 @@ const Gpr = struct {
             u32  => data = @truncate(u32, self.lo),
             u64  => data = self.lo,
             u128 => data = (@as(u128, self.hi) << 64) | @as(u128, self.lo),
+            else => unreachable,
         }
 
         return data;
@@ -55,12 +79,13 @@ const Gpr = struct {
         assert(T == u32 or T == u64 or T == u128);
 
         switch (T) {
-            u32  => self.lo = exts(u64, T, data),
+            u32  => self.lo = exts(u64, u32, data),
             u64  => self.lo = data,
             u128 => {
                 self.lo = @truncate(u64, data);
                 self.hi = @truncate(u64, data >> 64);
             },
+            else => unreachable,
         }
     }
 };
@@ -109,6 +134,8 @@ var regFile = RegFile{};
 pub fn init() void {
     regFile.setPc(resetVector);
 
+    cop0.init();
+
     info("   [EE Core   ] Successfully initialized.", .{});
 }
 
@@ -150,11 +177,80 @@ fn write(comptime T: type, addr: u32, data: T) void {
     bus.write(T, translateAddr(addr), data);
 }
 
+/// Get Opcode field
+fn getOpcode(instr: u32) u6 {
+    return @truncate(u6, instr >> 26);
+}
+
+/// Get Funct field
+fn getFunct(instr: u32) u6 {
+    return @truncate(u6, instr);
+}
+
+/// Get Rd field
+fn getRd(instr: u32) u5 {
+    return @truncate(u5, instr >> 11);
+}
+
+/// Get Rs field
+fn getRs(instr: u32) u5 {
+    return @truncate(u5, instr >> 21);
+}
+
+/// Get Rt field
+fn getRt(instr: u32) u5 {
+    return @truncate(u5, instr >> 16);
+}
+
 /// Decodes and executes instructions
 fn decodeInstr(instr: u32) void {
-    err("  [EE Core   ] Unhandled instruction 0x{X:0>8}.", .{instr});
+    const opcode = getOpcode(instr);
 
-    assert(false);
+    switch (opcode) {
+        @enumToInt(Opcode.Cop0) => {
+            const rs = getRs(instr);
+
+            switch (rs) {
+                @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
+                else => {
+                    err("  [EE Core   ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        else => {
+            err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
+
+            assert(false);
+        }
+    }
+}
+
+/// Move From Coprocessor
+fn iMfc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    var data: u32 = undefined;
+
+    switch (n) {
+        0 => data = cop0.get(u32, rd),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    regFile.set(u32, rt, data);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
+    
+        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRt, data});
+    }
 }
 
 /// Steps the EE Core interpreter
