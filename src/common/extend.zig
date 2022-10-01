@@ -19,6 +19,7 @@ pub fn exts(comptime dstT: type, comptime srcT: type, data: srcT) dstT {
         u8  => temp = @bitCast(u64, @as(i64, @bitCast(i8, data))),
         u16 => temp = @bitCast(u64, @as(i64, @bitCast(i16, data))),
         u32 => temp = @bitCast(u64, @as(i64, @bitCast(i32, data))),
+        else => unreachable,
     }
 
     return @truncate(dstT, temp);
