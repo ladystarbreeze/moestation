@@ -25,6 +25,9 @@ const doDisasm = true;
 
 const resetVector: u32 = 0xBFC0_0000;
 
+/// Branch delay slot helper
+var inDelaySlot: [2]bool = undefined;
+
 /// Register aliases
 const CpuReg = enum(u5) {
     R0 =  0, AT =  1, V0 =  2, V1 =  3,
@@ -40,7 +43,10 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Bne     = 0x05,
     Slti    = 0x0A,
+    Ori     = 0x0D,
+    Lui     = 0x0F,
     Cop0    = 0x10,
 };
 
@@ -107,7 +113,7 @@ const RegFile = struct {
     }
 
     /// Sets GPR
-    pub fn set(self: *RegFile, comptime T: type, idx: u5, data: u32) void {
+    pub fn set(self: *RegFile, comptime T: type, idx: u5, data: T) void {
         self.regs[idx].set(T, data);
 
         self.regs[0].set(u128, 0);
@@ -230,7 +236,10 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Bne ) => iBne(instr),
         @enumToInt(Opcode.Slti) => iSlti(instr),
+        @enumToInt(Opcode.Ori ) => iOri(instr),
+        @enumToInt(Opcode.Lui ) => iLui(instr),
         @enumToInt(Opcode.Cop0) => {
             const rs = getRs(instr);
 
@@ -248,6 +257,57 @@ fn decodeInstr(instr: u32) void {
 
             assert(false);
         }
+    }
+}
+
+/// Branch helper
+fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
+    regFile.set(u64, rd, regFile.npc);
+
+    if (isCond) {
+        regFile.npc = target;
+
+        inDelaySlot[1] = true;
+    } else {
+        if (isLikely) {
+            regFile.setPc(regFile.npc);
+        } else {
+            inDelaySlot[1] = true;
+        }
+    }
+}
+
+/// Branch on Not Equal
+fn iBne(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(u64, rs) != regFile.get(u64, rt), @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [EE Core   ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Load Upper Immediate
+fn iLui(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rt = getRt(instr);
+
+    regFile.set(u32, rt, @as(u32, imm16) << 16);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LUI ${s}, 0x{X}; ${s} = {X:0>16}h", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -273,7 +333,24 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>16}", .{n, tagRt, tagRd, tagRt, regFile.get(u128, rt)});
+        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>16}", .{n, tagRt, tagRd, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// OR Immediate
+fn iOri(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rt, regFile.get(u64, rs) | @as(u64, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -293,31 +370,34 @@ fn iSll(instr: u32) void {
             const tagRd = @tagName(@intToEnum(CpuReg, rd));
             const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-            info("   [EE Core   ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u128, rd)});
+            info("   [EE Core   ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
         }
     }
 }
 
 /// Set Less Than Immediate
 fn iSlti(instr: u32) void {
-    const imm16s = exts(u32, u16, getImm16(instr));
+    const imm16s = exts(u64, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rt, @as(u32, @bitCast(u1, @bitCast(i32, regFile.get(u32, rs)) < @bitCast(i32, imm16s))));
+    regFile.set(u64, rt, @as(u64, @bitCast(u1, @bitCast(i64, regFile.get(u64, rs)) < @bitCast(i64, imm16s))));
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u128, rt)});
+        info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
 /// Steps the EE Core interpreter
 pub fn step() void {
     regFile.cpc = regFile.pc;
+
+    inDelaySlot[0] = inDelaySlot[1];
+    inDelaySlot[1] = false;
 
     decodeInstr(fetchInstr());
 }
