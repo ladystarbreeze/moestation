@@ -1,0 +1,7 @@
+# Zig
+zig-cache
+zig-out
+
+# Debug & dev
+moeDocs
+moeFiles
