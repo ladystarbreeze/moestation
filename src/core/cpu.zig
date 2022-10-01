@@ -40,6 +40,7 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Slti    = 0x0A,
     Cop0    = 0x10,
 };
 
@@ -187,6 +188,16 @@ fn getFunct(instr: u32) u6 {
     return @truncate(u6, instr);
 }
 
+/// Get 16-bit immediate
+fn getImm16(instr: u32) u16 {
+    return @truncate(u16, instr);
+}
+
+/// Get Sa field
+fn getSa(instr: u32) u5 {
+    return @truncate(u5, instr >> 6);
+}
+
 /// Get Rd field
 fn getRd(instr: u32) u5 {
     return @truncate(u5, instr >> 11);
@@ -207,6 +218,19 @@ fn decodeInstr(instr: u32) void {
     const opcode = getOpcode(instr);
 
     switch (opcode) {
+        @enumToInt(Opcode.Special) => {
+            const funct = getFunct(instr);
+
+            switch (funct) {
+                @enumToInt(Special.Sll) => iSll(instr),
+                else => {
+                    err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        @enumToInt(Opcode.Slti) => iSlti(instr),
         @enumToInt(Opcode.Cop0) => {
             const rs = getRs(instr);
 
@@ -249,7 +273,45 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRt, data});
+        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>16}", .{n, tagRt, tagRd, tagRt, regFile.get(u128, rt)});
+    }
+}
+
+/// Shift Left Logical
+fn iSll(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, regFile.get(u32, rt) << sa);
+
+    if (doDisasm) {
+        if (@intToEnum(CpuReg, rd) == CpuReg.R0) {
+            info("   [EE Core   ] NOP", .{});
+        } else {
+            const tagRd = @tagName(@intToEnum(CpuReg, rd));
+            const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+            info("   [EE Core   ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u128, rd)});
+        }
+    }
+}
+
+/// Set Less Than Immediate
+fn iSlti(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rt, @as(u32, @bitCast(u1, @bitCast(i32, regFile.get(u32, rs)) < @bitCast(i32, imm16s))));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u128, rt)});
     }
 }
 
