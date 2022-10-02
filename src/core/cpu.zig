@@ -52,12 +52,15 @@ const Opcode = enum(u6) {
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll = 0x00,
+    Sll  = 0x00,
+    Jr   = 0x08,
+    Sync = 0x0F,
 };
 
 /// COP instructions
 const CopOpcode = enum(u5) {
     Mf = 0x00,
+    Mt = 0x04,
 };
 
 /// EE Core General-purpose register
@@ -228,7 +231,9 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll) => iSll(instr),
+                @enumToInt(Special.Sll ) => iSll(instr),
+                @enumToInt(Special.Jr  ) => iJr(instr),
+                @enumToInt(Special.Sync) => iSync(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -245,6 +250,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (rs) {
                 @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
+                @enumToInt(CopOpcode.Mt) => iMtc(instr, 0),
                 else => {
                     err("  [EE Core   ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
@@ -296,6 +302,21 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// Jump Register
+fn iJr(instr: u32) void {
+    const rs = getRs(instr);
+
+    const target = regFile.get(u32, rs);
+
+    doBranch(target, true, 0, false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+    
+        info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
+    }
+}
+
 /// Load Upper Immediate
 fn iLui(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -334,6 +355,30 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
         info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>16}", .{n, tagRt, tagRd, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Move To Coprocessor
+fn iMtc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    const data = regFile.get(u32, rt);
+
+    switch (n) {
+        0 => cop0.set(u32, rd, data),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
+    
+        info("   [EE Core   ] MTC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRd, regFile.get(u64, rt)});
     }
 }
 
@@ -389,6 +434,17 @@ fn iSlti(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Synchronize
+pub fn iSync(instr: u32) void {
+    const stype = getSa(instr);
+
+    if (doDisasm) {
+        const syncType = if ((stype >> 4) != 0) "P" else "L";
+
+        info("   [EE Core   ] SYNC.{s}", .{syncType});
     }
 }
 
