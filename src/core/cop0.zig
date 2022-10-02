@@ -50,6 +50,49 @@ pub const Cop0Reg = enum(u32) {
     R31         = 31,
 };
 
+/// COP0 Config register
+const Config = struct {
+     k0: u3   = undefined, // KSEG0 cache mode
+    bpe: bool = false,     // Branch Prediction Enable
+    nbe: bool = false,     // Non-Blocking load Enable
+    dce: bool = false,     // Data Cache Enable
+    ice: bool = false,     // Instruction Cache Enable
+    die: bool = false,     // Double Issue Enable
+
+    /// Returns Config
+    pub fn get(self: Config) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.k0) << 0;
+        data |= 1 << 6; // Data Cache size
+        data |= 2 << 9; // Instruction Cache size
+        data |= @as(u32, @bitCast(u1, self.bpe)) << 12;
+        data |= @as(u32, @bitCast(u1, self.nbe)) << 13;
+        data |= @as(u32, @bitCast(u1, self.dce)) << 16;
+        data |= @as(u32, @bitCast(u1, self.ice)) << 17;
+        data |= @as(u32, @bitCast(u1, self.die)) << 18;
+
+        return data;
+    }
+
+    /// Set Config
+    pub fn set(self: *Config, data: u32) void {
+        self.k0  = @truncate(u3, data);
+        self.bpe = (data & (1 << 12)) != 0;
+        self.nbe = (data & (1 << 13)) != 0;
+        self.dce = (data & (1 << 16)) != 0;
+        self.ice = (data & (1 << 17)) != 0;
+        self.die = (data & (1 << 18)) != 0;
+    }
+};
+
+/// COP0 register file
+const RegFile = struct {
+    config: Config = Config{},
+};
+
+var regFile = RegFile{};
+
 /// Initializes the COP0 module
 pub fn init() void {}
 
@@ -69,4 +112,18 @@ pub fn get(comptime T: type, idx: u5) T {
     }
 
     return data;
+}
+
+/// Sets a COP0 register
+pub fn set(comptime T: type, idx: u5, data: T) void {
+    assert(T == u32 or T == u64);
+
+    switch (idx) {
+        @enumToInt(Cop0Reg.Config) => regFile.config.set(data),
+        else => {
+            err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
+
+            assert(false);
+        }
+    }
 }
