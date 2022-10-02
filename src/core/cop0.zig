@@ -63,7 +63,7 @@ const Config = struct {
     pub fn get(self: Config) u32 {
         var data: u32 = 0;
 
-        data |= @as(u32, self.k0) << 0;
+        data |= @as(u32, self.k0);
         data |= 1 << 6; // Data Cache size
         data |= 2 << 9; // Instruction Cache size
         data |= @as(u32, @bitCast(u1, self.bpe)) << 12;
@@ -75,7 +75,7 @@ const Config = struct {
         return data;
     }
 
-    /// Set Config
+    /// Sets Config
     pub fn set(self: *Config, data: u32) void {
         self.k0  = @truncate(u3, data);
         self.bpe = (data & (1 << 12)) != 0;
@@ -86,12 +86,63 @@ const Config = struct {
     }
 };
 
-/// COP0 register file
-const RegFile = struct {
-    config: Config = Config{},
+/// COP0 Status register
+const Status = struct {
+    ie : bool = undefined, // Interrupt Enable
+    exl: bool = undefined, // EXception Level
+    erl: bool = true,      // ERror Level
+    ksu: u2   = 0,         // Kernel/Supervisor/User mode
+    bem: bool = undefined, // Bus Error Mask
+     im: u3   = undefined, // Interrupt Mask
+    eie: bool = undefined, // Enable IE bit
+    edi: bool = undefined, // Enable EI/DI
+     ch: bool = undefined, // Cache Hit
+    bev: bool = true,      // Boot Exception Vector
+    dev: bool = undefined, // Debug Exception Vector
+     cu: u4   = undefined, // Coprocessor Usable
+
+    // Returns Status
+    pub fn get(self: Status) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, @bitCast(u1, self.ie ));
+        data |= @as(u32, @bitCast(u1, self.exl)) << 1;
+        data |= @as(u32, @bitCast(u1, self.erl)) << 2;
+        data |= @as(u32, self.ksu) << 3;
+        data |= @as(u32, self.im & 3) << 10;
+        data |= @as(u32, @bitCast(u1, self.bem)) << 12;
+        data |= @as(u32, self.im & 4) << 13;
+        data |= @as(u32, @bitCast(u1, self.eie)) << 16;
+        data |= @as(u32, @bitCast(u1, self.edi)) << 17;
+        data |= @as(u32, @bitCast(u1, self.ch )) << 18;
+        data |= @as(u32, @bitCast(u1, self.bev)) << 22;
+        data |= @as(u32, @bitCast(u1, self.dev)) << 23;
+        data |= @as(u32, self.cu) << 28;
+
+        return data;
+    }
+
+    /// Sets Status
+    pub fn set(self: *Status, data: u32) void {
+        self.ie  = (data & 1) != 0;
+        self.exl = (data & (1 << 1)) != 0;
+        self.erl = (data & (1 << 2)) != 0;
+        self.ksu = @truncate(u2, data >> 3);
+        self.im  = @truncate(u3, (data >> 10) & 3);
+        self.bem = (data & (1 << 12)) != 0;
+        self.im |= @truncate(u3, (data >> 13) & 4);
+        self.eie = (data & (1 << 16)) != 0;
+        self.edi = (data & (1 << 17)) != 0;
+        self.ch  = (data & (1 << 18)) != 0;
+        self.bev = (data & (1 << 22)) != 0;
+        self.dev = (data & (1 << 23)) != 0;
+        self.cu  = @truncate(u4, data >> 28);
+    }
 };
 
-var regFile = RegFile{};
+/// COP0 register file (private)
+var config: Config = Config{};
+var status: Status = Status{};
 
 /// Initializes the COP0 module
 pub fn init() void {}
@@ -119,7 +170,8 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     assert(T == u32 or T == u64);
 
     switch (idx) {
-        @enumToInt(Cop0Reg.Config) => regFile.config.set(data),
+        @enumToInt(Cop0Reg.Status) => status.set(data),
+        @enumToInt(Cop0Reg.Config) => config.set(data),
         else => {
             err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
 
