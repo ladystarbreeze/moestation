@@ -86,6 +86,28 @@ const Config = struct {
     }
 };
 
+/// COP0 Index register
+const Index = struct {
+    index: u6   = undefined, // TLB index
+        p: bool = undefined, // Software bit
+    
+    /// Return Index
+    pub fn get(self: Index) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.index);
+        data |= @as(u32, @bitCast(u1, self.p)) << 31;
+
+        return data;
+    }
+
+    /// Sets Index
+    pub fn set(self: *Index, data: u32) void {
+        self.index = @truncate(u6, data);
+        self.p     = (data & (1 << 31)) != 0;
+    }
+};
+
 /// COP0 Status register
 const Status = struct {
     ie : bool = undefined, // Interrupt Enable
@@ -145,6 +167,7 @@ var compare: u32 = undefined;
 var   count: u32 = undefined;
 
 var config: Config = Config{};
+var  index: Index  =  Index{};
 var status: Status = Status{};
 
 /// Initializes the COP0 module
@@ -173,6 +196,7 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     assert(T == u32 or T == u64);
 
     switch (idx) {
+        @enumToInt(Cop0Reg.Index  ) => index.set(data),
         @enumToInt(Cop0Reg.Count  ) => count   = data,
         @enumToInt(Cop0Reg.Compare) => compare = data,
         @enumToInt(Cop0Reg.Status ) => status.set(data),
