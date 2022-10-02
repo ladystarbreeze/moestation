@@ -11,6 +11,7 @@ const assert = std.debug.assert;
 
 const err  = std.log.err;
 const info = std.log.info;
+const warn = std.log.warn;
 
 const Allocator = std.mem.Allocator;
 
@@ -69,7 +70,12 @@ pub fn read(comptime T: type, addr: u32) T {
 pub fn write(comptime T: type, addr: u32, data: T) void {
     assert(T == u8 or T == u16 or T == u32 or T == u64 or T == u128);
 
-    err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
+    switch (addr) {
+        0x1000_F500 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
+        else => {
+            err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
-    assert(false);
+            assert(false);
+        }
+    }
 }
