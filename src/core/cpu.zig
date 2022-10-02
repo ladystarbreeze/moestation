@@ -44,10 +44,12 @@ const CpuReg = enum(u5) {
 const Opcode = enum(u6) {
     Special = 0x00,
     Bne     = 0x05,
+    Addiu   = 0x09,
     Slti    = 0x0A,
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Sw      = 0x2B,
 };
 
 /// SPECIAL instructions
@@ -241,11 +243,12 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
-        @enumToInt(Opcode.Bne ) => iBne(instr),
-        @enumToInt(Opcode.Slti) => iSlti(instr),
-        @enumToInt(Opcode.Ori ) => iOri(instr),
-        @enumToInt(Opcode.Lui ) => iLui(instr),
-        @enumToInt(Opcode.Cop0) => {
+        @enumToInt(Opcode.Bne  ) => iBne(instr),
+        @enumToInt(Opcode.Addiu) => iAddiu(instr),
+        @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Ori  ) => iOri(instr),
+        @enumToInt(Opcode.Lui  ) => iLui(instr),
+        @enumToInt(Opcode.Cop0 ) => {
             const rs = getRs(instr);
 
             switch (rs) {
@@ -258,6 +261,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Sw) => iSw(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -280,6 +284,23 @@ fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
         } else {
             inDelaySlot[1] = true;
         }
+    }
+}
+
+/// ADD Immediate Unsigned
+fn iAddiu(instr: u32) void {
+    const imm16s = exts(u64, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rt, @truncate(u32, regFile.get(u64, rs) +% imm16s));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -328,7 +349,7 @@ fn iLui(instr: u32) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LUI ${s}, 0x{X}; ${s} = {X:0>16}h", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
+        info("   [EE Core   ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -435,6 +456,31 @@ fn iSlti(instr: u32) void {
 
         info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
+}
+
+/// Store Word
+fn iSw(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, regFile.get(u32, rt)});
+    }
+
+    if ((addr & 3) != 0) {
+        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u32, addr, regFile.get(u32, rt));
 }
 
 /// Synchronize
