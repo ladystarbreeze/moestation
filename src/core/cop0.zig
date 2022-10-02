@@ -141,6 +141,9 @@ const Status = struct {
 };
 
 /// COP0 register file (private)
+var compare: u32 = undefined;
+var   count: u32 = undefined;
+
 var config: Config = Config{};
 var status: Status = Status{};
 
@@ -170,8 +173,10 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     assert(T == u32 or T == u64);
 
     switch (idx) {
-        @enumToInt(Cop0Reg.Status) => status.set(data),
-        @enumToInt(Cop0Reg.Config) => config.set(data),
+        @enumToInt(Cop0Reg.Count  ) => count   = data,
+        @enumToInt(Cop0Reg.Compare) => compare = data,
+        @enumToInt(Cop0Reg.Status ) => status.set(data),
+        @enumToInt(Cop0Reg.Config ) => config.set(data),
         else => {
             err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
 
