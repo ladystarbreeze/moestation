@@ -44,6 +44,7 @@ const CpuReg = enum(u5) {
 const Opcode = enum(u6) {
     Special = 0x00,
     Jal     = 0x03,
+    Beq     = 0x04,
     Bne     = 0x05,
     Addiu   = 0x09,
     Slti    = 0x0A,
@@ -61,6 +62,8 @@ const Special = enum(u6) {
     Jr    = 0x08,
     Jalr  = 0x09,
     Sync  = 0x0F,
+    Mult  = 0x18,
+    Or    = 0x25,
     Daddu = 0x2D,
 };
 
@@ -122,6 +125,9 @@ const RegFile = struct {
      pc: u32 = undefined,
     cpc: u32 = undefined,
     npc: u32 = undefined,
+
+    lo: Gpr = undefined,
+    hi: Gpr = undefined,
 
     /// Returns GPR
     pub fn get(self: RegFile, comptime T: type, idx: u5) T {
@@ -287,6 +293,8 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
+                @enumToInt(Special.Mult ) => iMult(instr),
+                @enumToInt(Special.Or   ) => iOr(instr),
                 @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -296,6 +304,7 @@ fn decodeInstr(instr: u32) void {
             }
         },
         @enumToInt(Opcode.Jal  ) => iJal(instr),
+        @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
@@ -385,6 +394,25 @@ fn iAndi(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Branch on EQual
+fn iBeq(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(u64, rs) == regFile.get(u64, rt), @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [EE Core   ] BEQ ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -531,6 +559,51 @@ fn iMtc(instr: u32, comptime n: u2) void {
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
         info("   [EE Core   ] MTC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRd, regFile.get(u32, rt)});
+    }
+}
+
+/// MULTiply
+fn iMult(instr: u32) void {
+    const rd = getRs(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = @intCast(i64, @bitCast(i32, regFile.get(u32, rs))) *% @intCast(i64, @bitCast(i32, regFile.get(u32, rt)));
+
+    regFile.lo.set(u32, @truncate(u32, @bitCast(u64, res)));
+    regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+
+    regFile.set(u32, rd, @truncate(u32, @bitCast(u64, res)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        if (rd == 0) {
+            info("   [EE Core   ] MULT ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        } else {
+            info("   [EE Core   ] MULT ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+        }
+    }
+}
+
+/// OR
+fn iOr(instr: u32) void {
+    const rd = getRs(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u64, rs) | regFile.get(u64, rt);
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] OR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
