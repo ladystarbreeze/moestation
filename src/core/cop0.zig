@@ -86,12 +86,77 @@ const Config = struct {
     }
 };
 
+/// COP0 EntryHi register
+const EntryHi = struct {
+    asid: u8  = undefined, // Address Space IDentifier
+    vpn2: u19 = undefined, // Virtual Page Number / 2
+
+    /// Returns EntryHi
+    pub fn get(self: EntryHi) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.asid);
+        data |= @as(u32, self.vpn2) << 13;
+
+        return data;
+    }
+
+    /// Set EntryHi
+    pub fn set(self: *EntryHi, data: u32) void {
+        self.asid = @truncate(u8, data);
+        self.vpn2 = @truncate(u19, data >> 13);
+    }
+};
+
+/// COP0 EntryLo registers
+const EntryLo = struct {
+    /// Is this EntryLo0?
+    is0: bool,
+
+      g: bool = undefined, // Global
+      v: bool = undefined, // Valid
+      d: bool = undefined, // Dirty
+      c: u3   = undefined, // Cache mode
+    pfn: u20  = undefined, // Page Frame Number
+      s: bool = undefined, // Scratchpad (EntryLo0 only)
+    
+    /// Returns EntryLo
+    pub fn get(self: EntryLo) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, @bitCast(u1, self.g));
+        data |= @as(u32, @bitCast(u1, self.v)) << 1;
+        data |= @as(u32, @bitCast(u1, self.d)) << 2;
+        data |= @as(u32, self.c  ) << 3;
+        data |= @as(u32, self.pfn) << 6;
+
+        if (self.is0) {
+            data |= @as(u32, @bitCast(u1, self.s)) << 31;
+        }
+
+        return data;
+    }
+
+    /// Sets EntryLo
+    pub fn set(self: *EntryLo, data: u32) void {
+        self.g   = (data & 1) != 0;
+        self.v   = (data & (1 << 1)) != 0;
+        self.d   = (data & (1 << 2)) != 0;
+        self.c   = @truncate(u3 , data >> 3);
+        self.pfn = @truncate(u20, data >> 6);
+
+        if (self.is0) {
+            self.s = (data & (1 << 31)) != 0;
+        }
+    }
+};
+
 /// COP0 Index register
 const Index = struct {
     index: u6   = undefined, // TLB index
         p: bool = undefined, // Software bit
     
-    /// Return Index
+    /// Returns Index
     pub fn get(self: Index) u32 {
         var data: u32 = 0;
 
@@ -163,12 +228,16 @@ const Status = struct {
 };
 
 /// COP0 register file (private)
-var compare: u32 = undefined;
-var   count: u32 = undefined;
+var  compare: u32 = undefined;
+var    count: u32 = undefined;
+var pagemask: u12 = undefined;
 
-var config: Config = Config{};
-var  index: Index  =  Index{};
-var status: Status = Status{};
+var   config: Config  =  Config{};
+var  entryhi: EntryHi = EntryHi{};
+var entrylo0: EntryLo = EntryLo{.is0 = true};
+var entrylo1: EntryLo = EntryLo{.is0 = false};
+var    index: Index   =   Index{};
+var   status: Status  =  Status{};
 
 /// Initializes the COP0 module
 pub fn init() void {}
@@ -196,11 +265,15 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     assert(T == u32 or T == u64);
 
     switch (idx) {
-        @enumToInt(Cop0Reg.Index  ) => index.set(data),
-        @enumToInt(Cop0Reg.Count  ) => count   = data,
-        @enumToInt(Cop0Reg.Compare) => compare = data,
-        @enumToInt(Cop0Reg.Status ) => status.set(data),
-        @enumToInt(Cop0Reg.Config ) => config.set(data),
+        @enumToInt(Cop0Reg.Index   ) => index.set(data),
+        @enumToInt(Cop0Reg.EntryLo0) => entrylo0.set(data),
+        @enumToInt(Cop0Reg.EntryLo1) => entrylo1.set(data),
+        @enumToInt(Cop0Reg.PageMask) => pagemask = @truncate(u12, data >> 13),
+        @enumToInt(Cop0Reg.Count   ) => count = data,
+        @enumToInt(Cop0Reg.EntryHi ) => entryhi.set(data),
+        @enumToInt(Cop0Reg.Compare ) => compare = data,
+        @enumToInt(Cop0Reg.Status  ) => status.set(data),
+        @enumToInt(Cop0Reg.Config  ) => config.set(data),
         else => {
             err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
 
