@@ -50,12 +50,14 @@ const Opcode = enum(u6) {
     Lui     = 0x0F,
     Cop0    = 0x10,
     Sw      = 0x2B,
+    Sd      = 0x3F,
 };
 
 /// SPECIAL instructions
 const Special = enum(u6) {
     Sll  = 0x00,
     Jr   = 0x08,
+    Jalr = 0x09,
     Sync = 0x0F,
 };
 
@@ -241,6 +243,7 @@ fn decodeInstr(instr: u32) void {
             switch (funct) {
                 @enumToInt(Special.Sll ) => iSll(instr),
                 @enumToInt(Special.Jr  ) => iJr(instr),
+                @enumToInt(Special.Jalr) => iJalr(instr),
                 @enumToInt(Special.Sync) => iSync(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -280,6 +283,7 @@ fn decodeInstr(instr: u32) void {
             }
         },
         @enumToInt(Opcode.Sw) => iSw(instr),
+        @enumToInt(Opcode.Sd) => iSd(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -290,7 +294,7 @@ fn decodeInstr(instr: u32) void {
 
 /// Branch helper
 fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
-    regFile.set(u64, rd, regFile.npc);
+    regFile.set(u64, rd, @as(u64, regFile.npc));
 
     if (isCond) {
         regFile.npc = target;
@@ -338,6 +342,23 @@ fn iBne(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
         info("   [EE Core   ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Jump And Link Register
+fn iJalr(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+
+    const target = regFile.get(u32, rs);
+
+    doBranch(target, true, rd, false);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+    
+        info("   [EE Core   ] JALR ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(u32, rd), target});
     }
 }
 
@@ -438,6 +459,32 @@ fn iOri(instr: u32) void {
     }
 }
 
+/// Store Doubleword
+fn iSd(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = regFile.get(u64, rt);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SD ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    if ((addr & 7) != 0) {
+        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u64, addr, data);
+}
+
 /// Shift Left Logical
 fn iSll(instr: u32) void {
     const sa = getSa(instr);
@@ -484,12 +531,13 @@ fn iSw(instr: u32) void {
     const rt = getRt(instr);
 
     const addr = regFile.get(u32, rs) +% imm16s;
+    const data = regFile.get(u32, rt);
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, regFile.get(u32, rt)});
+        info("   [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 3) != 0) {
@@ -498,7 +546,7 @@ fn iSw(instr: u32) void {
         assert(false);
     }
 
-    write(u32, addr, regFile.get(u32, rt));
+    write(u32, addr, data);
 }
 
 /// Synchronize
