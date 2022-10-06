@@ -43,9 +43,11 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Jal     = 0x03,
     Bne     = 0x05,
     Addiu   = 0x09,
     Slti    = 0x0A,
+    Andi    = 0x0C,
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
@@ -55,10 +57,11 @@ const Opcode = enum(u6) {
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll  = 0x00,
-    Jr   = 0x08,
-    Jalr = 0x09,
-    Sync = 0x0F,
+    Sll   = 0x00,
+    Jr    = 0x08,
+    Jalr  = 0x09,
+    Sync  = 0x0F,
+    Daddu = 0x2D,
 };
 
 /// COP instructions
@@ -246,6 +249,11 @@ fn getImm16(instr: u32) u16 {
     return @truncate(u16, instr);
 }
 
+/// Get 26-bit offset
+fn getInstrIndex(instr: u32) u26 {
+    return @truncate(u26, instr);
+}
+
 /// Get Sa field
 fn getSa(instr: u32) u5 {
     return @truncate(u5, instr >> 6);
@@ -275,10 +283,11 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll ) => iSll(instr),
-                @enumToInt(Special.Jr  ) => iJr(instr),
-                @enumToInt(Special.Jalr) => iJalr(instr),
-                @enumToInt(Special.Sync) => iSync(instr),
+                @enumToInt(Special.Sll  ) => iSll(instr),
+                @enumToInt(Special.Jr   ) => iJr(instr),
+                @enumToInt(Special.Jalr ) => iJalr(instr),
+                @enumToInt(Special.Sync ) => iSync(instr),
+                @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -286,9 +295,11 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
         @enumToInt(Opcode.Cop0 ) => {
@@ -360,6 +371,23 @@ fn iAddiu(instr: u32) void {
     }
 }
 
+/// AND Immediate
+fn iAndi(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rt, regFile.get(u64, rs) & @as(u64, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
+}
+
 /// Branch on Not Equal
 fn iBne(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -379,6 +407,36 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// Doubleword ADD Unsigned
+fn iDaddu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u64, rs) +% regFile.get(u64, rt);
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Jump And Link
+fn iJal(instr: u32) void {
+    const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
+
+    doBranch(target, true, @enumToInt(CpuReg.RA), false);
+
+    if (doDisasm) {
+        info("   [EE Core   ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}, PC = {X:0>8}h", .{target, regFile.get(u64, @enumToInt(CpuReg.RA)), target});
+    }
+}
+
 /// Jump And Link Register
 fn iJalr(instr: u32) void {
     const rd = getRd(instr);
@@ -392,7 +450,7 @@ fn iJalr(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
     
-        info("   [EE Core   ] JALR ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(u32, rd), target});
+        info("   [EE Core   ] JALR ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(u64, rd), target});
     }
 }
 
