@@ -150,6 +150,9 @@ const RegFile = struct {
 /// RegFile instance
 var regFile = RegFile{};
 
+/// Scratchpad RAM
+var spram: [0x4000]u8 = undefined;
+
 /// Initializes the EE Core interpreter
 pub fn init() void {
     regFile.setPc(resetVector);
@@ -159,28 +162,46 @@ pub fn init() void {
     info("   [EE Core   ] Successfully initialized.", .{});
 }
 
-/// Translates virtual address to physical address
-fn translateAddr(addr: u32) u32 {
+/// Translates virtual address to physical address. Returns true if scratchpad access
+fn translateAddr(comptime isWrite: bool, addr: *u32) bool {
     // NOTE: this is Kernel mode only!
-    var pAddr: u32 = undefined;
+    var isScratchpad = false;
 
-    switch (@truncate(u4, addr >> 28)) {
+    switch (@truncate(u4, addr.* >> 28)) {
         0x8 ... 0x9, 0xA ... 0xB => {
-            pAddr = addr & 0x1FFF_FFFF;
+            addr.* &= 0x1FFF_FFFF;
         },
         0x0 ... 0x7, 0xC ... 0xF => {
-            err("  [EE Core   ] Unhandled TLB area @ 0x{X:0>8}.", .{addr});
-
-            assert(false);
+            isScratchpad = cop0.translateAddrTlb(isWrite, addr);
         },
     }
 
-    return pAddr;
+    return isScratchpad;
 }
 
 /// Reads data from the system bus
 fn read(comptime T: type, addr: u32) T {
-    return bus.read(T, translateAddr(addr));
+    var pAddr = addr;
+
+    const isScratchpad = translateAddr(false, &pAddr);
+
+    if (isScratchpad) {
+        err("  [EE Core   ] Unhandled SPRAM access ({s}) @ 0x{X:0>8}.", .{@typeName(T), pAddr});
+
+        assert(false);
+        // return readSpram(T, pAddr);
+    }
+
+    return bus.read(T, pAddr);
+}
+
+/// Reads data from scratchpad RAM
+fn readSpram(comptime T: type, addr: u32) T {
+    var data: T = undefined;
+
+    @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &spram[addr]), @sizeOf(T));
+
+    return data;
 }
 
 /// Fetches an instruction from memory and increments PC
@@ -194,7 +215,20 @@ fn fetchInstr() u32 {
 
 /// Writes data to the system bus
 fn write(comptime T: type, addr: u32, data: T) void {
-    bus.write(T, translateAddr(addr), data);
+    var pAddr = addr;
+
+    const isScratchpad = translateAddr(true, &pAddr);
+
+    if (isScratchpad) {
+        return writeSpram(T, pAddr, data);
+    }
+
+    bus.write(T, pAddr, data);
+}
+
+/// Writes data to scratchpad RAM
+fn writeSpram(comptime T: type, addr: u32, data: T) void {
+    @memcpy(@ptrCast([*]u8, &spram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
 }
 
 /// Get Opcode field
