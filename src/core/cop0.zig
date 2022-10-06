@@ -326,6 +326,65 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     }
 }
 
+/// Translates an address through the TLB. Returns true if scratchpad access
+pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
+    info("   [COP0 (EE) ] Translating address 0x{X:0>8}...", .{addr.*});
+
+    var isSpram: bool = undefined;
+
+    var idx: u5 = 0;
+    while (idx < 32) : (idx += 0) {
+        isSpram = tlbEntry[idx].s;
+
+        if (isSpram) {
+            assert(tlbEntry[idx].mask == 0 and tlbEntry[idx].d0 == tlbEntry[idx].d1 and tlbEntry[idx].v0 == tlbEntry[idx].v1);
+        }
+
+        const entryMask = tlbEntry[idx].mask;
+
+        const mask: u32 = if (isSpram) 0x3FFF else 0xFFF | (@as(u32, entryMask) << 12);
+        const vpnShift: u5 = if (isSpram) 14 else @as(u5, @popCount(u12, entryMask)) + 12;
+
+        const vpn = addr.* >> vpnShift;
+
+        const entryVpn = tlbEntry[idx].vpn2 >> (vpnShift - 12);
+
+        if (((vpn >> 1) == entryVpn) and (tlbEntry[idx].g or tlbEntry[idx].asid == entryhi.asid)) {
+            if (isSpram) {
+                addr.* &= mask;
+            } else {
+                if ((vpn & 1) != 0) {
+                    assert(tlbEntry[idx].v1);
+
+                    if (isWrite) {
+                        assert(tlbEntry[idx].d1);
+                    }
+
+                    addr.* = (@as(u32, tlbEntry[idx].pfn1) << 12) | (addr.* & mask);
+                } else {
+                    assert(tlbEntry[idx].v0);
+
+                    if (isWrite) {
+                        assert(tlbEntry[idx].d0);
+                    }
+
+                    addr.* = (@as(u32, tlbEntry[idx].pfn0) << 12) | (addr.* & mask);
+                }
+            }
+
+            info("   [COP0 (EE) ] Physical address = 0x{X:0>8}.", .{addr.*});
+
+            return isSpram;
+        }
+    }
+
+    err("  [COP0 (EE) ] Unhandled TLB miss exception.", .{});
+
+    assert(false);
+
+    return false;
+}
+
 /// Writes an indexed TLB entry
 pub fn setEntryIndexed() void {
     const idx = index.index;
