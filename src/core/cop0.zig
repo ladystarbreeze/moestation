@@ -353,23 +353,30 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
             if (isSpram) {
                 addr.* &= mask;
             } else {
+                var v: bool = undefined;
+                var d: bool = undefined;
+                
+                var pfn: u20 = undefined;
+                
                 if ((vpn & 1) != 0) {
-                    assert(tlbEntry[idx].v1);
+                    v = tlbEntry[idx].v1;
+                    d = tlbEntry[idx].d1;
 
-                    if (isWrite) {
-                        assert(tlbEntry[idx].d1);
-                    }
-
-                    addr.* = (@as(u32, tlbEntry[idx].pfn1) << 12) | (addr.* & mask);
+                    pfn = tlbEntry[idx].pfn1;
                 } else {
-                    assert(tlbEntry[idx].v0);
+                    v = tlbEntry[idx].v0;
+                    d = tlbEntry[idx].d0;
 
-                    if (isWrite) {
-                        assert(tlbEntry[idx].d0);
-                    }
-
-                    addr.* = (@as(u32, tlbEntry[idx].pfn0) << 12) | (addr.* & mask);
+                    pfn = tlbEntry[idx].pfn0;
                 }
+
+                assert(v);
+
+                if (isWrite) {
+                    assert(d);
+                }
+
+                addr.* = (@as(u32, pfn) << 12) | (addr.* & mask);
             }
 
             info("   [COP0 (EE) ] Physical address = 0x{X:0>8}.", .{addr.*});
