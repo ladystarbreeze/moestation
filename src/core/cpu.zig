@@ -52,6 +52,7 @@ const Opcode = enum(u6) {
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Beql    = 0x14,
     Sw      = 0x2B,
     Sd      = 0x3F,
 };
@@ -62,7 +63,9 @@ const Special = enum(u6) {
     Jr    = 0x08,
     Jalr  = 0x09,
     Sync  = 0x0F,
+    Mflo  = 0x12,
     Mult  = 0x18,
+    Divu  = 0x1B,
     Or    = 0x25,
     Daddu = 0x2D,
 };
@@ -293,7 +296,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
+                @enumToInt(Special.Mflo ) => iMflo(instr),
                 @enumToInt(Special.Mult ) => iMult(instr),
+                @enumToInt(Special.Divu ) => iDivu(instr),
                 @enumToInt(Special.Or   ) => iOr(instr),
                 @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
@@ -336,8 +341,9 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
-        @enumToInt(Opcode.Sw) => iSw(instr),
-        @enumToInt(Opcode.Sd) => iSd(instr),
+        @enumToInt(Opcode.Beql) => iBeql(instr),
+        @enumToInt(Opcode.Sw  ) => iSw(instr),
+        @enumToInt(Opcode.Sd  ) => iSd(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -416,6 +422,25 @@ fn iBeq(instr: u32) void {
     }
 }
 
+/// Branch on EQual Likely
+fn iBeql(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(u64, rs) == regFile.get(u64, rt), @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [EE Core   ] BEQL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+    }
+}
+
 /// Branch on Not Equal
 fn iBne(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -451,6 +476,27 @@ fn iDaddu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// DIVide Unsigned
+fn iDivu(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const n = regFile.get(u32, rs);
+    const d = regFile.get(u32, rt);
+
+    assert(d != 0);
+
+    regFile.lo.set(u32, n / d);
+    regFile.hi.set(u32, n % d);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DIVU ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -535,6 +581,21 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
         info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRt, regFile.get(u32, rt)});
+    }
+}
+
+/// Move From LO
+fn iMflo(instr: u32) void {
+    const rd = getRd(instr);
+
+    const data = regFile.lo.get(u64);
+
+    regFile.set(u64, rd, data);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] MFLO ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, data});
     }
 }
 
