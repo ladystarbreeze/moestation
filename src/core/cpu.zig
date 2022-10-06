@@ -264,6 +264,7 @@ fn decodeInstr(instr: u32) void {
                     const funct = getFunct(instr);
 
                     switch (funct) {
+                        @enumToInt(ControlOpcode.Tlbwi) => iTlbwi(),
                         else => {
                             err("  [EE Core   ] Unhandled COP0 Control instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -512,9 +513,9 @@ fn iSync(instr: u32) void {
 }
 
 /// TLB Write Indexed
-fn iTlbwi(instr: u32) {
+fn iTlbwi() void {
     if (doDisasm) {
-        info("[EE Core   ] TLBWI", .{});
+        info("   [EE Core   ] TLBWI", .{});
     }
 
     cop0.setEntryIndexed();
