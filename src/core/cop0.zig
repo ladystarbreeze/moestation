@@ -227,6 +227,47 @@ const Status = struct {
     }
 };
 
+/// TLB entry
+const TlbEntry = struct {
+      v1: bool = undefined, // Valid1
+      d1: bool = undefined, // Dirty1
+      c1: u3   = undefined, // Cache mode1
+    pfn1: u20  = undefined, // Page Frame Number1
+      v0: bool = undefined, // Valid0
+      d0: bool = undefined, // Dirty0
+      c0: u3   = undefined, // Cache mode0
+    pfn0: u20  = undefined, // Page Frame Number0
+       s: bool = undefined, // Scratchpad
+    asid: u8   = undefined, // Address Space IDentifier
+       g: bool = undefined, // Global
+    vpn2: u19  = undefined, // Virtual Page Number / 2
+    mask: u12  = undefined, // page MASK
+
+    /// Returns TLB entry
+    pub fn get(self: TlbEntry) u128 {
+        var data: u128 = 0;
+
+        data |= @as(u128, @bitCast(u1, self.v1)) << 1;
+        data |= @as(u128, @bitCast(u1, self.d1)) << 2;
+        data |= @as(u128, self.c1  ) << 3;
+        data |= @as(u128, self.pfn1) << 6;
+
+        data |= @as(u128, @bitCast(u1, self.v0)) << 33;
+        data |= @as(u128, @bitCast(u1, self.d0)) << 34;
+        data |= @as(u128, self.c0  ) << 35;
+        data |= @as(u128, self.pfn0) << 38;
+        data |= @as(u128, @bitCast(u1, self.s)) << 63;
+
+        data |= @as(u128, self.asid) << 64;
+        data |= @as(u128, @bitCast(u1, self.g)) << 76;
+        data |= @as(u128, self.vpn2) << 77;
+
+        data |= @as(u128, self.mask) << 109;
+
+        return data;
+    }
+};
+
 /// COP0 register file (private)
 var  compare: u32 = undefined;
 var    count: u32 = undefined;
@@ -238,6 +279,9 @@ var entrylo0: EntryLo = EntryLo{.is0 = true};
 var entrylo1: EntryLo = EntryLo{.is0 = false};
 var    index: Index   =   Index{};
 var   status: Status  =  Status{};
+
+/// TLB entries
+var tlbEntry: [32]TlbEntry = undefined;
 
 /// Initializes the COP0 module
 pub fn init() void {}
@@ -280,4 +324,28 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
             assert(false);
         }
     }
+}
+
+/// Writes an indexed TLB entry
+pub fn setEntryIndexed() void {
+    const idx = index.index;
+
+    tlbEntry[idx].v1   = entrylo1.v;
+    tlbEntry[idx].d1   = entrylo1.d;
+    tlbEntry[idx].c1   = entrylo1.c;
+    tlbEntry[idx].pfn1 = entrylo1.pfn;
+
+    tlbEntry[idx].v0   = entrylo0.v;
+    tlbEntry[idx].d0   = entrylo0.d;
+    tlbEntry[idx].c0   = entrylo0.c;
+    tlbEntry[idx].pfn0 = entrylo0.pfn;
+    tlbEntry[idx].s    = entrylo0.s;
+
+    tlbEntry[idx].asid = entryhi.asid;
+    tlbEntry[idx].g    = entrylo0.g and entrylo1.g;
+    tlbEntry[idx].vpn2 = entryhi.vpn2;
+
+    tlbEntry[idx].mask = pagemask;
+
+    info("   [COP0 (EE) ] Indexed write @ TLB entry {} = 0x{X:0>32}.", .{idx, tlbEntry[idx].get()});
 }
