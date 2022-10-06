@@ -63,6 +63,12 @@ const Special = enum(u6) {
 const CopOpcode = enum(u5) {
     Mf = 0x00,
     Mt = 0x04,
+    Co = 0x10,
+};
+
+/// COP Control instructions
+const ControlOpcode = enum(u6) {
+    Tlbwi = 0x02,
 };
 
 /// EE Core General-purpose register
@@ -254,6 +260,17 @@ fn decodeInstr(instr: u32) void {
             switch (rs) {
                 @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 0),
+                @enumToInt(CopOpcode.Co) => {
+                    const funct = getFunct(instr);
+
+                    switch (funct) {
+                        else => {
+                            err("  [EE Core   ] Unhandled COP0 Control instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 else => {
                     err("  [EE Core   ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
@@ -375,7 +392,7 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>16}", .{n, tagRt, tagRd, tagRt, regFile.get(u64, rt)});
+        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRt, regFile.get(u32, rt)});
     }
 }
 
@@ -399,7 +416,7 @@ fn iMtc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MTC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRd, regFile.get(u64, rt)});
+        info("   [EE Core   ] MTC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRd, regFile.get(u32, rt)});
     }
 }
 
@@ -484,7 +501,7 @@ fn iSw(instr: u32) void {
 }
 
 /// Synchronize
-pub fn iSync(instr: u32) void {
+fn iSync(instr: u32) void {
     const stype = getSa(instr);
 
     if (doDisasm) {
@@ -492,6 +509,15 @@ pub fn iSync(instr: u32) void {
 
         info("   [EE Core   ] SYNC.{s}", .{syncType});
     }
+}
+
+/// TLB Write Indexed
+fn iTlbwi(instr: u32) {
+    if (doDisasm) {
+        info("[EE Core   ] TLBWI", .{});
+    }
+
+    cop0.setEntryIndexed();
 }
 
 /// Steps the EE Core interpreter
