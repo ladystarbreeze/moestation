@@ -18,6 +18,8 @@ const cop0 = @import("cop0.zig");
 
 const Cop0Reg = cop0.Cop0Reg;
 
+const cop1 = @import("cop1.zig");
+
 const exts = @import("../common/extend.zig").exts;
 
 /// Enable/disable disassembler
@@ -55,7 +57,9 @@ const Opcode = enum(u6) {
     Cop0    = 0x10,
     Beql    = 0x14,
     Bnel    = 0x15,
+    Lb      = 0x20,
     Sw      = 0x2B,
+    Swc1    = 0x39,
     Sd      = 0x3F,
 };
 
@@ -346,7 +350,9 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Beql) => iBeql(instr),
         @enumToInt(Opcode.Bnel) => iBnel(instr),
+        @enumToInt(Opcode.Lb  ) => iLb(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
+        @enumToInt(Opcode.Swc1) => iSwc(instr, 1),
         @enumToInt(Opcode.Sd  ) => iSd(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
@@ -564,6 +570,26 @@ fn iJr(instr: u32) void {
     
         info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
     }
+}
+
+/// Load Byte
+fn iLb(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = exts(u64, u8, read(u8, addr));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
 }
 
 /// Load Upper Immediate
@@ -804,6 +830,44 @@ fn iSw(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    if ((addr & 3) != 0) {
+        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u32, addr, data);
+}
+
+/// Store Word Coprocessor
+fn iSwc(instr: u32, comptime n: u2) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    var data: u32 = undefined;
+
+    assert(cop0.isCopUsable(n));
+
+    switch (n) {
+        1 => data = cop1.getRaw(rt),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SWC{} ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{n, tagRt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 3) != 0) {
