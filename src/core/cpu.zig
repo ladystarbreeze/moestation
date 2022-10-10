@@ -61,11 +61,13 @@ const Opcode = enum(u6) {
     Cop0    = 0x10,
     Beql    = 0x14,
     Bnel    = 0x15,
+    Mmi     = 0x1C,
     Lb      = 0x20,
     Lw      = 0x23,
     Lbu     = 0x24,
     Lhu     = 0x25,
     Sb      = 0x28,
+    Sh      = 0x29,
     Sw      = 0x2B,
     Ld      = 0x37,
     Swc1    = 0x39,
@@ -97,6 +99,7 @@ const Special = enum(u6) {
 
 /// REGIMM instructions
 const Regimm = enum(u5) {
+    Bltz = 0x00,
     Bgez = 0x01,
 };
 
@@ -110,6 +113,12 @@ const CopOpcode = enum(u5) {
 /// COP Control instructions
 const ControlOpcode = enum(u6) {
     Tlbwi = 0x02,
+};
+
+/// MMI instructions
+const MmiOpcode = enum(u6) {
+    Mflo1 = 0x12,
+    Divu1 = 0x1B,
 };
 
 /// EE Core General-purpose register
@@ -133,6 +142,21 @@ const Gpr = struct {
         return data;
     }
 
+    /// Returns high 64 bits of GPR (for LO/HI)
+    pub fn getHi(self: Gpr, comptime T: type) T {
+        assert(T == u32 or T == u64);
+
+        var data: T = undefined;
+
+        switch (T) {
+            u32  => data = @truncate(u32, self.hi),
+            u64  => data = self.hi,
+            else => unreachable,
+        }
+
+        return data;
+    }
+
     /// Sets GPR
     pub fn set(self: *Gpr, comptime T: type, data: T) void {
         assert(T == u32 or T == u64 or T == u128);
@@ -144,6 +168,17 @@ const Gpr = struct {
                 self.lo = @truncate(u64, data);
                 self.hi = @truncate(u64, data >> 64);
             },
+            else => unreachable,
+        }
+    }
+
+    /// Sets high 64 bits of GPR (for LO/HI)
+    pub fn setHi(self: *Gpr, comptime T: type, data: T) void {
+        assert(T == u32 or T == u64);
+
+        switch (T) {
+            u32  => self.hi = exts(u64, u32, data),
+            u64  => self.hi = data,
             else => unreachable,
         }
     }
@@ -326,11 +361,11 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jalr ) => iJalr(instr),
                 @enumToInt(Special.Movn ) => iMovn(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
-                @enumToInt(Special.Mfhi ) => iMfhi(instr),
-                @enumToInt(Special.Mflo ) => iMflo(instr),
+                @enumToInt(Special.Mfhi ) => iMfhi(instr, false),
+                @enumToInt(Special.Mflo ) => iMflo(instr, false),
                 @enumToInt(Special.Mult ) => iMult(instr),
                 @enumToInt(Special.Div  ) => iDiv(instr),
-                @enumToInt(Special.Divu ) => iDivu(instr),
+                @enumToInt(Special.Divu ) => iDivu(instr, 0),
                 @enumToInt(Special.Addu ) => iAddu(instr),
                 @enumToInt(Special.Subu ) => iSubu(instr),
                 @enumToInt(Special.And  ) => iAnd(instr),
@@ -349,6 +384,7 @@ fn decodeInstr(instr: u32) void {
             const rt = getRt(instr);
 
             switch (rt) {
+                @enumToInt(Regimm.Bltz) => iBltz(instr),
                 @enumToInt(Regimm.Bgez) => iBgez(instr),
                 else => {
                     err("  [EE Core   ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
@@ -396,11 +432,25 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Beql) => iBeql(instr),
         @enumToInt(Opcode.Bnel) => iBnel(instr),
+        @enumToInt(Opcode.Mmi ) => {
+            const funct = getFunct(instr);
+
+            switch (funct) {
+                @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
+                @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
+                else => {
+                    err("  [EE Core   ] Unhandled MMI instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                    assert(false);
+                }
+            }
+        },
         @enumToInt(Opcode.Lb  ) => iLb(instr),
         @enumToInt(Opcode.Lw  ) => iLw(instr),
         @enumToInt(Opcode.Lbu ) => iLbu(instr),
         @enumToInt(Opcode.Lhu ) => iLhu(instr),
         @enumToInt(Opcode.Sb  ) => iSb(instr),
+        @enumToInt(Opcode.Sh  ) => iSh(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
         @enumToInt(Opcode.Ld  ) => iLd(instr),
         @enumToInt(Opcode.Swc1) => iSwc(instr, 1),
@@ -589,6 +639,23 @@ fn iBlez(instr: u32) void {
     }
 }
 
+/// Branch on Less Than Zero
+fn iBltz(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) < 0, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
 /// Branch on Not Equal
 fn iBne(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -674,7 +741,7 @@ fn iDiv(instr: u32) void {
 }
 
 /// DIVide Unsigned
-fn iDivu(instr: u32) void {
+fn iDivu(instr: u32, comptime pipeline: u1) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
@@ -683,14 +750,24 @@ fn iDivu(instr: u32) void {
 
     assert(d != 0);
 
-    regFile.lo.set(u32, n / d);
-    regFile.hi.set(u32, n % d);
+    const q = n / d;
+    const r = n % d;
+
+    if (pipeline == 1) {
+        regFile.lo.setHi(u32, q);
+        regFile.hi.setHi(u32, r);
+    } else {
+        regFile.lo.set(u32, q);
+        regFile.hi.set(u32, r);
+    }
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DIVU ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        const isPipe1 = if (pipeline == 1) "1" else "";
+
+        info("   [EE Core   ] DIVU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -911,32 +988,48 @@ fn iMfc(instr: u32, comptime n: u2) void {
 }
 
 /// Move From HI
-fn iMfhi(instr: u32) void {
+fn iMfhi(instr: u32, isHi: bool) void {
     const rd = getRd(instr);
 
-    const data = regFile.hi.get(u64);
+    var data: u64 = undefined;
+    
+    if (isHi) {
+        data = regFile.hi.getHi(u64);
+    } else {
+        data = regFile.hi.get(u64);
+    }
 
     regFile.set(u64, rd, data);
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] MFHI ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, data});
+        const is1 = if (isHi) "1" else "";
+
+        info("   [EE Core   ] MFHI{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
     }
 }
 
 /// Move From LO
-fn iMflo(instr: u32) void {
+fn iMflo(instr: u32, isHi: bool) void {
     const rd = getRd(instr);
 
-    const data = regFile.lo.get(u64);
+    var data: u64 = undefined;
+    
+    if (isHi) {
+        data = regFile.lo.getHi(u64);
+    } else {
+        data = regFile.lo.get(u64);
+    }
 
     regFile.set(u64, rd, data);
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] MFLO ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, data});
+        const is1 = if (isHi) "1" else "";
+
+        info("   [EE Core   ] MFLO{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
     }
 }
 
@@ -1092,6 +1185,32 @@ fn iSd(instr: u32) void {
     }
 
     write(u64, addr, data);
+}
+
+/// Store Halfword
+fn iSh(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = @truncate(u16, regFile.get(u32, rt));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SH ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>4}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    if ((addr & 1) != 0) {
+        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u16, addr, data);
 }
 
 /// Shift Left Logical
