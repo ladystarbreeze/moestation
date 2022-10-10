@@ -286,6 +286,11 @@ var tlbEntry: [32]TlbEntry = undefined;
 /// Initializes the COP0 module
 pub fn init() void {}
 
+/// Returns true if a coprocessor is usable
+pub fn isCopUsable(comptime n: u2) bool {
+    return (status.cu & (1 << n)) != 0;
+}
+
 /// Returns a COP0 register
 pub fn get(comptime T: type, idx: u5) T {
     assert(T == u32 or T == u64);
