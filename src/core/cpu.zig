@@ -45,10 +45,12 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Regimm  = 0x01,
     J       = 0x02,
     Jal     = 0x03,
     Beq     = 0x04,
     Bne     = 0x05,
+    Blez    = 0x06,
     Addiu   = 0x09,
     Slti    = 0x0A,
     Sltiu   = 0x0B,
@@ -75,12 +77,21 @@ const Special = enum(u6) {
     Jr    = 0x08,
     Jalr  = 0x09,
     Sync  = 0x0F,
+    Mfhi  = 0x10,
     Mflo  = 0x12,
     Mult  = 0x18,
+    Div   = 0x1A,
     Divu  = 0x1B,
     Addu  = 0x21,
+    Subu  = 0x23,
     Or    = 0x25,
+    Sltu  = 0x2B,
     Daddu = 0x2D,
+};
+
+/// REGIMM instructions
+const Regimm = enum(u5) {
+    Bgez = 0x01,
 };
 
 /// COP instructions
@@ -307,14 +318,30 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
+                @enumToInt(Special.Mfhi ) => iMfhi(instr),
                 @enumToInt(Special.Mflo ) => iMflo(instr),
                 @enumToInt(Special.Mult ) => iMult(instr),
+                @enumToInt(Special.Div  ) => iDiv(instr),
                 @enumToInt(Special.Divu ) => iDivu(instr),
                 @enumToInt(Special.Addu ) => iAddu(instr),
+                @enumToInt(Special.Subu ) => iSubu(instr),
                 @enumToInt(Special.Or   ) => iOr(instr),
+                @enumToInt(Special.Sltu ) => iSltu(instr),
                 @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        @enumToInt(Opcode.Regimm) => {
+            const rt = getRt(instr);
+
+            switch (rt) {
+                @enumToInt(Regimm.Bgez) => iBgez(instr),
+                else => {
+                    err("  [EE Core   ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
                     assert(false);
                 }
@@ -324,6 +351,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
+        @enumToInt(Opcode.Blez ) => iBlez(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
         @enumToInt(Opcode.Sltiu) => iSltiu(instr),
@@ -479,6 +507,41 @@ fn iBeql(instr: u32) void {
     }
 }
 
+
+/// Branch on Greater than or Equal Zero
+fn iBgez(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) >= 0, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Less than or Equal Zero
+fn iBlez(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) <= 0, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
 /// Branch on Not Equal
 fn iBne(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -533,6 +596,33 @@ fn iDaddu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// DIVide
+fn iDiv(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const n = @bitCast(i32, regFile.get(u32, rs));
+    const d = @bitCast(i32, regFile.get(u32, rt));
+
+    assert(d != 0);
+    assert(!(n == -0x80000000 and d == -1));
+
+    regFile.lo.set(u32, @bitCast(u32, @divFloor(n, d)));
+
+    if (d < 0) {
+        regFile.hi.set(u32, @bitCast(u32, @rem(n, -d)));
+    } else {
+        regFile.hi.set(u32, @bitCast(u32, n) % @bitCast(u32, d));
+    }
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DIV ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -746,6 +836,21 @@ fn iMfc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// Move From HI
+fn iMfhi(instr: u32) void {
+    const rd = getRd(instr);
+
+    const data = regFile.hi.get(u64);
+
+    regFile.set(u64, rd, data);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] MFHI ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, data});
+    }
+}
+
 /// Move From LO
 fn iMflo(instr: u32) void {
     const rd = getRd(instr);
@@ -948,6 +1053,23 @@ fn iSltiu(instr: u32) void {
     }
 }
 
+/// Set Less Than Unsigned
+fn iSltu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, @as(u64, @bitCast(u1, regFile.get(u64, rs) < regFile.get(u64, rt))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SLTIU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Shift Right Arithmetic
 fn iSra(instr: u32) void {
     const sa = getSa(instr);
@@ -962,6 +1084,23 @@ fn iSra(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// SUBtract Unsigned
+fn iSubu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, @truncate(u32, regFile.get(u64, rs) -% regFile.get(u64, rt)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
