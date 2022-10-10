@@ -272,6 +272,7 @@ const TlbEntry = struct {
 var  compare: u32 = undefined;
 var    count: u32 = undefined;
 var pagemask: u12 = undefined;
+var    wired: u6  = undefined;
 
 var   config: Config  =  Config{};
 var  entryhi: EntryHi = EntryHi{};
@@ -281,7 +282,7 @@ var    index: Index   =   Index{};
 var   status: Status  =  Status{};
 
 /// TLB entries
-var tlbEntry: [32]TlbEntry = undefined;
+var tlbEntry: [48]TlbEntry = undefined;
 
 /// Initializes the COP0 module
 pub fn init() void {}
@@ -318,6 +319,7 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
         @enumToInt(Cop0Reg.EntryLo0) => entrylo0.set(data),
         @enumToInt(Cop0Reg.EntryLo1) => entrylo1.set(data),
         @enumToInt(Cop0Reg.PageMask) => pagemask = @truncate(u12, data >> 13),
+        @enumToInt(Cop0Reg.Wired   ) => wired = @truncate(u6, data),
         @enumToInt(Cop0Reg.Count   ) => count = data,
         @enumToInt(Cop0Reg.EntryHi ) => entryhi.set(data),
         @enumToInt(Cop0Reg.Compare ) => compare = data,
@@ -337,8 +339,8 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
 
     var isSpram: bool = undefined;
 
-    var idx: u5 = 0;
-    while (idx < 32) : (idx += 0) {
+    var idx: u6 = 0;
+    while (idx < 48) : (idx += 0) {
         isSpram = tlbEntry[idx].s;
 
         if (isSpram) {
@@ -400,6 +402,8 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
 /// Writes an indexed TLB entry
 pub fn setEntryIndexed() void {
     const idx = index.index;
+
+    assert(idx < 48);
 
     tlbEntry[idx].v1   = entrylo1.v;
     tlbEntry[idx].d1   = entrylo1.d;
