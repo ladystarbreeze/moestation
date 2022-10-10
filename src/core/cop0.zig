@@ -299,7 +299,8 @@ pub fn get(comptime T: type, idx: u5) T {
     var data: T = undefined;
 
     switch (idx) {
-        @enumToInt(Cop0Reg.PRId) => data = @as(T, 0x59),
+        @enumToInt(Cop0Reg.Count) => data = count,
+        @enumToInt(Cop0Reg.PRId ) => data = @as(T, 0x59),
         else => {
             err("  [COP0 (EE) ] Unhandled register read ({s}) @ {s}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx))});
 
@@ -331,6 +332,11 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
             assert(false);
         }
     }
+}
+
+/// Increments Count, checks for Compare interrupts
+pub fn incrementCount() void {
+    count +%= 1;
 }
 
 /// Translates an address through the TLB. Returns true if scratchpad access
