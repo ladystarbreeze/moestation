@@ -58,9 +58,18 @@ pub fn read(comptime T: type, addr: u32) T {
     if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
-        err("  [Bus       ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+        switch (addr) {
+            0x1000_F130 => {
+                warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
-        assert(false);
+                data = 0;
+            },
+            else => {
+                err("  [Bus       ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+
+                assert(false);
+            }
+        }
     }
 
     return data;
