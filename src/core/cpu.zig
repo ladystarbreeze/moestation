@@ -82,6 +82,7 @@ const Special = enum(u6) {
     Sra    = 0x03,
     Jr     = 0x08,
     Jalr   = 0x09,
+    Movz   = 0x0A,
     Movn   = 0x0B,
     Sync   = 0x0F,
     Mfhi   = 0x10,
@@ -122,6 +123,7 @@ const ControlOpcode = enum(u6) {
 /// MMI instructions
 const MmiOpcode = enum(u6) {
     Mflo1 = 0x12,
+    Mult1 = 0x18,
     Divu1 = 0x1B,
 };
 
@@ -363,12 +365,13 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sra   ) => iSra(instr),
                 @enumToInt(Special.Jr    ) => iJr(instr),
                 @enumToInt(Special.Jalr  ) => iJalr(instr),
+                @enumToInt(Special.Movz  ) => iMovz(instr),
                 @enumToInt(Special.Movn  ) => iMovn(instr),
                 @enumToInt(Special.Sync  ) => iSync(instr),
                 @enumToInt(Special.Mfhi  ) => iMfhi(instr, false),
                 @enumToInt(Special.Mflo  ) => iMflo(instr, false),
                 @enumToInt(Special.Dsrav ) => iDsrav(instr),
-                @enumToInt(Special.Mult  ) => iMult(instr),
+                @enumToInt(Special.Mult  ) => iMult(instr, 0),
                 @enumToInt(Special.Div   ) => iDiv(instr),
                 @enumToInt(Special.Divu  ) => iDivu(instr, 0),
                 @enumToInt(Special.Addu  ) => iAddu(instr),
@@ -445,6 +448,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
+                @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
                 @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
                 else => {
                     err("  [EE Core   ] Unhandled MMI instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -1100,11 +1104,8 @@ fn iMovn(instr: u32) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    const dataRs = regFile.get(u64, rs);
-    const dataRt = regFile.get(u64, rt);
-
-    if (dataRt != 0) {
-        regFile.set(u64, rd, dataRs);
+    if (regFile.get(u64, rt) != 0) {
+        regFile.set(u64, rd, regFile.get(u64, rs));
     }
 
     if (doDisasm) {
@@ -1112,7 +1113,26 @@ fn iMovn(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] MOVN ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRt, dataRt, tagRd, dataRs});
+        info("   [EE Core   ] MOVN ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRt, regFile.get(u64, rd)});
+    }
+}
+
+/// MOVe on Zero
+fn iMovz(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    if (regFile.get(u64, rt) == 0) {
+        regFile.set(u64, rd, regFile.get(u64, rs));
+    }
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] MOVZ ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1141,15 +1161,20 @@ fn iMtc(instr: u32, comptime n: u2) void {
 }
 
 /// MULTiply
-fn iMult(instr: u32) void {
+fn iMult(instr: u32, comptime pipeline: u1) void {
     const rd = getRs(instr);
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const res = @intCast(i64, @bitCast(i32, regFile.get(u32, rs))) *% @intCast(i64, @bitCast(i32, regFile.get(u32, rt)));
 
-    regFile.lo.set(u32, @truncate(u32, @bitCast(u64, res)));
-    regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+    if (pipeline == 1) {
+        regFile.lo.setHi(u32, @truncate(u32, @bitCast(u64, res)));
+        regFile.hi.setHi(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+    } else {
+        regFile.lo.set(u32, @truncate(u32, @bitCast(u64, res)));
+        regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+    }
 
     regFile.set(u32, rd, @truncate(u32, @bitCast(u64, res)));
 
@@ -1158,10 +1183,12 @@ fn iMult(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
+        const isPipe1 = if (pipeline == 1) "1" else "";
+
         if (rd == 0) {
-            info("   [EE Core   ] MULT ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+            info("   [EE Core   ] MULT{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
         } else {
-            info("   [EE Core   ] MULT ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+            info("   [EE Core   ] MULT{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
         }
     }
 }
@@ -1308,7 +1335,7 @@ fn iSlt(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        info("   [EE Core   ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1359,7 +1386,7 @@ fn iSltu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        info("   [EE Core   ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
