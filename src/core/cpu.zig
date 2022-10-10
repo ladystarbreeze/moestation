@@ -59,6 +59,7 @@ const Opcode = enum(u6) {
     Beql    = 0x14,
     Bnel    = 0x15,
     Lb      = 0x20,
+    Lw      = 0x23,
     Lbu     = 0x24,
     Sw      = 0x2B,
     Ld      = 0x37,
@@ -354,6 +355,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Beql) => iBeql(instr),
         @enumToInt(Opcode.Bnel) => iBnel(instr),
         @enumToInt(Opcode.Lb  ) => iLb(instr),
+        @enumToInt(Opcode.Lw  ) => iLw(instr),
         @enumToInt(Opcode.Lbu ) => iLbu(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
         @enumToInt(Opcode.Ld  ) => iLd(instr),
@@ -668,6 +670,33 @@ fn iLui(instr: u32) void {
 
         info("   [EE Core   ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
     }
+}
+
+/// Load Word
+fn iLw(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if ((addr & 3) != 0) {
+        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = exts(u64, u32, read(u32, addr));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LW ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
 }
 
 /// Move From Coprocessor
