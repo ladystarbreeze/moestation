@@ -18,8 +18,38 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
-// Memory arrays
-var bios: []u8 = undefined; // BIOS ROM
+/// KPUTCHAR register
+const Kputchar = struct {
+    msg: [256]u8 = undefined,
+
+    idx: u9 = 0,
+
+    /// Writes a character to KPUTCHAR
+    pub fn write(self: *Kputchar, c: u8) void {
+        if (self.idx >= 256) {
+            err("  [KPUTCHAR  ] Message buffer overflowed.", .{});
+
+            assert(false);
+        }
+
+        if (c == 0x0A) {
+            self.msg[self.idx] = 0;
+
+            self.flush();
+        } else {
+            self.msg[self.idx] = c;
+
+            self.idx += 1;
+        }
+    }
+
+    /// Prints out and resets message
+    fn flush(self: *Kputchar) void {
+        info("   [KPUTCHAR  ] {s}", .{self.msg});
+
+        self.idx = 0;
+    }
+};
 
 /// Memory base addresses
 const MemBase = enum(u32) {
@@ -30,6 +60,12 @@ const MemBase = enum(u32) {
 const MemSize = enum(u32) {
     Bios = 0x40_0000,
 };
+
+// Memory arrays
+var bios: []u8 = undefined; // BIOS ROM
+
+/// KPUTCHAR
+var kputchar: Kputchar = Kputchar{};
 
 /// Initializes the bus module
 pub fn init(allocator: Allocator, biosPath: []const u8) !void {
@@ -80,6 +116,11 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     assert(T == u8 or T == u16 or T == u32 or T == u64 or T == u128);
 
     switch (addr) {
+        0x1000_F180 => {
+            assert(T == u8);
+
+            kputchar.write(@truncate(u8, data));
+        },
         0x1000_F100, 0x1000_F120, 0x1000_F140, 0x1000_F150,
         0x1000_F500 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
         else => {
