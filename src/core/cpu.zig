@@ -61,6 +61,7 @@ const Opcode = enum(u6) {
     Lb      = 0x20,
     Lw      = 0x23,
     Lbu     = 0x24,
+    Sb      = 0x28,
     Sw      = 0x2B,
     Ld      = 0x37,
     Swc1    = 0x39,
@@ -77,6 +78,7 @@ const Special = enum(u6) {
     Mflo  = 0x12,
     Mult  = 0x18,
     Divu  = 0x1B,
+    Addu  = 0x21,
     Or    = 0x25,
     Daddu = 0x2D,
 };
@@ -308,6 +310,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Mflo ) => iMflo(instr),
                 @enumToInt(Special.Mult ) => iMult(instr),
                 @enumToInt(Special.Divu ) => iDivu(instr),
+                @enumToInt(Special.Addu ) => iAddu(instr),
                 @enumToInt(Special.Or   ) => iOr(instr),
                 @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
@@ -357,6 +360,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Lb  ) => iLb(instr),
         @enumToInt(Opcode.Lw  ) => iLw(instr),
         @enumToInt(Opcode.Lbu ) => iLbu(instr),
+        @enumToInt(Opcode.Sb  ) => iSb(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
         @enumToInt(Opcode.Ld  ) => iLd(instr),
         @enumToInt(Opcode.Swc1) => iSwc(instr, 1),
@@ -400,6 +404,23 @@ fn iAddiu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// ADD Unsigned
+fn iAddu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, @truncate(u32, regFile.get(u64, rs) +% regFile.get(u64, rt)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -824,6 +845,26 @@ fn iOri(instr: u32) void {
 
         info("   [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
     }
+}
+
+/// Store Byte
+fn iSb(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = @truncate(u8, regFile.get(u32, rt));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SB ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    write(u8, addr, data);
 }
 
 /// Store Doubleword
