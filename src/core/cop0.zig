@@ -346,7 +346,7 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
     var isSpram: bool = undefined;
 
     var idx: u6 = 0;
-    while (idx < 48) : (idx += 0) {
+    while (idx < 48) : (idx += 1) {
         isSpram = tlbEntry[idx].s;
 
         if (isSpram) {
