@@ -58,7 +58,9 @@ const Opcode = enum(u6) {
     Beql    = 0x14,
     Bnel    = 0x15,
     Lb      = 0x20,
+    Lbu     = 0x24,
     Sw      = 0x2B,
+    Ld      = 0x37,
     Swc1    = 0x39,
     Sd      = 0x3F,
 };
@@ -66,6 +68,7 @@ const Opcode = enum(u6) {
 /// SPECIAL instructions
 const Special = enum(u6) {
     Sll   = 0x00,
+    Sra   = 0x03,
     Jr    = 0x08,
     Jalr  = 0x09,
     Sync  = 0x0F,
@@ -299,6 +302,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(Special.Sll  ) => iSll(instr),
+                @enumToInt(Special.Sra  ) => iSra(instr),
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
@@ -351,7 +355,9 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Beql) => iBeql(instr),
         @enumToInt(Opcode.Bnel) => iBnel(instr),
         @enumToInt(Opcode.Lb  ) => iLb(instr),
+        @enumToInt(Opcode.Lbu ) => iLbu(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
+        @enumToInt(Opcode.Ld  ) => iLd(instr),
         @enumToInt(Opcode.Swc1) => iSwc(instr, 1),
         @enumToInt(Opcode.Sd  ) => iSd(instr),
         else => {
@@ -592,6 +598,53 @@ fn iLb(instr: u32) void {
     regFile.set(u64, rt, data);
 }
 
+/// Load Byte Unsigned
+fn iLbu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = @as(u64, read(u8, addr));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LBU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
+/// Load Doubleword
+fn iLd(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if ((addr & 7) != 0) {
+        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = read(u64, addr);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LD ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
 /// Load Upper Immediate
 fn iLui(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -815,6 +868,23 @@ fn iSltiu(instr: u32) void {
     }
 }
 
+/// Shift Right Arithmetic
+fn iSra(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, @truncate(u32, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> sa)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Store Word
 fn iSw(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -852,7 +922,11 @@ fn iSwc(instr: u32, comptime n: u2) void {
 
     var data: u32 = undefined;
 
-    assert(cop0.isCopUsable(n));
+    if (!cop0.isCopUsable(n)) {
+        err("  [EE Core   ] Coprocessor {} is unusable!", .{n});
+
+        assert(false);
+    }
 
     switch (n) {
         1 => data = cop1.getRaw(rt),
@@ -865,9 +939,8 @@ fn iSwc(instr: u32, comptime n: u2) void {
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
-        const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SWC{} ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{n, tagRt, imm16s, tagRs, addr, data});
+        info("   [EE Core   ] SWC{} ${}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 3) != 0) {
