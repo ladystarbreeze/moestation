@@ -45,6 +45,7 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    J       = 0x02,
     Jal     = 0x03,
     Beq     = 0x04,
     Bne     = 0x05,
@@ -207,10 +208,7 @@ fn read(comptime T: type, addr: u32) T {
     const isScratchpad = translateAddr(false, &pAddr);
 
     if (isScratchpad) {
-        err("  [EE Core   ] Unhandled SPRAM access ({s}) @ 0x{X:0>8}.", .{@typeName(T), pAddr});
-
-        assert(false);
-        // return readSpram(T, pAddr);
+        return readSpram(T, pAddr);
     }
 
     return bus.read(T, pAddr);
@@ -318,6 +316,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.J    ) => iJ(instr),
         @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
@@ -532,6 +531,17 @@ fn iDivu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DIVU ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+    }
+}
+
+/// Jump
+fn iJ(instr: u32) void {
+    const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
+
+    doBranch(target, true, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        info("   [EE Core   ] J 0x{X:0>8}; PC = {X:0>8}h", .{target, target});
     }
 }
 
