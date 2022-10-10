@@ -48,11 +48,13 @@ const Opcode = enum(u6) {
     Bne     = 0x05,
     Addiu   = 0x09,
     Slti    = 0x0A,
+    Sltiu   = 0x0B,
     Andi    = 0x0C,
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
     Beql    = 0x14,
+    Bnel    = 0x15,
     Sw      = 0x2B,
     Sd      = 0x3F,
 };
@@ -313,6 +315,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Sltiu) => iSltiu(instr),
         @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
@@ -342,6 +345,7 @@ fn decodeInstr(instr: u32) void {
             }
         },
         @enumToInt(Opcode.Beql) => iBeql(instr),
+        @enumToInt(Opcode.Bnel) => iBnel(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
         @enumToInt(Opcode.Sd  ) => iSd(instr),
         else => {
@@ -457,6 +461,25 @@ fn iBne(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
         info("   [EE Core   ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Branch on Not Equal Likely
+fn iBnel(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(u64, rs) != regFile.get(u64, rt), @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [EE Core   ] BNEL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -746,6 +769,23 @@ fn iSlti(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Set Less Than Immediate Unsigned
+fn iSltiu(instr: u32) void {
+    const imm16s = exts(u64, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rt, @as(u64, @bitCast(u1, regFile.get(u64, rs) < imm16s)));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SLTIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
