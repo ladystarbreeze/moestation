@@ -64,6 +64,7 @@ const Opcode = enum(u6) {
     Lb      = 0x20,
     Lw      = 0x23,
     Lbu     = 0x24,
+    Lhu     = 0x25,
     Sb      = 0x28,
     Sw      = 0x2B,
     Ld      = 0x37,
@@ -74,6 +75,7 @@ const Opcode = enum(u6) {
 /// SPECIAL instructions
 const Special = enum(u6) {
     Sll   = 0x00,
+    Srl   = 0x02,
     Sra   = 0x03,
     Jr    = 0x08,
     Jalr  = 0x09,
@@ -86,7 +88,9 @@ const Special = enum(u6) {
     Divu  = 0x1B,
     Addu  = 0x21,
     Subu  = 0x23,
+    And   = 0x24,
     Or    = 0x25,
+    Slt   = 0x2A,
     Sltu  = 0x2B,
     Daddu = 0x2D,
 };
@@ -316,6 +320,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(Special.Sll  ) => iSll(instr),
+                @enumToInt(Special.Srl  ) => iSrl(instr),
                 @enumToInt(Special.Sra  ) => iSra(instr),
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
@@ -328,7 +333,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Divu ) => iDivu(instr),
                 @enumToInt(Special.Addu ) => iAddu(instr),
                 @enumToInt(Special.Subu ) => iSubu(instr),
+                @enumToInt(Special.And  ) => iAnd(instr),
                 @enumToInt(Special.Or   ) => iOr(instr),
+                @enumToInt(Special.Slt  ) => iSlt(instr),
                 @enumToInt(Special.Sltu ) => iSltu(instr),
                 @enumToInt(Special.Daddu) => iDaddu(instr),
                 else => {
@@ -392,6 +399,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Lb  ) => iLb(instr),
         @enumToInt(Opcode.Lw  ) => iLw(instr),
         @enumToInt(Opcode.Lbu ) => iLbu(instr),
+        @enumToInt(Opcode.Lhu ) => iLhu(instr),
         @enumToInt(Opcode.Sb  ) => iSb(instr),
         @enumToInt(Opcode.Sw  ) => iSw(instr),
         @enumToInt(Opcode.Ld  ) => iLd(instr),
@@ -453,6 +461,25 @@ fn iAddu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// AND
+fn iAnd(instr: u32) void {
+    const rd = getRs(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u64, rs) & regFile.get(u64, rt);
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] AND ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -788,6 +815,33 @@ fn iLd(instr: u32) void {
     regFile.set(u64, rt, data);
 }
 
+/// Load Halfword Unsigned
+fn iLhu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if ((addr & 1) != 0) {
+        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = @as(u64, read(u16, addr));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LHU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
 /// Load Upper Immediate
 fn iLui(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -1061,6 +1115,23 @@ fn iSll(instr: u32) void {
     }
 }
 
+/// Set Less Than
+fn iSlt(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, @as(u64, @bitCast(u1, @bitCast(i64, regFile.get(u64, rs)) < @intCast(i64, regFile.get(u64, rt)))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Set Less Than Immediate
 fn iSlti(instr: u32) void {
     const imm16s = exts(u64, u16, getImm16(instr));
@@ -1108,7 +1179,7 @@ fn iSltu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTIU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        info("   [EE Core   ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1126,6 +1197,23 @@ fn iSra(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Shift Right Logical
+fn iSrl(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, @truncate(u32, regFile.get(u64, rt) >> sa));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1241,4 +1329,6 @@ pub fn step() void {
     inDelaySlot[1] = false;
 
     decodeInstr(fetchInstr());
+
+    cop0.incrementCount();
 }
