@@ -51,6 +51,7 @@ const Opcode = enum(u6) {
     Beq     = 0x04,
     Bne     = 0x05,
     Blez    = 0x06,
+    Bgtz    = 0x07,
     Addiu   = 0x09,
     Slti    = 0x0A,
     Sltiu   = 0x0B,
@@ -76,6 +77,7 @@ const Special = enum(u6) {
     Sra   = 0x03,
     Jr    = 0x08,
     Jalr  = 0x09,
+    Movn  = 0x0B,
     Sync  = 0x0F,
     Mfhi  = 0x10,
     Mflo  = 0x12,
@@ -317,6 +319,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sra  ) => iSra(instr),
                 @enumToInt(Special.Jr   ) => iJr(instr),
                 @enumToInt(Special.Jalr ) => iJalr(instr),
+                @enumToInt(Special.Movn ) => iMovn(instr),
                 @enumToInt(Special.Sync ) => iSync(instr),
                 @enumToInt(Special.Mfhi ) => iMfhi(instr),
                 @enumToInt(Special.Mflo ) => iMflo(instr),
@@ -352,6 +355,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Blez ) => iBlez(instr),
+        @enumToInt(Opcode.Bgtz ) => iBgtz(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
         @enumToInt(Opcode.Sltiu) => iSltiu(instr),
@@ -507,7 +511,6 @@ fn iBeql(instr: u32) void {
     }
 }
 
-
 /// Branch on Greater than or Equal Zero
 fn iBgez(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -522,6 +525,23 @@ fn iBgez(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
         info("   [EE Core   ] BGEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Greater Than Zero
+fn iBgtz(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) > 0, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -863,6 +883,28 @@ fn iMflo(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
         info("   [EE Core   ] MFLO ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, data});
+    }
+}
+
+/// MOVe on Not equal
+fn iMovn(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const dataRs = regFile.get(u64, rs);
+    const dataRt = regFile.get(u64, rt);
+
+    if (dataRt != 0) {
+        regFile.set(u64, rd, dataRs);
+    }
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] MOVN ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRt, dataRt, tagRd, dataRs});
     }
 }
 
