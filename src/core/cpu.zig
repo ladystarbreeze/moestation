@@ -23,7 +23,7 @@ const cop1 = @import("cop1.zig");
 const exts = @import("../common/extend.zig").exts;
 
 /// Enable/disable disassembler
-const doDisasm = true;
+const doDisasm = false;
 
 const resetVector: u32 = 0xBFC0_0000;
 
@@ -57,6 +57,7 @@ const Opcode = enum(u6) {
     Sltiu   = 0x0B,
     Andi    = 0x0C,
     Ori     = 0x0D,
+    Xori    = 0x0E,
     Lui     = 0x0F,
     Cop0    = 0x10,
     Beql    = 0x14,
@@ -76,25 +77,28 @@ const Opcode = enum(u6) {
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll   = 0x00,
-    Srl   = 0x02,
-    Sra   = 0x03,
-    Jr    = 0x08,
-    Jalr  = 0x09,
-    Movn  = 0x0B,
-    Sync  = 0x0F,
-    Mfhi  = 0x10,
-    Mflo  = 0x12,
-    Mult  = 0x18,
-    Div   = 0x1A,
-    Divu  = 0x1B,
-    Addu  = 0x21,
-    Subu  = 0x23,
-    And   = 0x24,
-    Or    = 0x25,
-    Slt   = 0x2A,
-    Sltu  = 0x2B,
-    Daddu = 0x2D,
+    Sll    = 0x00,
+    Srl    = 0x02,
+    Sra    = 0x03,
+    Jr     = 0x08,
+    Jalr   = 0x09,
+    Movn   = 0x0B,
+    Sync   = 0x0F,
+    Mfhi   = 0x10,
+    Mflo   = 0x12,
+    Dsrav  = 0x17,
+    Mult   = 0x18,
+    Div    = 0x1A,
+    Divu   = 0x1B,
+    Addu   = 0x21,
+    Subu   = 0x23,
+    And    = 0x24,
+    Or     = 0x25,
+    Slt    = 0x2A,
+    Sltu   = 0x2B,
+    Daddu  = 0x2D,
+    Dsll32 = 0x3C,
+    Dsra32 = 0x3F,
 };
 
 /// REGIMM instructions
@@ -354,25 +358,28 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll  ) => iSll(instr),
-                @enumToInt(Special.Srl  ) => iSrl(instr),
-                @enumToInt(Special.Sra  ) => iSra(instr),
-                @enumToInt(Special.Jr   ) => iJr(instr),
-                @enumToInt(Special.Jalr ) => iJalr(instr),
-                @enumToInt(Special.Movn ) => iMovn(instr),
-                @enumToInt(Special.Sync ) => iSync(instr),
-                @enumToInt(Special.Mfhi ) => iMfhi(instr, false),
-                @enumToInt(Special.Mflo ) => iMflo(instr, false),
-                @enumToInt(Special.Mult ) => iMult(instr),
-                @enumToInt(Special.Div  ) => iDiv(instr),
-                @enumToInt(Special.Divu ) => iDivu(instr, 0),
-                @enumToInt(Special.Addu ) => iAddu(instr),
-                @enumToInt(Special.Subu ) => iSubu(instr),
-                @enumToInt(Special.And  ) => iAnd(instr),
-                @enumToInt(Special.Or   ) => iOr(instr),
-                @enumToInt(Special.Slt  ) => iSlt(instr),
-                @enumToInt(Special.Sltu ) => iSltu(instr),
-                @enumToInt(Special.Daddu) => iDaddu(instr),
+                @enumToInt(Special.Sll   ) => iSll(instr),
+                @enumToInt(Special.Srl   ) => iSrl(instr),
+                @enumToInt(Special.Sra   ) => iSra(instr),
+                @enumToInt(Special.Jr    ) => iJr(instr),
+                @enumToInt(Special.Jalr  ) => iJalr(instr),
+                @enumToInt(Special.Movn  ) => iMovn(instr),
+                @enumToInt(Special.Sync  ) => iSync(instr),
+                @enumToInt(Special.Mfhi  ) => iMfhi(instr, false),
+                @enumToInt(Special.Mflo  ) => iMflo(instr, false),
+                @enumToInt(Special.Dsrav ) => iDsrav(instr),
+                @enumToInt(Special.Mult  ) => iMult(instr),
+                @enumToInt(Special.Div   ) => iDiv(instr),
+                @enumToInt(Special.Divu  ) => iDivu(instr, 0),
+                @enumToInt(Special.Addu  ) => iAddu(instr),
+                @enumToInt(Special.Subu  ) => iSubu(instr),
+                @enumToInt(Special.And   ) => iAnd(instr),
+                @enumToInt(Special.Or    ) => iOr(instr),
+                @enumToInt(Special.Slt   ) => iSlt(instr),
+                @enumToInt(Special.Sltu  ) => iSltu(instr),
+                @enumToInt(Special.Daddu ) => iDaddu(instr),
+                @enumToInt(Special.Dsll32) => iDsll32(instr),
+                @enumToInt(Special.Dsra32) => iDsra32(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -404,6 +411,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Sltiu) => iSltiu(instr),
         @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
+        @enumToInt(Opcode.Xori ) => iXori(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
         @enumToInt(Opcode.Cop0 ) => {
             const rs = getRs(instr);
@@ -468,6 +476,8 @@ fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
     regFile.set(u64, rd, @as(u64, regFile.npc));
 
     if (isCond) {
+        assert(target != 0xBFC00928);
+
         regFile.npc = target;
 
         inDelaySlot[1] = true;
@@ -768,6 +778,57 @@ fn iDivu(instr: u32, comptime pipeline: u1) void {
         const isPipe1 = if (pipeline == 1) "1" else "";
 
         info("   [EE Core   ] DIVU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+    }
+}
+
+/// Doubleword Shift Left Logical + 32
+fn iDsll32(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, regFile.get(u64, rt) << (@as(u6, sa) + 32));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSLL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Doubleword Shift Right Arithmetic Variable
+fn iDsrav(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> @truncate(u6, regFile.get(u64, rs))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Doubleword Shift Right Arithmetic
+fn iDsra32(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> (@as(u6, sa) + 32)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRA32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1438,6 +1499,23 @@ fn iTlbwi() void {
     }
 
     cop0.setEntryIndexed();
+}
+
+/// XOR Immediate
+fn iXori(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rt, regFile.get(u64, rs) ^ @as(u64, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] XORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
 }
 
 /// Steps the EE Core interpreter
