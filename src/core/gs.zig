@@ -38,6 +38,24 @@ const PrivReg = enum(u32) {
 /// Writes data to privileged register
 pub fn writePriv(addr: u32, data: u64) void {
     switch (addr) {
+        @enumToInt(PrivReg.Smode1) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SMODE1) = 0x{X:0>16}.", .{addr, data});
+        },
+        @enumToInt(PrivReg.Smode2) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SMODE2) = 0x{X:0>16}.", .{addr, data});
+        },
+        @enumToInt(PrivReg.Srfsh) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SRFSH) = 0x{X:0>16}.", .{addr, data});
+        },
+        @enumToInt(PrivReg.Synch1) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SYNCH1) = 0x{X:0>16}.", .{addr, data});
+        },
+        @enumToInt(PrivReg.Synch2) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SYNCH2) = 0x{X:0>16}.", .{addr, data});
+        },
+        @enumToInt(PrivReg.Syncv) => {
+            info("   [GS        ] Write @ 0x{X:0>8} (SYNCV) = 0x{X:0>16}.", .{addr, data});
+        },
         @enumToInt(PrivReg.GsCsr) => {
             info("   [GS        ] Write @ 0x{X:0>8} (GS_CSR) = 0x{X:0>16}.", .{addr, data});
 
