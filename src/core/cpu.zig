@@ -74,6 +74,7 @@ const Opcode = enum(u6) {
     Sb      = 0x28,
     Sh      = 0x29,
     Sw      = 0x2B,
+    Cache   = 0x2F,
     Ld      = 0x37,
     Swc1    = 0x39,
     Sd      = 0x3F,
@@ -130,6 +131,12 @@ const MmiOpcode = enum(u6) {
     Mflo1 = 0x12,
     Mult1 = 0x18,
     Divu1 = 0x1B,
+    Mmi3  = 0x29,
+};
+
+/// MMI3 instructions
+const Mmi3Opcode = enum(u5) {
+    Por = 0x12,
 };
 
 /// EE Core General-purpose register
@@ -457,6 +464,18 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
                 @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
                 @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
+                @enumToInt(MmiOpcode.Mmi3 ) => {
+                    const sa = getSa(instr);
+
+                    switch (sa) {
+                        @enumToInt(Mmi3Opcode.Por) => iPor(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled MMI3 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 else => {
                     err("  [EE Core   ] Unhandled MMI instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -464,19 +483,20 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
-        @enumToInt(Opcode.Lq  ) => iLq(instr),
-        @enumToInt(Opcode.Sq  ) => iSq(instr),
-        @enumToInt(Opcode.Lb  ) => iLb(instr),
-        @enumToInt(Opcode.Lh  ) => iLh(instr),
-        @enumToInt(Opcode.Lw  ) => iLw(instr),
-        @enumToInt(Opcode.Lbu ) => iLbu(instr),
-        @enumToInt(Opcode.Lhu ) => iLhu(instr),
-        @enumToInt(Opcode.Sb  ) => iSb(instr),
-        @enumToInt(Opcode.Sh  ) => iSh(instr),
-        @enumToInt(Opcode.Sw  ) => iSw(instr),
-        @enumToInt(Opcode.Ld  ) => iLd(instr),
-        @enumToInt(Opcode.Swc1) => iSwc(instr, 1),
-        @enumToInt(Opcode.Sd  ) => iSd(instr),
+        @enumToInt(Opcode.Lq   ) => iLq(instr),
+        @enumToInt(Opcode.Sq   ) => iSq(instr),
+        @enumToInt(Opcode.Lb   ) => iLb(instr),
+        @enumToInt(Opcode.Lh   ) => iLh(instr),
+        @enumToInt(Opcode.Lw   ) => iLw(instr),
+        @enumToInt(Opcode.Lbu  ) => iLbu(instr),
+        @enumToInt(Opcode.Lhu  ) => iLhu(instr),
+        @enumToInt(Opcode.Sb   ) => iSb(instr),
+        @enumToInt(Opcode.Sh   ) => iSh(instr),
+        @enumToInt(Opcode.Sw   ) => iSw(instr),
+        @enumToInt(Opcode.Cache) => iCache(instr),
+        @enumToInt(Opcode.Ld   ) => iLd(instr),
+        @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
+        @enumToInt(Opcode.Sd   ) => iSd(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -715,6 +735,22 @@ fn iBnel(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
         info("   [EE Core   ] BNEL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// CACHE
+fn iCache(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] CACHE 0x{X:0>2}, 0x{X}(${s}); ADDR = 0x{X:0>8}", .{rt, imm16s, tagRs, addr});
     }
 }
 
@@ -1318,6 +1354,25 @@ fn iOri(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Parallel OR
+fn iPor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u128, rs) | regFile.get(u128, rt);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] POR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
