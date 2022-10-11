@@ -43,3 +43,8 @@ pub fn write(addr: u32, data: u32) void {
         }
     }
 }
+
+/// Writes data to GIF FIFO
+pub fn writeFifo(data: u128) void {
+    info("   [GIF       ] Write @ FIFO = 0x{X:0>32}.", .{data});
+}
