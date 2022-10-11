@@ -18,6 +18,8 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
+const intc = @import("intc.zig");
+
 /// KPUTCHAR register
 const Kputchar = struct {
     msg: [256]u8 = undefined,
@@ -119,19 +121,30 @@ pub fn read(comptime T: type, addr: u32) T {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
+            0x1000_F010 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ INTC_MASK");
+                }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (INTC_MASK).", .{@typeName(T), addr});
+
+                data = intc.getMask();
+            },
             0x1000_F430 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ MCH_RICM");
+                }
+
                 info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (MCH_RICM).", .{@typeName(T), addr});
 
                 data = 0;
             },
             0x1000_F440 => {
-                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (MCH_DRD).", .{@typeName(T), addr});
-
-                comptime {
-                    if (T != u32) {
-                        return 0;
-                    }
+                if (T != u32) {
+                    @panic("Unhandled read @ MCH_DRD");
                 }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (MCH_DRD).", .{@typeName(T), addr});
 
                 const sop = @truncate(u4, mchRicm >> 6);
 
@@ -140,7 +153,7 @@ pub fn read(comptime T: type, addr: u32) T {
 
                     switch (sa) {
                         0x21 => {
-                            info("   [RDRAM     ] Command 0x21 (Init).", .{});
+                            info("   [RDRAM     ] Register 0x21 (Init).", .{});
 
                             if (rdramSdevId < 2) {
                                 rdramSdevId += 1;
@@ -151,12 +164,12 @@ pub fn read(comptime T: type, addr: u32) T {
                             }
                         },
                         0x40 => {
-                            info("   [RDRAM     ] Command 0x40 (DevId).", .{});
+                            info("   [RDRAM     ] Register 0x40 (DevId).", .{});
 
                             data = mchRicm & 0x1F;
                         },
                         else => {
-                            err("  [RDRAM     ] Unhandled RDRAM command 0x{X:0>2}.", .{sa});
+                            err("  [RDRAM     ] Unhandled RDRAM register 0x{X:0>2}.", .{sa});
 
                             assert(false);
                         }
@@ -191,24 +204,22 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     } else {
         switch (addr) {
             0x1000_F180 => {
-                // info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (KPUTCHAR) = 0x{X}.", .{@typeName(T), addr, data});
-
-                comptime {
-                    if (T != u8) {
-                        return;
-                    }
+                if (T != u8) {
+                    @panic("Unhandled write @ KPUTCHAR");
                 }
+
+                // info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (KPUTCHAR) = 0x{X}.", .{@typeName(T), addr, data});
 
                 kputchar.write(@truncate(u8, data));
             },
             0x1000_F430 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ MCH_RICM");
+                }
+
                 info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (MCH_RICM) = 0x{X}.", .{@typeName(T), addr, data});
 
-                comptime {
-                    if (T != u32) {
-                        return;
-                    }
-                }
+                assert(T == u32);
 
                 const  sa = @truncate(u8, data >> 16);
                 const sbc = @truncate(u4, data >>  6);
@@ -220,13 +231,11 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 mchRicm = data & ~@as(u32, 0x80000000);
             },
             0x1000_F440 => {
-                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (MCH_DRD) = 0x{X}.", .{@typeName(T), addr, data});
-
-                comptime {
-                    if (T != u32) {
-                        return;
-                    }
+                if (T != u32) {
+                    @panic("Unhandled write @ MCH_DRD");
                 }
+
+                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (MCH_DRD) = 0x{X}.", .{@typeName(T), addr, data});
 
                 mchDrd = data;
             },
