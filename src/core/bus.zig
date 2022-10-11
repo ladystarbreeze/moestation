@@ -178,7 +178,7 @@ pub fn read(comptime T: type, addr: u32) T {
                     data = 0;
                 }
             },
-            0x1000_F130,
+            0x1000_F130 => data = 0,
             0x1000_F400, 0x1000_F410 => {
                 warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
@@ -203,6 +203,15 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else {
         switch (addr) {
+            0x1000_F010 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ INTC_MASK");
+                }
+
+                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (INTC_MASK) = 0x{X}.", .{@typeName(T), addr, data});
+
+                intc.setMask(data);
+            },
             0x1000_F180 => {
                 if (T != u8) {
                     @panic("Unhandled write @ KPUTCHAR");
