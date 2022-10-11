@@ -75,7 +75,7 @@ fn getChannel(addr: u8) Channel {
 
 /// Reads data from DMAC I/O
 pub fn read(addr: u32) u32 {
-    var data: u32 = undefined;
+    var data: u32 = 0;
 
     if (addr < @enumToInt(ControlReg.DCtrl)) {
         err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
@@ -85,8 +85,9 @@ pub fn read(addr: u32) u32 {
         switch (addr) {
             @enumToInt(ControlReg.DStat) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_STAT).", .{addr});
-
-                data = 0;
+            },
+            @enumToInt(ControlReg.DPcr) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D_PCR).", .{addr});
             },
             else => {
                 err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
