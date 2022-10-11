@@ -470,13 +470,47 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Cop2 ) => {
             const rs = getRs(instr);
 
-            switch (rs) {
-                @enumToInt(CopOpcode.Cf) => iCfc(instr, 2),
-                @enumToInt(CopOpcode.Ct) => iCtc(instr, 2),
-                else => {
-                    err("  [EE Core   ] Unhandled COP2 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+            if ((rs & (1 << 4)) != 0) {
+                const funct = getFunct(instr);
 
-                    assert(false);
+                if ((funct >> 2) == 0xF) {
+                    const sa = getSa(instr);
+
+                    switch (sa) {
+                        0x0F => {
+                            switch (funct) {
+                                0x3F => vu0.iIswr(instr),
+                                else => {
+                                    err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction (0x0F) 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                                    assert(false);
+                                }
+                            }
+                        },
+                        else => {
+                            err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+
+                            assert(false);
+                        }
+                    }
+                } else {
+                    switch (funct) {
+                        else => {
+                            err("  [EE Core   ] Unhandled VU0 macro instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                            assert(false);
+                        }
+                    }
+                }
+            } else {
+                switch (rs & 0xF) {
+                    @enumToInt(CopOpcode.Cf) => iCfc(instr, 2),
+                    @enumToInt(CopOpcode.Ct) => iCtc(instr, 2),
+                    else => {
+                        err("  [EE Core   ] Unhandled COP2 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+
+                        assert(false);
+                    }
                 }
             }
         },
