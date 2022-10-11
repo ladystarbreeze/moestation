@@ -23,6 +23,7 @@ const gif   = @import("gif.zig");
 const gs    = @import("gs.zig");
 const intc  = @import("intc.zig");
 const timer = @import("timer.zig");
+const vu0   = @import("vu0.zig");
 
 /// Memory base addresses
 const MemBase = enum(u32) {
@@ -39,6 +40,7 @@ const MemSize = enum(u32) {
     Ram   = 0x200_0000,
     Timer = 0x000_1840,
     Gif   = 0x000_0100,
+    Vu0   = 0x000_1000,
     Dmac  = 0x000_7000,
     Gs    = 0x000_2000,
     Bios  = 0x040_0000,
@@ -66,6 +68,8 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 
     rdram = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
 
+    vu0.vuMem = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+
     info("   [Bus       ] Successfully loaded BIOS.", .{});
 }
 
@@ -73,6 +77,7 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 pub fn deinit(allocator: Allocator) void {
     allocator.free(bios );
     allocator.free(rdram);
+    allocator.free(vu0.vuMem);
 }
 
 /// Reads data from the system bus
