@@ -40,7 +40,21 @@ pub fn getMask() u32 {
     return @as(u32, intcMask);
 }
 
+/// Returns INTC_STAT
+pub fn getStat() u32 {
+    return @as(u32, intcStat);
+}
+
 /// Sets INTC_MASK, checks for interrupt
 pub fn setMask(data: u32) void {
     intcMask = @truncate(u15, data);
+
+    // TODO: Check for interrupts
+}
+
+/// Sets INTC_STAT, checks for interrupt
+pub fn setStat(data: u32) void {
+    intcStat &= ~@truncate(u15, data);
+
+    // TODO: Check for interrupts
 }
