@@ -18,6 +18,7 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
+const dmac  = @import("dmac.zig");
 const gif   = @import("gif.zig");
 const gs    = @import("gs.zig");
 const intc  = @import("intc.zig");
@@ -28,6 +29,7 @@ const MemBase = enum(u32) {
     Ram   = 0x0000_0000,
     Timer = 0x1000_0000,
     Gif   = 0x1000_3000,
+    Dmac  = 0x1000_8000,
     Gs    = 0x1200_0000,
     Bios  = 0x1FC0_0000,
 };
@@ -37,6 +39,7 @@ const MemSize = enum(u32) {
     Ram   = 0x200_0000,
     Timer = 0x000_1840,
     Gif   = 0x000_0100,
+    Dmac  = 0x000_7000,
     Gs    = 0x000_2000,
     Bios  = 0x040_0000,
 };
@@ -86,6 +89,12 @@ pub fn read(comptime T: type, addr: u32) T {
         }
 
         data = gif.read(addr);
+    } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
+        if (T != u32) {
+            @panic("Unhandled read @ DMAC I/O");
+        }
+
+        data = dmac.read(addr);
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
@@ -195,6 +204,12 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         }
 
         gif.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
+        if (T != u32) {
+            @panic("Unhandled write @ DMAC I/O");
+        }
+
+        dmac.write(addr, data);
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
         if (T != u64) {
             @panic("Unhandled write @ GS I/O");
