@@ -51,7 +51,7 @@ pub fn write(addr: u32, data: u32) void {
             info("   [GIF       ] Write @ 0x{X:0>8} (GIF_CTRL) = 0x{X:0>8}.", .{addr, data});
 
             if ((data & 1) != 0) {
-                info("   [GIF       ] Resetting GIF.", .{});
+                info("   [GIF       ] GIF reset.", .{});
             }
         },
         else => {
