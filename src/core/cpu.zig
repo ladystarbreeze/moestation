@@ -105,6 +105,7 @@ const Special = enum(u6) {
     Slt    = 0x2A,
     Sltu   = 0x2B,
     Daddu  = 0x2D,
+    Dsll   = 0x38,
     Dsll32 = 0x3C,
     Dsra32 = 0x3F,
 };
@@ -396,6 +397,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Slt   ) => iSlt(instr),
                 @enumToInt(Special.Sltu  ) => iSltu(instr),
                 @enumToInt(Special.Daddu ) => iDaddu(instr),
+                @enumToInt(Special.Dsll  ) => iDsll(instr),
                 @enumToInt(Special.Dsll32) => iDsll32(instr),
                 @enumToInt(Special.Dsra32) => iDsra32(instr),
                 else => {
@@ -847,6 +849,23 @@ fn iDivu(instr: u32, comptime pipeline: u1) void {
         const isPipe1 = if (pipeline == 1) "1" else "";
 
         info("   [EE Core   ] DIVU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+    }
+}
+
+/// Doubleword Shift Left Logical
+fn iDsll(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, regFile.get(u64, rt) << @as(u6, sa));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
