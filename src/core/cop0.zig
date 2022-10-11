@@ -341,7 +341,7 @@ pub fn incrementCount() void {
 
 /// Translates an address through the TLB. Returns true if scratchpad access
 pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
-    info("   [COP0 (EE) ] Translating address 0x{X:0>8}...", .{addr.*});
+    //info("   [COP0 (EE) ] Translating address 0x{X:0>8}...", .{addr.*});
 
     var isSpram: bool = undefined;
 
@@ -392,7 +392,7 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
                 addr.* = (@as(u32, pfn) << 12) | (addr.* & mask);
             }
 
-            info("   [COP0 (EE) ] Physical address = 0x{X:0>8}.", .{addr.*});
+            //info("   [COP0 (EE) ] Physical address = 0x{X:0>8}.", .{addr.*});
 
             return isSpram;
         }
