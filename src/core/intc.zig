@@ -39,3 +39,8 @@ var intcStat: u15 = 0;
 pub fn getMask() u32 {
     return @as(u32, intcMask);
 }
+
+/// Sets INTC_MASK, checks for interrupt
+pub fn setMask(data: u32) void {
+    intcMask = @truncate(u15, data);
+}
