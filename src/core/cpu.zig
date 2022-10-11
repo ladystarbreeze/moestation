@@ -22,6 +22,8 @@ const cop1 = @import("cop1.zig");
 
 const exts = @import("../common/extend.zig").exts;
 
+const vu0 = @import("vu0.zig");
+
 /// Enable/disable disassembler
 const doDisasm = false;
 
@@ -60,6 +62,7 @@ const Opcode = enum(u6) {
     Xori    = 0x0E,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Cop2    = 0x12,
     Beql    = 0x14,
     Bnel    = 0x15,
     Daddiu  = 0x19,
@@ -103,6 +106,7 @@ const Special = enum(u6) {
     Subu   = 0x23,
     And    = 0x24,
     Or     = 0x25,
+    Nor    = 0x27,
     Slt    = 0x2A,
     Sltu   = 0x2B,
     Daddu  = 0x2D,
@@ -120,7 +124,9 @@ const Regimm = enum(u5) {
 /// COP instructions
 const CopOpcode = enum(u5) {
     Mf = 0x00,
+    Cf = 0x02,
     Mt = 0x04,
+    Ct = 0x06,
     Co = 0x10,
 };
 
@@ -396,6 +402,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Subu  ) => iSubu(instr),
                 @enumToInt(Special.And   ) => iAnd(instr),
                 @enumToInt(Special.Or    ) => iOr(instr),
+                @enumToInt(Special.Nor   ) => iNor(instr),
                 @enumToInt(Special.Slt   ) => iSlt(instr),
                 @enumToInt(Special.Sltu  ) => iSltu(instr),
                 @enumToInt(Special.Daddu ) => iDaddu(instr),
@@ -455,6 +462,19 @@ fn decodeInstr(instr: u32) void {
                 },
                 else => {
                     err("  [EE Core   ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        @enumToInt(Opcode.Cop2 ) => {
+            const rs = getRs(instr);
+
+            switch (rs) {
+                @enumToInt(CopOpcode.Cf) => iCfc(instr, 2),
+                @enumToInt(CopOpcode.Ct) => iCtc(instr, 2),
+                else => {
+                    err("  [EE Core   ] Unhandled COP2 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
                     assert(false);
                 }
@@ -757,6 +777,54 @@ fn iCache(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
         info("   [EE Core   ] CACHE 0x{X:0>2}, 0x{X}(${s}); ADDR = 0x{X:0>8}", .{rt, imm16s, tagRs, addr});
+    }
+}
+
+/// move From Control
+fn iCfc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    var data: u32 = undefined;
+
+    switch (n) {
+        2 => data = vu0.getControl(u32, rd),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    regFile.set(u32, rt, data);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [EE Core   ] CFC{} ${s}, ${}; ${s} = 0x{X:0>16}", .{n, tagRt, rd, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// move To Control
+fn iCtc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    const data = regFile.get(u32, rt);
+
+    switch (n) {
+        2 => vu0.setControl(u32, rd, data),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [EE Core   ] CTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, data});
     }
 }
 
@@ -1341,6 +1409,25 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
         } else {
             info("   [EE Core   ] MULT{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
         }
+    }
+}
+
+/// NOR
+fn iNor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = ~(regFile.get(u64, rs) | regFile.get(u64, rt));
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] NOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
