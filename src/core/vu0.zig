@@ -48,7 +48,7 @@ pub fn getControl(comptime T: type, idx: u5) T {
 
     switch (idx) {
         0 ... 15 => {
-            info("   [VU0 (COP2)] Control register read ({s}) @ $VI{}.", .{@typeName(T), idx});
+            //info("   [VU0 (COP2)] Control register read ({s}) @ $VI{}.", .{@typeName(T), idx});
 
             data = @as(T, regFile.getVi(@truncate(u4, idx)));
         },
@@ -78,7 +78,7 @@ fn write(comptime T: type, addr: u12, data: T) void {
 pub fn setControl(comptime T: type, idx: u5, data: T) void {
     switch (idx) {
         0 ... 15 => {
-            info("   [VU0 (COP2)] Control register write ({s}) @ $VI{} = 0x{X:0>8}.", .{@typeName(T), idx, data});
+            //info("   [VU0 (COP2)] Control register write ({s}) @ $VI{} = 0x{X:0>8}.", .{@typeName(T), idx, data});
 
             regFile.setVi(@truncate(u4, idx), @truncate(u16, data));
         },
