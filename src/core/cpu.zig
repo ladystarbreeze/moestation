@@ -85,6 +85,7 @@ const Special = enum(u6) {
     Sll    = 0x00,
     Srl    = 0x02,
     Sra    = 0x03,
+    Sllv   = 0x04,
     Jr     = 0x08,
     Jalr   = 0x09,
     Movz   = 0x0A,
@@ -375,6 +376,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sll   ) => iSll(instr),
                 @enumToInt(Special.Srl   ) => iSrl(instr),
                 @enumToInt(Special.Sra   ) => iSra(instr),
+                @enumToInt(Special.Sllv  ) => iSllv(instr),
                 @enumToInt(Special.Jr    ) => iJr(instr),
                 @enumToInt(Special.Jalr  ) => iJalr(instr),
                 @enumToInt(Special.Movz  ) => iMovz(instr),
@@ -1469,13 +1471,30 @@ fn iSll(instr: u32) void {
     }
 }
 
+/// Shift Left Logical Variable
+fn iSllv(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, regFile.get(u32, rt) << @truncate(u5, regFile.get(u64, rs)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Set Less Than
 fn iSlt(instr: u32) void {
     const rd = getRd(instr);
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u64, rd, @as(u64, @bitCast(u1, @bitCast(i64, regFile.get(u64, rs)) < @intCast(i64, regFile.get(u64, rt)))));
+    regFile.set(u64, rd, @as(u64, @bitCast(u1, @bitCast(i64, regFile.get(u64, rs)) < @bitCast(i64, regFile.get(u64, rt)))));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
