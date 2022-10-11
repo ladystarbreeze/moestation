@@ -22,42 +22,6 @@ const gif  = @import("gif.zig");
 const gs   = @import("gs.zig");
 const intc = @import("intc.zig");
 
-/// KPUTCHAR register
-const Kputchar = struct {
-    msg: [256]u8 = undefined,
-
-    idx: u9 = 0,
-
-    /// Writes a character to KPUTCHAR
-    pub fn write(self: *Kputchar, c: u8) void {
-        if (self.idx >= 256) {
-            err("  [KPUTCHAR  ] Message buffer overflowed.", .{});
-
-            assert(false);
-        }
-
-        if (c == 0x0A) {
-            self.flush();
-        } else {
-            self.msg[self.idx] = c;
-
-            self.idx += 1;
-        }
-    }
-
-    /// Prints out and resets message
-    fn flush(self: *Kputchar) void {
-        info("   [KPUTCHAR  ] {s}", .{self.msg});
-
-        var i: usize = 0;
-        while (i < 256) : (i += 1) {
-            self.msg[i] = 0;
-        }
-
-        self.idx = 0;
-    }
-};
-
 /// Memory base addresses
 const MemBase = enum(u32) {
     Ram  = 0x0000_0000,
@@ -78,9 +42,6 @@ const MemSize = enum(u32) {
 var  bios: []u8 = undefined; // BIOS ROM
 var rdram: []u8 = undefined; // RDRAM
 
-/// KPUTCHAR
-var kputchar: Kputchar = Kputchar{};
-
 // RDRAM registers
 var  mchDrd: u32 = undefined;
 var mchRicm: u32 = undefined;
@@ -98,12 +59,6 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
     bios = try biosFile.reader().readAllAlloc(allocator, @enumToInt(MemSize.Bios));
 
     rdram = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
-
-    // Clear KPUTCHAR
-    var i: usize = 0;
-    while (i < 256) : (i += 1) {
-        kputchar.msg[i] = 0;
-    }
 
     info("   [Bus       ] Successfully loaded BIOS.", .{});
 }
@@ -136,6 +91,15 @@ pub fn read(comptime T: type, addr: u32) T {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
+            0x1000_F000 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ INTC_STAT");
+                }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (INTC_STAT).", .{@typeName(T), addr});
+
+                data = intc.getStat();
+            },
             0x1000_F010 => {
                 if (T != u32) {
                     @panic("Unhandled read @ INTC_MASK");
@@ -239,6 +203,15 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
                 gif.writeFifo(data);
             },
+            0x1000_F000 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ INTC_STAT");
+                }
+
+                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (INTC_STAT) = 0x{X}.", .{@typeName(T), addr, data});
+
+                intc.setStat(data);
+            },
             0x1000_F010 => {
                 if (T != u32) {
                     @panic("Unhandled write @ INTC_MASK");
@@ -255,7 +228,11 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
                 // info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (KPUTCHAR) = 0x{X}.", .{@typeName(T), addr, data});
 
-                kputchar.write(@truncate(u8, data));
+                if (data != 0) {
+                    const stdOut = std.io.getStdOut().writer();
+
+                    stdOut.print("{c}", .{data}) catch unreachable;
+                }
             },
             0x1000_F430 => {
                 if (T != u32) {
