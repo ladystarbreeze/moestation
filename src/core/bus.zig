@@ -18,6 +18,7 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
+const gif  = @import("gif.zig");
 const intc = @import("intc.zig");
 
 /// KPUTCHAR register
@@ -59,12 +60,14 @@ const Kputchar = struct {
 /// Memory base addresses
 const MemBase = enum(u32) {
     Ram  = 0x0000_0000,
+    Gif  = 0x1000_3000,
     Bios = 0x1FC0_0000,
 };
 
 /// Memory sizes
 const MemSize = enum(u32) {
     Ram  = 0x200_0000,
+    Gif  = 0x000_0100,
     Bios = 0x040_0000,
 };
 
@@ -116,8 +119,11 @@ pub fn read(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(T));
-    }
-    else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
+    } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
+        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
+
+        data = 0;
+    } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
@@ -201,6 +207,14 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
+        if (T != u32) {
+            @panic("Unhandled write @ GIF I/O");
+        }
+
+        gif.write(addr, data);
+    } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IOP) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
             0x1000_F010 => {
