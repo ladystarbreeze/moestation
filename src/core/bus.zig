@@ -122,6 +122,12 @@ pub fn read(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
+        if (T != u32) {
+            @panic("Unhandled read @ GIF I/O");
+        }
+
+        data = gif.read(addr);
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 

@@ -26,6 +26,24 @@ const GifReg = enum(u32) {
     GifP3Tag = 0x1000_30A0,
 };
 
+/// Reads data from GIF I/O
+pub fn read(addr: u32) u32 {
+    var data: u32 = 0;
+
+    switch (addr) {
+        @enumToInt(GifReg.GifStat) => {
+            info("   [GIF       ] Read @ 0x{X:0>8} (GIF_STAT).", .{addr});
+        },
+        else => {
+            err("  [GIF       ] Unhandled read @ 0x{X:0>8}.", .{addr});
+
+            assert(false);
+        }
+    }
+
+    return data;
+}
+
 /// Writes data to GIF I/O
 pub fn write(addr: u32, data: u32) void {
     switch (addr) {
