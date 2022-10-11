@@ -18,24 +18,27 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
-const gif  = @import("gif.zig");
-const gs   = @import("gs.zig");
-const intc = @import("intc.zig");
+const gif   = @import("gif.zig");
+const gs    = @import("gs.zig");
+const intc  = @import("intc.zig");
+const timer = @import("timer.zig");
 
 /// Memory base addresses
 const MemBase = enum(u32) {
-    Ram  = 0x0000_0000,
-    Gif  = 0x1000_3000,
-    Gs   = 0x1200_0000,
-    Bios = 0x1FC0_0000,
+    Ram   = 0x0000_0000,
+    Timer = 0x1000_0000,
+    Gif   = 0x1000_3000,
+    Gs    = 0x1200_0000,
+    Bios  = 0x1FC0_0000,
 };
 
 /// Memory sizes
 const MemSize = enum(u32) {
-    Ram  = 0x200_0000,
-    Gif  = 0x000_0100,
-    Gs   = 0x000_2000,
-    Bios = 0x040_0000,
+    Ram   = 0x200_0000,
+    Timer = 0x000_1840,
+    Gif   = 0x000_0100,
+    Gs    = 0x000_2000,
+    Bios  = 0x040_0000,
 };
 
 // Memory arrays
@@ -180,6 +183,12 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Timer) and addr < (@enumToInt(MemBase.Timer) + @enumToInt(MemSize.Timer))) {
+        if (T != u32) {
+            @panic("Unhandled write @ Timer I/O");
+        }
+
+        timer.write(addr, data);
     } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
         if (T != u32) {
             @panic("Unhandled write @ GIF I/O");
