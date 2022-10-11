@@ -19,6 +19,7 @@ const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
 const gif  = @import("gif.zig");
+const gs   = @import("gs.zig");
 const intc = @import("intc.zig");
 
 /// KPUTCHAR register
@@ -61,6 +62,7 @@ const Kputchar = struct {
 const MemBase = enum(u32) {
     Ram  = 0x0000_0000,
     Gif  = 0x1000_3000,
+    Gs   = 0x1200_0000,
     Bios = 0x1FC0_0000,
 };
 
@@ -68,6 +70,7 @@ const MemBase = enum(u32) {
 const MemSize = enum(u32) {
     Ram  = 0x200_0000,
     Gif  = 0x000_0100,
+    Gs   = 0x000_2000,
     Bios = 0x040_0000,
 };
 
@@ -213,10 +216,23 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         }
 
         gif.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
+        if (T != u64) {
+            @panic("Unhandled write @ GS I/O");
+        }
+
+        gs.writePriv(addr, data);
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IOP) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
+            0x1000_6000 => {
+                if (T != u128) {
+                    @panic("Unhandled write @ GIF FIFO");
+                }
+
+                gif.writeFifo(data);
+            },
             0x1000_F010 => {
                 if (T != u32) {
                     @panic("Unhandled write @ INTC_MASK");
