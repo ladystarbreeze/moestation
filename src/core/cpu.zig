@@ -482,6 +482,16 @@ fn decodeInstr(instr: u32) void {
                     const sa = getSa(instr);
 
                     switch (sa) {
+                        0x0D => {
+                            switch (funct) {
+                                0x3D => vu0.iSqi(instr),
+                                else => {
+                                    err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction (0x0D) 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                                    assert(false);
+                                }
+                            }
+                        },
                         0x0F => {
                             switch (funct) {
                                 0x3F => vu0.iIswr(instr),

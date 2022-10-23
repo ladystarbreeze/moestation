@@ -259,7 +259,34 @@ pub fn iIswr(instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        info("   [VU0       ] ISWR.{s} VI[{}], (VI[{}]){s}", .{destStr, it, is, destStr});
+        info("   [VU0       ] ISWR.{s} VI[{}]{s}, (VI[{}])", .{destStr, it, destStr, is});
+    }
+}
+
+/// Store Quadword with post-Increment
+pub fn iSqi(instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const is = getRs(instr);
+    
+    assert(is < 16);
+
+    const addr = @truncate(u12, regFile.getVi(@truncate(u4, is)) << 4);
+
+    var i: u12 = 0;
+    while (i < 4) : (i += 1) {
+        if ((dest & (@as(u4, 1) << (3 - @truncate(u2, i)))) != 0) {
+            const e = @intToEnum(Element, @as(u4, 1) << (3 - @truncate(u2, i)));
+
+            write(u32, addr +% (i * 4), regFile.getVfElement(u32, ft, e));
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        info("   [VU0       ] SQI.{s} VF[{}]{s}, (VI[{}]++)", .{destStr, ft, destStr, is});
     }
 }
 
