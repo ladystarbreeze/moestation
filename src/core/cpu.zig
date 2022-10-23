@@ -62,6 +62,7 @@ const Opcode = enum(u6) {
     Xori    = 0x0E,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Cop1    = 0x11,
     Cop2    = 0x12,
     Beql    = 0x14,
     Bnel    = 0x15,
@@ -128,6 +129,16 @@ const CopOpcode = enum(u5) {
     Mt = 0x04,
     Ct = 0x06,
     Co = 0x10,
+};
+
+/// COP1 instructions
+const Cop1Opcode = enum(u5) {
+    S = 0x10,
+};
+
+/// COP1 Single instructions
+const Cop1Single = enum(u6) {
+    Adda = 0x18,
 };
 
 /// COP2 instructions
@@ -468,6 +479,31 @@ fn decodeInstr(instr: u32) void {
                 },
                 else => {
                     err("  [EE Core   ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        @enumToInt(Opcode.Cop1 ) => {
+            const rs = getRs(instr);
+
+            switch (rs) {
+                @enumToInt(CopOpcode.Mt) => iMtc(instr, 1),
+                @enumToInt(CopOpcode.Ct) => iCtc(instr, 1),
+                @enumToInt(Cop1Opcode.S) => {
+                    const funct = getFunct(instr);
+
+                    switch (funct) {
+                        @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled FPU Single instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
+                else => {
+                    err("  [EE Core   ] Unhandled FPU instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
                     assert(false);
                 }
@@ -867,6 +903,7 @@ fn iCtc(instr: u32, comptime n: u2) void {
     const data = regFile.get(u32, rt);
 
     switch (n) {
+        1 => cop1.setControl(rd, data),
         2 => vu0.setControl(u32, rd, data),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
@@ -1304,6 +1341,12 @@ fn iMfc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
+    if (!cop0.isCopUsable(n)) {
+        err("  [EE Core   ] Coprocessor {} is unusable!", .{n});
+
+        assert(false);
+    }
+
     var data: u32 = undefined;
 
     switch (n) {
@@ -1319,9 +1362,8 @@ fn iMfc(instr: u32, comptime n: u2) void {
 
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
-        const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MFC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRt, regFile.get(u32, rt)});
+        info("   [EE Core   ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(u32, rt)});
     }
 }
 
@@ -1414,10 +1456,17 @@ fn iMtc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
+    if (!cop0.isCopUsable(n)) {
+        err("  [EE Core   ] Coprocessor {} is unusable!", .{n});
+
+        assert(false);
+    }
+
     const data = regFile.get(u32, rt);
 
     switch (n) {
         0 => cop0.set(u32, rd, data),
+        1 => cop1.setRaw(rd, data),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
 
@@ -1427,9 +1476,8 @@ fn iMtc(instr: u32, comptime n: u2) void {
 
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
-        const tagRd = @tagName(@intToEnum(Cop0Reg, rd));
     
-        info("   [EE Core   ] MTC{} ${s}, ${s}; ${s} = 0x{X:0>8}", .{n, tagRt, tagRd, tagRd, regFile.get(u32, rt)});
+        info("   [EE Core   ] MTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, regFile.get(u32, rt)});
     }
 }
 
@@ -1545,6 +1593,12 @@ fn iQmfc2(instr: u32) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
+    if (!cop0.isCopUsable(2)) {
+        err("  [EE Core   ] Coprocessor 2 is unusable!", .{});
+
+        assert(false);
+    }
+
     var data: u128 = vu0.get(u128, rd);
 
     regFile.set(u128, rt, data);
@@ -1560,6 +1614,12 @@ fn iQmfc2(instr: u32) void {
 fn iQmtc2(instr: u32) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
+
+    if (!cop0.isCopUsable(2)) {
+        err("  [EE Core   ] Coprocessor 2 is unusable!", .{});
+
+        assert(false);
+    }
 
     const data = regFile.get(u128, rt);
 
