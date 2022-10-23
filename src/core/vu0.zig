@@ -18,8 +18,38 @@ const ControlReg = enum(u5) {
     Fbrst = 28,
 };
 
+/// Vector elements
+const Element = enum(u4) {
+    W = 1 << 0,
+    Z = 1 << 1,
+    Y = 1 << 2,
+    X = 1 << 3,
+};
+
+/// VU0 floating-point register
+const Vf = struct {
+    x: u32,
+    y: u32,
+    z: u32,
+    w: u32,
+
+    /// Returns the full 128-bit VF
+    pub fn get(self: Vf) u128 {
+        return (@as(u128, self.x) << 96) | (@as(u128, self.y) << 64) | (@as(u128, self.z) << 32) | @as(u128, self.w);
+    }
+
+    /// Sets the full 128-bit VF
+    pub fn set(self: *Vf, data: u128) void {
+        self.x = @truncate(u32, data >> 96);
+        self.y = @truncate(u32, data >> 64);
+        self.z = @truncate(u32, data >> 32);
+        self.w = @truncate(u32, data);
+    }
+};
+
 /// VU0 register file
 const RegFile = struct {
+    vf: [32]Vf  = undefined,
     vi: [16]u16 = undefined,
 
     /// Returns a VI register
@@ -27,11 +57,59 @@ const RegFile = struct {
         return self.vi[idx];
     }
 
+    /// Returns a VF register
+    pub fn getVf(self: RegFile, idx: u5) u128 {
+        return self.vf[idx].get();
+    }
+
+    /// Returns a VF element
+    pub fn getVfElement(self: RegFile, comptime T: type, idx: u5, e: Element) T {
+        assert(T == u32 or T == f32);
+
+        var data: u32 = 0;
+
+        switch (e) {
+            Element.W => data = self.vf[idx].w,
+            Element.Z => data = self.vf[idx].z,
+            Element.Y => data = self.vf[idx].y,
+            Element.X => data = self.vf[idx].x,
+        }
+
+        if (T == f32) {
+            return @bitCast(f32, data);
+        }
+
+        return data;
+    }
+
     /// Sets a VI register
     pub fn setVi(self: *RegFile, idx: u4, data: u16) void {
         self.vi[idx] = data;
 
         self.vi[0] = 0;
+    }
+
+    /// Sets a VF register
+    pub fn setVf(self: *RegFile, idx: u5, data: u128) void {
+        self.vf[idx].set(data);
+
+        self.vf[0].set(0x3F800000);
+    }
+
+    /// Sets a VF element
+    pub fn setVfElement(self: *RegFile, comptime T: type, idx: u5, e: Element, data: T) void {
+        assert(T == u32 or T == f32);
+
+        const data_ = if (T == f32) @bitCast(u32, data) else data;
+
+        switch (e) {
+            Element.W => self.vf[idx].w = data_,
+            Element.Z => self.vf[idx].z = data_,
+            Element.Y => self.vf[idx].y = data_,
+            Element.X => self.vf[idx].x = data_,
+        }
+
+        self.vf[0].set(0);
     }
 };
 
@@ -41,6 +119,17 @@ const doDisasm = true;
 pub var vuMem: []u8 = undefined;
 
 var regFile: RegFile = RegFile{};
+
+/// Returns a COP2 register
+pub fn get(comptime T: type, idx: u5) T {
+    assert(T == u32 or T == u128);
+
+    if (T == u32) {
+        @panic("Unhandled COP2 read");
+    }
+
+    return regFile.getVf(idx);
+}
 
 /// Returns a COP2 control register
 pub fn getControl(comptime T: type, idx: u5) T {
@@ -133,6 +222,11 @@ fn getDestStr(dest: u4) []const u8 {
     };
 }
 
+/// Get d field
+fn getRd(instr: u32) u5 {
+    return @truncate(u5, instr >> 6);
+}
+
 /// Get t field
 fn getRt(instr: u32) u5 {
     return @truncate(u5, instr >> 16);
@@ -166,5 +260,32 @@ pub fn iIswr(instr: u32) void {
         const destStr = getDestStr(dest);
 
         info("   [VU0       ] ISWR.{s} VI[{}], (VI[{}]){s}", .{destStr, it, is, destStr});
+    }
+}
+
+/// floating-point SUBtract
+pub fn iSub(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) - regFile.getVfElement(f32, ft, e);
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] SUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
