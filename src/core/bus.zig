@@ -29,7 +29,9 @@ const vu0   = @import("vu0.zig");
 const MemBase = enum(u32) {
     Ram     = 0x0000_0000,
     Timer   = 0x1000_0000,
+    Ipu     = 0x1000_2000,
     Gif     = 0x1000_3000,
+    Vif0    = 0x1000_3800,
     Vif1    = 0x1000_3C00,
     Dmac    = 0x1000_8000,
     Vu0Code = 0x1100_0000,
@@ -44,6 +46,7 @@ const MemBase = enum(u32) {
 const MemSize = enum(u32) {
     Ram   = 0x200_0000,
     Timer = 0x000_1840,
+    Ipu   = 0x000_0040,
     Gif   = 0x000_0100,
     Vu0   = 0x000_1000,
     Vu1   = 0x000_4000,
@@ -97,6 +100,14 @@ pub fn read(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Ipu) and addr < (@enumToInt(MemBase.Ipu) + @enumToInt(MemSize.Ipu))) {
+        if (T != u32) {
+            @panic("Unhandled read @ IPU I/O");
+        }
+        
+        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IPU).", .{@typeName(T), addr});
+
+        data = 0;
     } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
         if (T != u32) {
             @panic("Unhandled read @ GIF I/O");
@@ -212,12 +223,20 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         }
 
         timer.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Ipu) and addr < (@enumToInt(MemBase.Ipu) + @enumToInt(MemSize.Ipu))) {
+        if (T != u32) {
+            @panic("Unhandled write @ IPU I/O");
+        }
+
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IPU) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
         if (T != u32) {
             @panic("Unhandled write @ GIF I/O");
         }
 
         gif.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Vif0) and addr < (@enumToInt(MemBase.Vif0) + @enumToInt(MemSize.Vif))) {
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF0) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Vif1) and addr < (@enumToInt(MemBase.Vif1) + @enumToInt(MemSize.Vif))) {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF1) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
@@ -248,6 +267,13 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IOP) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
+            0x1000_4000 => {
+                if (T != u128) {
+                    @panic("Unhandled write @ VIF0 FIFO");
+                }
+
+                warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF0 FIFO) = 0x{X}.", .{@typeName(T), addr, data});
+            },
             0x1000_5000 => {
                 if (T != u128) {
                     @panic("Unhandled write @ VIF1 FIFO");
@@ -261,6 +287,13 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 }
 
                 gif.writeFifo(data);
+            },
+            0x1000_7010 => {
+                if (T != u128) {
+                    @panic("Unhandled write @ IPU In FIFO");
+                }
+
+                warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IPU In FIFO) = 0x{X}.", .{@typeName(T), addr, data});
             },
             0x1000_F000 => {
                 if (T != u32) {
