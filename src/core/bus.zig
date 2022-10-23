@@ -27,12 +27,17 @@ const vu0   = @import("vu0.zig");
 
 /// Memory base addresses
 const MemBase = enum(u32) {
-    Ram   = 0x0000_0000,
-    Timer = 0x1000_0000,
-    Gif   = 0x1000_3000,
-    Dmac  = 0x1000_8000,
-    Gs    = 0x1200_0000,
-    Bios  = 0x1FC0_0000,
+    Ram     = 0x0000_0000,
+    Timer   = 0x1000_0000,
+    Gif     = 0x1000_3000,
+    Vif1    = 0x1000_3C00,
+    Dmac    = 0x1000_8000,
+    Vu0Code = 0x1100_0000,
+    Vu0Data = 0x1100_4000,
+    Vu1Code = 0x1100_8000,
+    Vu1Data = 0x1100_C000,
+    Gs      = 0x1200_0000,
+    Bios    = 0x1FC0_0000,
 };
 
 /// Memory sizes
@@ -41,6 +46,8 @@ const MemSize = enum(u32) {
     Timer = 0x000_1840,
     Gif   = 0x000_0100,
     Vu0   = 0x000_1000,
+    Vu1   = 0x000_4000,
+    Vif   = 0x000_0180,
     Dmac  = 0x000_7000,
     Gs    = 0x000_2000,
     Bios  = 0x040_0000,
@@ -68,7 +75,8 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 
     rdram = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
 
-    vu0.vuMem = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+    vu0.vuCode = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+    vu0.vuMem  = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
 
     info("   [Bus       ] Successfully loaded BIOS.", .{});
 }
@@ -77,6 +85,7 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 pub fn deinit(allocator: Allocator) void {
     allocator.free(bios );
     allocator.free(rdram);
+    allocator.free(vu0.vuCode);
     allocator.free(vu0.vuMem);
 }
 
@@ -209,12 +218,26 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         }
 
         gif.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Vif1) and addr < (@enumToInt(MemBase.Vif1) + @enumToInt(MemSize.Vif))) {
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF1) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
         if (T != u32) {
             @panic("Unhandled write @ DMAC I/O");
         }
 
         dmac.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Vu0Code) and addr < (@enumToInt(MemBase.Vu0Code) + @enumToInt(MemSize.Vu0))) {
+        info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
+
+        @memcpy(@ptrCast([*]u8, &vu0.vuCode[addr - @enumToInt(MemBase.Vu0Code)]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Vu0Data) and addr < (@enumToInt(MemBase.Vu0Data) + @enumToInt(MemSize.Vu0))) {
+        info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Data) = 0x{X}.", .{@typeName(T), addr, data});
+
+        @memcpy(@ptrCast([*]u8, &vu0.vuMem[addr - @enumToInt(MemBase.Vu0Data)]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Vu1Code) and addr < (@enumToInt(MemBase.Vu1Code) + @enumToInt(MemSize.Vu1))) {
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Code) = 0x{X}.", .{@typeName(T), addr, data});
+    } else if (addr >= @enumToInt(MemBase.Vu1Data) and addr < (@enumToInt(MemBase.Vu1Data) + @enumToInt(MemSize.Vu1))) {
+        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Data) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
         if (T != u64) {
             @panic("Unhandled write @ GS I/O");
@@ -225,6 +248,13 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IOP) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
+            0x1000_5000 => {
+                if (T != u128) {
+                    @panic("Unhandled write @ VIF1 FIFO");
+                }
+
+                warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF1 FIFO) = 0x{X}.", .{@typeName(T), addr, data});
+            },
             0x1000_6000 => {
                 if (T != u128) {
                     @panic("Unhandled write @ GIF FIFO");
@@ -292,7 +322,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             },
             0x1000_F100, 0x1000_F120, 0x1000_F140, 0x1000_F150,
             0x1000_F400, 0x1000_F410, 0x1000_F420, 0x1000_F450, 0x1000_F460, 0x1000_F480, 0x1000_F490,
-            0x1000_F500 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
+            0x1000_F500, 0x1000_F510 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
             else => {
                 err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
