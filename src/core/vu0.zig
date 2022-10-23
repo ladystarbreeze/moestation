@@ -15,7 +15,13 @@ const warn = std.log.warn;
 
 /// Macro mode control registers
 const ControlReg = enum(u5) {
-    Fbrst = 28,
+    Sf     = 16,
+    Cf     = 18,
+    R      = 20,
+    I      = 21,
+    Q      = 22,
+    Cmsar0 = 27,
+    Fbrst  = 28,
 };
 
 /// Vector elements
@@ -51,6 +57,8 @@ const Vf = struct {
 const RegFile = struct {
     vf: [32]Vf  = undefined,
     vi: [16]u16 = undefined,
+
+    cmsar: u16 = undefined,
 
     /// Returns a VI register
     pub fn getVi(self: RegFile, idx: u4) u16 {
@@ -185,6 +193,26 @@ pub fn setControl(comptime T: type, idx: u5, data: T) void {
 
             regFile.setVi(@truncate(u4, idx), @truncate(u16, data));
         },
+        @enumToInt(ControlReg.Sf) => {
+            warn("[VU0 (COP2)] Control register write ({s}) @ $SF = 0x{X:0>8}.", .{@typeName(T), data});
+        },
+        @enumToInt(ControlReg.Cf) => {
+            warn("[VU0 (COP2)] Control register write ({s}) @ $CF = 0x{X:0>8}.", .{@typeName(T), data});
+        },
+        @enumToInt(ControlReg.R) => {
+            warn("[VU0 (COP2)] Control register write ({s}) @ $R = 0x{X:0>8}.", .{@typeName(T), data});
+        },
+        @enumToInt(ControlReg.I) => {
+            warn("[VU0 (COP2)] Control register write ({s}) @ $I = 0x{X:0>8}.", .{@typeName(T), data});
+        },
+        @enumToInt(ControlReg.Q) => {
+            warn("[VU0 (COP2)] Control register write ({s}) @ $Q = 0x{X:0>8}.", .{@typeName(T), data});
+        },
+        @enumToInt(ControlReg.Cmsar0) => {
+            info("   [VU0 (COP2)] Control register write ({s}) @ $CMSAR0 = 0x{X:0>8}.", .{@typeName(T), data});
+
+            regFile.cmsar = @truncate(u16, data);
+        },
         @enumToInt(ControlReg.Fbrst) => {
             info("   [VU0 (COP2)] Control register write ({s}) @ $FBRST = 0x{X:0>8}.", .{@typeName(T), data});
 
@@ -249,6 +277,23 @@ fn getRt(instr: u32) u5 {
 /// Get s field
 fn getRs(instr: u32) u5 {
     return @truncate(u5, instr >> 11);
+}
+
+/// Integer ADDition
+pub fn iIadd(instr: u32) void {
+    const id = getRd(instr);
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    assert(id < 16 and it < 16 and is < 16);
+
+    const res = regFile.getVi(@truncate(u4, is)) +% regFile.getVi(@truncate(u4, it));
+
+    regFile.setVi(@truncate(u4, id), res);
+
+    if (doDisasm) {
+        info("   [VU0       ] IADD VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}", .{id, is, it, id, res});
+    }
 }
 
 /// Integer Store

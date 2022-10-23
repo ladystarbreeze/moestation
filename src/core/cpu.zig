@@ -512,6 +512,7 @@ fn decodeInstr(instr: u32) void {
                 } else {
                     switch (funct) {
                         0x2C => vu0.iSub(instr),
+                        0x30 => vu0.iIadd(instr),
                         else => {
                             err("  [EE Core   ] Unhandled VU0 macro instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
