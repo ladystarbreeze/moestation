@@ -289,7 +289,7 @@ pub fn init() void {}
 
 /// Returns true if a coprocessor is usable
 pub fn isCopUsable(comptime n: u2) bool {
-    return (status.cu & (1 << n)) != 0;
+    return n == 0 or (status.cu & (1 << n)) != 0;
 }
 
 /// Returns a COP0 register
