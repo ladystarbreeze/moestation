@@ -115,6 +115,9 @@ const RegFile = struct {
 
 const doDisasm = true;
 
+/// VU0 code
+pub var vuCode: []u8 = undefined;
+
 /// VU0 mem
 pub var vuMem: []u8 = undefined;
 
