@@ -25,7 +25,7 @@ const exts = @import("../common/extend.zig").exts;
 const vu0 = @import("vu0.zig");
 
 /// Enable/disable disassembler
-const doDisasm = false;
+var doDisasm = false;
 
 const resetVector: u32 = 0xBFC0_0000;
 
@@ -314,8 +314,10 @@ fn read(comptime T: type, addr: u32) T {
     if (isScratchpad) {
         return readSpram(T, pAddr);
     }
+    
+    const data = bus.read(T, pAddr);
 
-    return bus.read(T, pAddr);
+    return data;
 }
 
 /// Reads data from scratchpad RAM
@@ -1231,19 +1233,28 @@ fn iLd(instr: u32) void {
 
 /// LDL - Load Doubleword Left
 fn iLdl(instr: u32) void {
+    const maskTable = [_]u64 {
+        0x00FFFFFF_FFFFFFFF, 0x0000FFFF_FFFFFFFF, 0x000000FF_FFFFFFFF, 0x00000000_FFFFFFFF,
+        0x00000000_00FFFFFF, 0x00000000_0000FFFF, 0x00000000_000000FF, 0x00000000_00000000,
+    };
+
+    const shiftTable = [_]u6 {
+        56, 48, 40, 32, 24, 16, 8, 0,
+    };
+
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 7);
 
-    const shift = @truncate(u6, 8 * (addr & 7));
-    const mask  = @bitCast(u64, @as(i64, -1)) << shift;
+    const shift = addr & 7;
 
-    const data = (regFile.get(u64, rt) & ~mask) | (read(u64, addr & ~@as(u32, 7)) << shift);
+    const data = (regFile.get(u64, rt) & maskTable[shift]) | (read(u64, addrMask) << shiftTable[shift]);
 
-    if (doDisasm) {
+    if (true) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1255,19 +1266,28 @@ fn iLdl(instr: u32) void {
 
 /// LDR - Load Doubleword Right
 fn iLdr(instr: u32) void {
+    const maskTable = [_]u64 {
+        0x00000000_00000000, 0xFF000000_00000000, 0xFFFF0000_00000000, 0xFFFFFF00_00000000,
+        0xFFFFFFFF_00000000, 0xFFFFFFFF_FF000000, 0xFFFFFFFF_FFFF0000, 0xFFFFFFFF_FFFFFF00,
+    };
+
+    const shiftTable = [_]u6 {
+        0, 8, 16, 24, 32, 40, 48, 56,
+    };
+
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 7);
 
-    const shift = @truncate(u6, 8 * ((addr ^ 7) & 7));
-    const mask  = @bitCast(u64, @as(i64, -1)) >> shift;
+    const shift = addr & 7;
 
-    const data = (regFile.get(u64, rt) & ~mask) | (read(u64, addr & ~@as(u32, 7)) >> shift);
+    const data = (regFile.get(u64, rt) & maskTable[shift]) | (read(u64, addrMask) >> shiftTable[shift]);
 
-    if (doDisasm) {
+    if (true) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1765,20 +1785,30 @@ fn iSd(instr: u32) void {
 
 /// SDL - Store Doubleword Left
 fn iSdl(instr: u32) void {
+    const maskTable = [_]u64 {
+        0xFFFFFFFF_FFFFFF00, 0xFFFFFFFF_FFFF0000, 0xFFFFFFFF_FF000000, 0xFFFFFFFF_00000000,
+        0xFFFFFF00_00000000, 0xFFFF0000_00000000, 0xFF000000_00000000, 0x00000000_00000000,
+    };
+
+    const shiftTable = [_]u6 {
+        56, 48, 40, 32, 24, 16, 8, 0,
+    };
+
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const addr = regFile.get(u32, rs) +% imm16s;
-    const data = read(u64, addr & ~@as(u32, 7));
+    const addrMask = addr & ~@as(u32, 7);
 
-    const shift = @truncate(u6, 8 * (addr & 7));
-    const mask  = @intCast(u64, @bitCast(u64, @as(i64, -1))) >> shift;
+    const shift = addr & 7;
 
-    write(u64, addr & ~@as(u32, 7), (data & ~mask) | (regFile.get(u64, rt) >> shift));
+    const data = (read(u64, addrMask) & maskTable[shift]) | (regFile.get(u64, rt) >> shiftTable[shift]);
 
-    if (doDisasm) {
+    write(u64, addrMask, data);
+
+    if (true) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1788,20 +1818,30 @@ fn iSdl(instr: u32) void {
 
 /// SDR - Store Doubleword Right
 fn iSdr(instr: u32) void {
+    const maskTable = [_]u64 {
+        0x00000000_000000FF, 0x00000000_0000FFFF, 0x00000000_00FFFFFF, 0x00000000_FFFFFFFF,
+        0x000000FF_FFFFFFFF, 0x0000FFFF_FFFFFFFF, 0x00FFFFFF_FFFFFFFF, 0xFFFFFFFF_FFFFFFFF,
+    };
+
+    const shiftTable = [_]u6 {
+        0, 8, 16, 24, 32, 40, 48, 56,
+    };
+
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const addr = regFile.get(u32, rs) +% imm16s;
-    const data = read(u64, addr & ~@as(u32, 7));
+    const addrMask = addr & ~@as(u32, 7);
 
-    const shift = @truncate(u6, 8 * ((addr ^ 7) & 7));
-    const mask  = @intCast(u64, @bitCast(u64, @as(i64, -1))) << shift;
+    const shift = addr & 7;
 
-    write(u64, addr & ~@as(u32, 7), (data & ~mask) | (regFile.get(u64, rt) << shift));
+    const data = (read(u64, addrMask) & maskTable[shift]) | (regFile.get(u64, rt) << shiftTable[shift]);
 
-    if (doDisasm) {
+    write(u64, addrMask, data);
+
+    if (true) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1879,7 +1919,9 @@ fn iSlt(instr: u32) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u64, rd, @as(u64, @bitCast(u1, @bitCast(i64, regFile.get(u64, rs)) < @bitCast(i64, regFile.get(u64, rt)))));
+    const res: u64 = if (@bitCast(i64, regFile.get(u64, rs)) < @bitCast(i64, regFile.get(u64, rt))) 1 else 0;
+
+    regFile.set(u64, rd, res);
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2137,10 +2179,17 @@ fn iXori(instr: u32) void {
 pub fn step() void {
     regFile.cpc = regFile.pc;
 
+    //if (regFile.cpc == 0x8000DB90 and regFile.get(u64, @enumToInt(CpuReg.V1)) == 0x20) doDisasm = true;
+    //if (regFile.cpc == 0x8000DB90 and regFile.get(u64, @enumToInt(CpuReg.V1)) == 0x1FFF_FFFE) assert(false);
+
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
 
     decodeInstr(fetchInstr());
 
     cop0.incrementCount();
+}
+
+pub fn dumpRegs() void {
+    info("   [EE Core   ] PC = 0x{X:0>8}, $RA = 0x{X:0>8}", .{regFile.cpc, regFile.get(u32, @enumToInt(CpuReg.RA))});
 }
