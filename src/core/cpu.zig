@@ -130,6 +130,11 @@ const CopOpcode = enum(u5) {
     Co = 0x10,
 };
 
+/// COP2 instructions
+const Cop2Opcode = enum(u5) {
+    Qmfc2 = 0x01,
+};
+
 /// COP Control instructions
 const ControlOpcode = enum(u6) {
     Tlbwi = 0x02,
@@ -495,6 +500,7 @@ fn decodeInstr(instr: u32) void {
                     }
                 } else {
                     switch (funct) {
+                        0x2C => vu0.iSub(instr),
                         else => {
                             err("  [EE Core   ] Unhandled VU0 macro instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -504,8 +510,9 @@ fn decodeInstr(instr: u32) void {
                 }
             } else {
                 switch (rs & 0xF) {
-                    @enumToInt(CopOpcode.Cf) => iCfc(instr, 2),
-                    @enumToInt(CopOpcode.Ct) => iCtc(instr, 2),
+                    @enumToInt(Cop2Opcode.Qmfc2) => iQmfc2(instr),
+                    @enumToInt(CopOpcode.Cf    ) => iCfc(instr, 2),
+                    @enumToInt(CopOpcode.Ct    ) => iCtc(instr, 2),
                     else => {
                         err("  [EE Core   ] Unhandled COP2 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
@@ -1517,6 +1524,22 @@ fn iPor(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] POR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Quadword Move From Coprocessor 2
+fn iQmfc2(instr: u32) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    var data: u128 = vu0.get(u128, rd);
+
+    regFile.set(u128, rt, data);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [EE Core   ] QMFC2 ${s}, ${}; ${s} = 0x{X:0>32}", .{tagRt, rd, tagRt, regFile.get(u128, rt)});
     }
 }
 
