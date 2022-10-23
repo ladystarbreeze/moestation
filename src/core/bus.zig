@@ -18,6 +18,7 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
+const cpu   = @import("cpu.zig");
 const dmac  = @import("dmac.zig");
 const gif   = @import("gif.zig");
 const gs    = @import("gs.zig");
@@ -246,17 +247,17 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
         dmac.write(addr, data);
     } else if (addr >= @enumToInt(MemBase.Vu0Code) and addr < (@enumToInt(MemBase.Vu0Code) + @enumToInt(MemSize.Vu0))) {
-        info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
+        //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
 
         @memcpy(@ptrCast([*]u8, &vu0.vuCode[addr - @enumToInt(MemBase.Vu0Code)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Vu0Data) and addr < (@enumToInt(MemBase.Vu0Data) + @enumToInt(MemSize.Vu0))) {
-        info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Data) = 0x{X}.", .{@typeName(T), addr, data});
+        //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Data) = 0x{X}.", .{@typeName(T), addr, data});
 
         @memcpy(@ptrCast([*]u8, &vu0.vuMem[addr - @enumToInt(MemBase.Vu0Data)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Vu1Code) and addr < (@enumToInt(MemBase.Vu1Code) + @enumToInt(MemSize.Vu1))) {
-        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Code) = 0x{X}.", .{@typeName(T), addr, data});
+        //warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Code) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Vu1Data) and addr < (@enumToInt(MemBase.Vu1Data) + @enumToInt(MemSize.Vu1))) {
-        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Data) = 0x{X}.", .{@typeName(T), addr, data});
+        //warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Data) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
         if (T != u64) {
             @panic("Unhandled write @ GS I/O");
@@ -359,8 +360,30 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             else => {
                 err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
+                cpu.dumpRegs();
+
+                //dumpRam();
+
                 assert(false);
             }
         }
     }
+}
+
+/// Dumps RDRAM image
+fn dumpRam() void {
+    info("   [Bus       ] Dumping RAM...", .{});
+
+    // Load BIOS file
+    const ramFile = openFile("moeFiles/ram.bin", .{.mode = OpenMode.write_only}) catch {
+        err("  [moestation] Unable to open file.", .{});
+
+        return;
+    };
+
+    defer ramFile.close();
+
+    ramFile.writer().writeAll(rdram) catch {
+        err("  [moestation] Unable to write to file.", .{});
+    };
 }
