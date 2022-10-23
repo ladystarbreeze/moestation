@@ -95,6 +95,7 @@ const Special = enum(u6) {
     Srl    = 0x02,
     Sra    = 0x03,
     Sllv   = 0x04,
+    Srlv   = 0x06,
     Srav   = 0x07,
     Jr     = 0x08,
     Jalr   = 0x09,
@@ -117,7 +118,9 @@ const Special = enum(u6) {
     Sltu   = 0x2B,
     Daddu  = 0x2D,
     Dsll   = 0x38,
+    Dsrl   = 0x3A,
     Dsll32 = 0x3C,
+    Dsrl32 = 0x3E,
     Dsra32 = 0x3F,
 };
 
@@ -409,6 +412,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Srl   ) => iSrl(instr),
                 @enumToInt(Special.Sra   ) => iSra(instr),
                 @enumToInt(Special.Sllv  ) => iSllv(instr),
+                @enumToInt(Special.Srlv  ) => iSrlv(instr),
                 @enumToInt(Special.Srav  ) => iSrav(instr),
                 @enumToInt(Special.Jr    ) => iJr(instr),
                 @enumToInt(Special.Jalr  ) => iJalr(instr),
@@ -431,7 +435,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sltu  ) => iSltu(instr),
                 @enumToInt(Special.Daddu ) => iDaddu(instr),
                 @enumToInt(Special.Dsll  ) => iDsll(instr),
+                @enumToInt(Special.Dsrl  ) => iDsrl(instr),
                 @enumToInt(Special.Dsll32) => iDsll32(instr),
+                @enumToInt(Special.Dsrl32) => iDsrl32(instr),
                 @enumToInt(Special.Dsra32) => iDsra32(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -1110,6 +1116,40 @@ fn iDsra32(instr: u32) void {
     }
 }
 
+/// Doubleword Shift Right Logical
+fn iDsrl(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, regFile.get(u64, rt) >> @as(u6, sa));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Doubleword Shift Right Logical + 32
+fn iDsrl32(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, regFile.get(u64, rt) >> (@as(u6, sa) + 32));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Jump
 fn iJ(instr: u32) void {
     const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
@@ -1233,15 +1273,6 @@ fn iLd(instr: u32) void {
 
 /// LDL - Load Doubleword Left
 fn iLdl(instr: u32) void {
-    const maskTable = [_]u64 {
-        0x00FFFFFF_FFFFFFFF, 0x0000FFFF_FFFFFFFF, 0x000000FF_FFFFFFFF, 0x00000000_FFFFFFFF,
-        0x00000000_00FFFFFF, 0x00000000_0000FFFF, 0x00000000_000000FF, 0x00000000_00000000,
-    };
-
-    const shiftTable = [_]u6 {
-        56, 48, 40, 32, 24, 16, 8, 0,
-    };
-
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
@@ -1250,11 +1281,12 @@ fn iLdl(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
     const addrMask = addr & ~@as(u32, 7);
 
-    const shift = addr & 7;
+    const shift = @truncate(u6, 8 * (addr & 7));
+    const mask = (~@as(u64, 0)) >> shift;
 
-    const data = (regFile.get(u64, rt) & maskTable[shift]) | (read(u64, addrMask) << shiftTable[shift]);
+    const data = (regFile.get(u64, rt) & mask) | (read(u64, addrMask) << (56 - shift));
 
-    if (true) {
+    if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1266,15 +1298,6 @@ fn iLdl(instr: u32) void {
 
 /// LDR - Load Doubleword Right
 fn iLdr(instr: u32) void {
-    const maskTable = [_]u64 {
-        0x00000000_00000000, 0xFF000000_00000000, 0xFFFF0000_00000000, 0xFFFFFF00_00000000,
-        0xFFFFFFFF_00000000, 0xFFFFFFFF_FF000000, 0xFFFFFFFF_FFFF0000, 0xFFFFFFFF_FFFFFF00,
-    };
-
-    const shiftTable = [_]u6 {
-        0, 8, 16, 24, 32, 40, 48, 56,
-    };
-
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
@@ -1283,11 +1306,12 @@ fn iLdr(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
     const addrMask = addr & ~@as(u32, 7);
 
-    const shift = addr & 7;
+    const shift = @truncate(u6, 8 * (addr & 7));
+    const mask = ~((~@as(u64, 0)) >> shift);
 
-    const data = (regFile.get(u64, rt) & maskTable[shift]) | (read(u64, addrMask) >> shiftTable[shift]);
+    const data = (regFile.get(u64, rt) & mask) | (read(u64, addrMask) >> shift);
 
-    if (true) {
+    if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1785,15 +1809,6 @@ fn iSd(instr: u32) void {
 
 /// SDL - Store Doubleword Left
 fn iSdl(instr: u32) void {
-    const maskTable = [_]u64 {
-        0xFFFFFFFF_FFFFFF00, 0xFFFFFFFF_FFFF0000, 0xFFFFFFFF_FF000000, 0xFFFFFFFF_00000000,
-        0xFFFFFF00_00000000, 0xFFFF0000_00000000, 0xFF000000_00000000, 0x00000000_00000000,
-    };
-
-    const shiftTable = [_]u6 {
-        56, 48, 40, 32, 24, 16, 8, 0,
-    };
-
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
@@ -1802,13 +1817,14 @@ fn iSdl(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
     const addrMask = addr & ~@as(u32, 7);
 
-    const shift = addr & 7;
+    const shift = @truncate(u6, 56 - 8 * (addr & 7));
+    const mask = ~((~@as(u64, 0)) >> shift);
 
-    const data = (read(u64, addrMask) & maskTable[shift]) | (regFile.get(u64, rt) >> shiftTable[shift]);
+    const data = (read(u64, addrMask) & mask) | (regFile.get(u64, rt) >> shift);
 
     write(u64, addrMask, data);
 
-    if (true) {
+    if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -1818,15 +1834,6 @@ fn iSdl(instr: u32) void {
 
 /// SDR - Store Doubleword Right
 fn iSdr(instr: u32) void {
-    const maskTable = [_]u64 {
-        0x00000000_000000FF, 0x00000000_0000FFFF, 0x00000000_00FFFFFF, 0x00000000_FFFFFFFF,
-        0x000000FF_FFFFFFFF, 0x0000FFFF_FFFFFFFF, 0x00FFFFFF_FFFFFFFF, 0xFFFFFFFF_FFFFFFFF,
-    };
-
-    const shiftTable = [_]u6 {
-        0, 8, 16, 24, 32, 40, 48, 56,
-    };
-
     const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
@@ -1835,13 +1842,14 @@ fn iSdr(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
     const addrMask = addr & ~@as(u32, 7);
 
-    const shift = addr & 7;
+    const shift = @truncate(u6, 8 * (addr & 7));
+    const mask = (~@as(u64, 0)) >> (56 - shift);
 
-    const data = (read(u64, addrMask) & maskTable[shift]) | (regFile.get(u64, rt) << shiftTable[shift]);
+    const data = (read(u64, addrMask) & mask) | (regFile.get(u64, rt) << shift);
 
     write(u64, addrMask, data);
 
-    if (true) {
+    if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
@@ -2051,6 +2059,23 @@ fn iSrl(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Shift Right Logical Variable
+fn iSrlv(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u32, rd, regFile.get(u32, rt) >> @truncate(u5, regFile.get(u64, rs)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
