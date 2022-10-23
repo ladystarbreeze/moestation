@@ -5,3 +5,6 @@ zig-out
 # Debug & dev
 moeDocs
 moeFiles
+
+# macOS
+.DS_Store
