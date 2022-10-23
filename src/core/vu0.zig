@@ -163,6 +163,17 @@ fn write(comptime T: type, addr: u12, data: T) void {
     @memcpy(@ptrCast([*]u8, &vuMem[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
 }
 
+/// Sets a COP2 register
+pub fn set(comptime T: type, idx: u5, data: T) void {
+    assert(T == u32 or T == u128);
+
+    if (T == u32) {
+        @panic("Unhandled COP2 write");
+    }
+
+    regFile.setVf(idx, data);
+}
+
 /// Sets a COP2 control register
 pub fn setControl(comptime T: type, idx: u5, data: T) void {
     switch (idx) {

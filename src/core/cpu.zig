@@ -133,6 +133,7 @@ const CopOpcode = enum(u5) {
 /// COP2 instructions
 const Cop2Opcode = enum(u5) {
     Qmfc2 = 0x01,
+    Qmtc2 = 0x05,
 };
 
 /// COP Control instructions
@@ -522,6 +523,7 @@ fn decodeInstr(instr: u32) void {
                 switch (rs & 0xF) {
                     @enumToInt(Cop2Opcode.Qmfc2) => iQmfc2(instr),
                     @enumToInt(CopOpcode.Cf    ) => iCfc(instr, 2),
+                    @enumToInt(Cop2Opcode.Qmtc2) => iQmtc2(instr),
                     @enumToInt(CopOpcode.Ct    ) => iCtc(instr, 2),
                     else => {
                         err("  [EE Core   ] Unhandled COP2 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
@@ -1550,6 +1552,22 @@ fn iQmfc2(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
         info("   [EE Core   ] QMFC2 ${s}, ${}; ${s} = 0x{X:0>32}", .{tagRt, rd, tagRt, regFile.get(u128, rt)});
+    }
+}
+
+/// Quadword Move To Coprocessor 2
+fn iQmtc2(instr: u32) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    const data = regFile.get(u128, rt);
+
+    vu0.set(u128, rd, data);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [EE Core   ] QMTC2 ${s}, ${}; ${} = 0x{X:0>32}", .{tagRt, rd, rd, data});
     }
 }
 
