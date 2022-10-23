@@ -67,6 +67,8 @@ const Opcode = enum(u6) {
     Beql    = 0x14,
     Bnel    = 0x15,
     Daddiu  = 0x19,
+    Ldl     = 0x1A,
+    Ldr     = 0x1B,
     Mmi     = 0x1C,
     Lq      = 0x1E,
     Sq      = 0x1F,
@@ -75,9 +77,12 @@ const Opcode = enum(u6) {
     Lw      = 0x23,
     Lbu     = 0x24,
     Lhu     = 0x25,
+    Lwu     = 0x27,
     Sb      = 0x28,
     Sh      = 0x29,
     Sw      = 0x2B,
+    Sdl     = 0x2C,
+    Sdr     = 0x2D,
     Cache   = 0x2F,
     Ld      = 0x37,
     Swc1    = 0x39,
@@ -573,6 +578,8 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Beql  ) => iBeql(instr),
         @enumToInt(Opcode.Bnel  ) => iBnel(instr),
         @enumToInt(Opcode.Daddiu) => iDaddiu(instr),
+        @enumToInt(Opcode.Ldl   ) => iLdl(instr),
+        @enumToInt(Opcode.Ldr   ) => iLdr(instr),
         @enumToInt(Opcode.Mmi   ) => {
             const funct = getFunct(instr);
 
@@ -606,9 +613,12 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Lw   ) => iLw(instr),
         @enumToInt(Opcode.Lbu  ) => iLbu(instr),
         @enumToInt(Opcode.Lhu  ) => iLhu(instr),
+        @enumToInt(Opcode.Lwu  ) => iLwu(instr),
         @enumToInt(Opcode.Sb   ) => iSb(instr),
         @enumToInt(Opcode.Sh   ) => iSh(instr),
         @enumToInt(Opcode.Sw   ) => iSw(instr),
+        @enumToInt(Opcode.Sdl  ) => iSdl(instr),
+        @enumToInt(Opcode.Sdr  ) => iSdr(instr),
         @enumToInt(Opcode.Cache) => iCache(instr),
         @enumToInt(Opcode.Ld   ) => iLd(instr),
         @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
@@ -1219,6 +1229,54 @@ fn iLd(instr: u32) void {
     regFile.set(u64, rt, data);
 }
 
+/// LDL - Load Doubleword Left
+fn iLdl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    const shift = @truncate(u6, 8 * (addr & 7));
+    const mask  = @bitCast(u64, @as(i64, -1)) << shift;
+
+    const data = (regFile.get(u64, rt) & ~mask) | (read(u64, addr & ~@as(u32, 7)) << shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LDL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
+/// LDR - Load Doubleword Right
+fn iLdr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    const shift = @truncate(u6, 8 * ((addr ^ 7) & 7));
+    const mask  = @bitCast(u64, @as(i64, -1)) >> shift;
+
+    const data = (regFile.get(u64, rt) & ~mask) | (read(u64, addr & ~@as(u32, 7)) >> shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LDR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
 /// Load Halfword
 fn iLh(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -1331,6 +1389,33 @@ fn iLw(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] LW ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u64, rt, data);
+}
+
+/// Load Word Unsigned
+fn iLwu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if ((addr & 3) != 0) {
+        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = @as(u64, read(u32, addr));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LWU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -1676,6 +1761,52 @@ fn iSd(instr: u32) void {
     }
 
     write(u64, addr, data);
+}
+
+/// SDL - Store Doubleword Left
+fn iSdl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = read(u64, addr & ~@as(u32, 7));
+
+    const shift = @truncate(u6, 8 * (addr & 7));
+    const mask  = @intCast(u64, @bitCast(u64, @as(i64, -1))) >> shift;
+
+    write(u64, addr & ~@as(u32, 7), (data & ~mask) | (regFile.get(u64, rt) >> shift));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SDL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+}
+
+/// SDR - Store Doubleword Right
+fn iSdr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const data = read(u64, addr & ~@as(u32, 7));
+
+    const shift = @truncate(u6, 8 * ((addr ^ 7) & 7));
+    const mask  = @intCast(u64, @bitCast(u64, @as(i64, -1))) << shift;
+
+    write(u64, addr & ~@as(u32, 7), (data & ~mask) | (regFile.get(u64, rt) << shift));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SDR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+    }
 }
 
 /// Store Halfword
