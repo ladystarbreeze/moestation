@@ -215,6 +215,13 @@ pub fn read(comptime T: type, addr: u32) T {
     return data;
 }
 
+/// Reads data from the IOP bus
+pub fn readIop(comptime T: type, addr: u32) T {
+    err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+
+    assert(false);
+}
+
 /// Writes data to the system bus
 pub fn write(comptime T: type, addr: u32, data: T) void {
     assert(T == u8 or T == u16 or T == u32 or T == u64 or T == u128);
@@ -377,6 +384,13 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             }
         }
     }
+}
+
+/// Writes data to the IOP bus
+pub fn writeIop(comptime T: type, addr: u32, data: T) void {
+    err("  [Bus (IOP) ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
+
+    assert(false);
 }
 
 /// Dumps RDRAM image
