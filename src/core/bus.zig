@@ -218,9 +218,18 @@ pub fn read(comptime T: type, addr: u32) T {
 /// Reads data from the IOP bus
 pub fn readIop(comptime T: type, addr: u32) T {
     var data: T = undefined;
-    err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
-    assert(false);
+    if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
+    } else {
+        switch (addr) {
+            else => {
+                err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+
+                assert(false);
+            }
+        }
+    }
 
     return data;
 }
