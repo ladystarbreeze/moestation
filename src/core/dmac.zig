@@ -78,9 +78,36 @@ pub fn read(addr: u32) u32 {
     var data: u32 = 0;
 
     if (addr < @enumToInt(ControlReg.DCtrl)) {
-        err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
+        const chn = getChannel(@truncate(u8, addr >> 8));
 
-        assert(false);
+        switch (addr & ~@as(u32, 0xFF00)) {
+            @enumToInt(ChannelReg.DChcr) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_CTRL).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DMadr) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_MADR).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DQwc) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_QWC).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DTadr) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_TADR).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DAsr0) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_ASR0).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DAsr1) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_ASR1).", .{addr, @enumToInt(chn)});
+            },
+            @enumToInt(ChannelReg.DSadr) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D{}_SADR).", .{addr, @enumToInt(chn)});
+            },
+            else => {
+                err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
+
+                assert(false);
+            }
+        }
     } else {
         switch (addr) {
             @enumToInt(ControlReg.DCtrl) => {
