@@ -217,9 +217,12 @@ pub fn read(comptime T: type, addr: u32) T {
 
 /// Reads data from the IOP bus
 pub fn readIop(comptime T: type, addr: u32) T {
+    var data: T = undefined;
     err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
     assert(false);
+
+    return data;
 }
 
 /// Writes data to the system bus
