@@ -23,6 +23,7 @@ const dmac  = @import("dmac.zig");
 const gif   = @import("gif.zig");
 const gs    = @import("gs.zig");
 const intc  = @import("intc.zig");
+const sif   = @import("sif.zig");
 const timer = @import("timer.zig");
 const vu0   = @import("vu0.zig");
 
@@ -35,6 +36,7 @@ const MemBase = enum(u32) {
     Vif0    = 0x1000_3800,
     Vif1    = 0x1000_3C00,
     Dmac    = 0x1000_8000,
+    Sif     = 0x1000_F200,
     Vu0Code = 0x1100_0000,
     Vu0Data = 0x1100_4000,
     Vu1Code = 0x1100_8000,
@@ -53,6 +55,7 @@ const MemSize = enum(u32) {
     Vu1   = 0x000_4000,
     Vif   = 0x000_0180,
     Dmac  = 0x000_7000,
+    Sif   = 0x000_0070,
     Gs    = 0x000_2000,
     Bios  = 0x040_0000,
 };
@@ -246,6 +249,12 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
         }
 
         dmac.write(addr, data);
+    } else if (addr >= @enumToInt(MemBase.Sif) and addr < (@enumToInt(MemBase.Sif) + @enumToInt(MemSize.Sif))) {
+        if (T != u32) {
+            @panic("Unhandled write @ SIF I/O");
+        }
+
+        sif.writeEe(addr, data);
     } else if (addr >= @enumToInt(MemBase.Vu0Code) and addr < (@enumToInt(MemBase.Vu0Code) + @enumToInt(MemSize.Vu0))) {
         //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
 
