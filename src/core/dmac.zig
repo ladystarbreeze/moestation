@@ -83,6 +83,9 @@ pub fn read(addr: u32) u32 {
         assert(false);
     } else {
         switch (addr) {
+            @enumToInt(ControlReg.DCtrl) => {
+                info("   [DMAC      ] Read @ 0x{X:0>8} (D_CTRL).", .{addr});
+            },
             @enumToInt(ControlReg.DStat) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_STAT).", .{addr});
             },
