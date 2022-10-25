@@ -12,41 +12,7 @@ const assert = std.debug.assert;
 const err  = std.log.err;
 const info = std.log.info;
 
-/// COP0 register aliases
-pub const Cop0Reg = enum(u32) {
-    Index       =  0,
-    Random      =  1,
-    EntryLo0    =  2,
-    EntryLo1    =  3,
-    Context     =  4,
-    PageMask    =  5,
-    Wired       =  6,
-    R7          =  7,
-    BadVAddr    =  8,
-    Count       =  9,
-    EntryHi     = 10,
-    Compare     = 11,
-    Status      = 12,
-    Cause       = 13,
-    EPC         = 14,
-    PRId        = 15,
-    Config      = 16,
-    LLAddr      = 17,
-    WatchLo     = 18,
-    WatchHi     = 19,
-    XContext    = 20,
-    R21         = 21,
-    R22         = 22,
-    R23         = 23,
-    R24         = 24,
-    R25         = 25,
-    ParityError = 26,
-    CacheError  = 27,
-    TagLo       = 28,
-    TagHi       = 29,
-    ErrorEPC    = 30,
-    R31         = 31,
-};
+const Cop0Reg = @import("cop0.zig").Cop0Reg;
 
 /// Returns a COP0 register
 pub fn get(idx: u5) u32 {
