@@ -38,11 +38,12 @@ const CpuReg = enum(u5) {
     GP = 28, SP = 29, S8 = 30, RA = 31,
 };
 
-
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Bne     = 0x05,
     Slti    = 0x0A,
+    Lui     = 0x0F,
     Cop0    = 0x10,
 };
 
@@ -204,7 +205,9 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Bne ) => iBne(instr),
         @enumToInt(Opcode.Slti) => iSlti(instr),
+        @enumToInt(Opcode.Lui ) => iLui(instr),
         @enumToInt(Opcode.Cop0) => {
             const rs = getRs(instr);
 
@@ -222,6 +225,51 @@ fn decodeInstr(instr: u32) void {
 
             assert(false);
         }
+    }
+}
+
+/// Branch helper
+fn doBranch(target: u32, isCond: bool, rd: u5) void {
+    regFile.set(rd, regFile.npc);
+
+    inDelaySlot[1] = true;
+
+    if (isCond) {
+        regFile.npc = target;
+    }
+}
+
+/// Branch on Not Equal
+fn iBne(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(rs) != regFile.get(rt), @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [IOP       ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>8}, ${s} = 0x{X:0>8}", .{tagRs, tagRt, target, tagRs, regFile.get(rs), tagRt, regFile.get(rt)});
+    }
+}
+
+/// Load Upper Immediate
+fn iLui(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rt = getRt(instr);
+
+    regFile.set(rt, @as(u32, imm16) << 16);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, imm16, tagRt, regFile.get(rt)});
     }
 }
 
