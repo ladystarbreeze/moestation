@@ -16,6 +16,8 @@ const bus = @import("bus.zig");
 
 const cop0 = @import("cop0_iop.zig");
 
+const exts = @import("../common/extend.zig").exts;
+
 /// Enable/disable disassembler
 var doDisasm = true;
 
@@ -40,6 +42,7 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Slti    = 0x0A,
     Cop0    = 0x10,
 };
 
@@ -201,6 +204,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Slti) => iSlti(instr),
         @enumToInt(Opcode.Cop0) => {
             const rs = getRs(instr);
 
@@ -270,6 +274,23 @@ fn iSll(instr: u32) void {
 
             info("   [IOP       ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
         }
+    }
+}
+
+/// Set Less Than Immediate
+fn iSlti(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, @as(u32, @bitCast(u1, @bitCast(i32, regFile.get(rs)) < @bitCast(i32, imm16s))));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
     }
 }
 
