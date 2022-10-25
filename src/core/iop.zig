@@ -43,6 +43,7 @@ const Opcode = enum(u6) {
     Special = 0x00,
     Bne     = 0x05,
     Slti    = 0x0A,
+    Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
 };
@@ -50,6 +51,7 @@ const Opcode = enum(u6) {
 /// SPECIAL instructions
 const Special = enum(u6) {
     Sll = 0x00,
+    Jr  = 0x08,
 };
 
 /// COP instructions
@@ -198,6 +200,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(Special.Sll) => iSll(instr),
+                @enumToInt(Special.Jr ) => iJr(instr),
                 else => {
                     err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -207,6 +210,7 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Bne ) => iBne(instr),
         @enumToInt(Opcode.Slti) => iSlti(instr),
+        @enumToInt(Opcode.Ori ) => iOri(instr),
         @enumToInt(Opcode.Lui ) => iLui(instr),
         @enumToInt(Opcode.Cop0) => {
             const rs = getRs(instr);
@@ -258,6 +262,21 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// Jump Register
+fn iJr(instr: u32) void {
+    const rs = getRs(instr);
+
+    const target = regFile.get(rs);
+
+    doBranch(target, true, 0);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+    
+        info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
+    }
+}
+
 /// Load Upper Immediate
 fn iLui(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -301,6 +320,23 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
         info("   [IOP       ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(rt)});
+    }
+}
+
+/// OR Immediate
+fn iOri(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, regFile.get(rs) | @as(u32, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16, tagRt, regFile.get(rt)});
     }
 }
 
