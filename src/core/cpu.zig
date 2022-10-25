@@ -20,9 +20,9 @@ const Cop0Reg = cop0.Cop0Reg;
 
 const cop1 = @import("cop1.zig");
 
-const exts = @import("../common/extend.zig").exts;
-
 const vu0 = @import("vu0.zig");
+
+const exts = @import("../common/extend.zig").exts;
 
 /// Enable/disable disassembler
 var doDisasm = false;
