@@ -643,18 +643,14 @@ fn decodeInstr(instr: u32) void {
 fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
     regFile.set(u64, rd, @as(u64, regFile.npc));
 
+    inDelaySlot[1] = true;
+
     if (isCond) {
-        assert(target != 0xBFC00928);
-
         regFile.npc = target;
+    } else if (isLikely) {
+        regFile.setPc(regFile.npc);
 
-        inDelaySlot[1] = true;
-    } else {
-        if (isLikely) {
-            regFile.setPc(regFile.npc);
-        } else {
-            inDelaySlot[1] = true;
-        }
+        inDelaySlot[1] = false;
     }
 }
 
