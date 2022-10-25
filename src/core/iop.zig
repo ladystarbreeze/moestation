@@ -14,6 +14,8 @@ const info = std.log.info;
 
 const bus = @import("bus.zig");
 
+const cop0 = @import("cop0_iop.zig");
+
 /// Enable/disable disassembler
 var doDisasm = true;
 
@@ -34,6 +36,23 @@ const CpuReg = enum(u5) {
     GP = 28, SP = 29, S8 = 30, RA = 31,
 };
 
+
+/// Opcodes
+const Opcode = enum(u6) {
+    Special = 0x00,
+    Cop0    = 0x10,
+};
+
+/// SPECIAL instructions
+const Special = enum(u6) {
+    Sll = 0x00,
+};
+
+/// COP instructions
+const CopOpcode = enum(u5) {
+    Mf = 0x00,
+};
+
 /// IOP register file
 const RegFile = struct {
     // GPRs
@@ -48,12 +67,12 @@ const RegFile = struct {
     hi: u32 = undefined,
 
     /// Returns GPR
-    pub fn get(self: RegFile, comptime T: type, idx: u5) T {
+    pub fn get(self: RegFile, idx: u5) u32 {
         return self.regs[idx];
     }
 
     /// Sets GPR
-    pub fn set(self: *RegFile, comptime T: type, idx: u5, data: T) void {
+    pub fn set(self: *RegFile, idx: u5, data: u32) void {
         self.regs[idx] = data;
 
         self.regs[0] = 0;
@@ -170,10 +189,86 @@ fn decodeInstr(instr: u32) void {
     const opcode = getOpcode(instr);
 
     switch (opcode) {
+        @enumToInt(Opcode.Special) => {
+            const funct = getFunct(instr);
+
+            switch (funct) {
+                @enumToInt(Special.Sll) => iSll(instr),
+                else => {
+                    err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                    assert(false);
+                }
+            }
+        },
+        @enumToInt(Opcode.Cop0) => {
+            const rs = getRs(instr);
+
+            switch (rs) {
+                @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
+                else => {
+                    err("  [IOP       ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
+
+                    assert(false);
+                }
+            }
+        },
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
             assert(false);
+        }
+    }
+}
+
+/// Move From Coprocessor
+fn iMfc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    //if (!cop0.isCopUsable(n)) {
+    //    err("  [IOP       ] Coprocessor {} is unusable!", .{n});
+    //
+    //    assert(false);
+    //}
+
+    var data: u32 = undefined;
+
+    switch (n) {
+        0 => data = cop0.get(rd),
+        else => {
+            err("  [IOP       ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    regFile.set(rt, data);
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [IOP       ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(rt)});
+    }
+}
+
+/// Shift Left Logical
+fn iSll(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rt) << sa);
+
+    if (doDisasm) {
+        if (@intToEnum(CpuReg, rd) == CpuReg.R0) {
+            info("   [IOP       ] NOP", .{});
+        } else {
+            const tagRd = @tagName(@intToEnum(CpuReg, rd));
+            const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+            info("   [IOP       ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
         }
     }
 }
