@@ -13,6 +13,7 @@ const info = std.log.info;
 // Submodules
 const bus = @import("core/bus.zig");
 const cpu = @import("core/cpu.zig");
+const iop = @import("core/iop.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
@@ -33,8 +34,15 @@ pub fn main() void {
     defer bus.deinit(allocator);
 
     cpu.init();
+    iop.init();
 
     while (true) {
-        cpu.step();
+        var i: i32 = 0;
+
+        while (i < 8) : (i += 1) {
+            cpu.step();
+        }
+
+        iop.step();
     }
 }
