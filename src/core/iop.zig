@@ -41,11 +41,14 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Beq     = 0x04,
     Bne     = 0x05,
+    Addiu   = 0x09,
     Slti    = 0x0A,
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Lw      = 0x23,
 };
 
 /// SPECIAL instructions
@@ -208,11 +211,13 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
-        @enumToInt(Opcode.Bne ) => iBne(instr),
-        @enumToInt(Opcode.Slti) => iSlti(instr),
-        @enumToInt(Opcode.Ori ) => iOri(instr),
-        @enumToInt(Opcode.Lui ) => iLui(instr),
-        @enumToInt(Opcode.Cop0) => {
+        @enumToInt(Opcode.Beq  ) => iBeq(instr),
+        @enumToInt(Opcode.Bne  ) => iBne(instr),
+        @enumToInt(Opcode.Addiu) => iAddiu(instr),
+        @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Ori  ) => iOri(instr),
+        @enumToInt(Opcode.Lui  ) => iLui(instr),
+        @enumToInt(Opcode.Cop0 ) => {
             const rs = getRs(instr);
 
             switch (rs) {
@@ -224,6 +229,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Lw) => iLw(instr),
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -240,6 +246,42 @@ fn doBranch(target: u32, isCond: bool, rd: u5) void {
 
     if (isCond) {
         regFile.npc = target;
+    }
+}
+
+/// ADD Immediate Unsigned
+fn iAddiu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, regFile.get(rs) +% imm16s);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
+    }
+}
+
+/// Branch on EQual
+fn iBeq(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, regFile.get(rs) == regFile.get(rt), @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+        
+        info("   [IOP       ] BEQ ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>8}, ${s} = 0x{X:0>8}", .{tagRs, tagRt, target, tagRs, regFile.get(rs), tagRt, regFile.get(rt)});
     }
 }
 
@@ -290,6 +332,33 @@ fn iLui(instr: u32) void {
 
         info("   [IOP       ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, imm16, tagRt, regFile.get(rt)});
     }
+}
+
+/// Load Word
+fn iLw(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+
+    if ((addr & 3) != 0) {
+        err("  [IOP       ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = read(u32, addr);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LW ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, data);
 }
 
 /// Move From Coprocessor
