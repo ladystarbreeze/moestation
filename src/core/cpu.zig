@@ -1281,10 +1281,10 @@ fn iLdl(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
     const addrMask = addr & ~@as(u32, 7);
 
-    const shift = @truncate(u6, 8 * (addr & 7));
-    const mask = (~@as(u64, 0)) >> shift;
+    const shift = @truncate(u6, 56 - 8 * (addr & 7));
+    const mask = ~((~@as(u64, 0)) << shift);
 
-    const data = (regFile.get(u64, rt) & mask) | (read(u64, addrMask) << (56 - shift));
+    const data = (regFile.get(u64, rt) & mask) | (read(u64, addrMask) << shift);
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
@@ -1843,7 +1843,7 @@ fn iSdr(instr: u32) void {
     const addrMask = addr & ~@as(u32, 7);
 
     const shift = @truncate(u6, 8 * (addr & 7));
-    const mask = (~@as(u64, 0)) >> (56 - shift);
+    const mask = ~((~@as(u64, 0)) << shift);
 
     const data = (read(u64, addrMask) & mask) | (regFile.get(u64, rt) << shift);
 
@@ -2203,9 +2203,6 @@ fn iXori(instr: u32) void {
 /// Steps the EE Core interpreter
 pub fn step() void {
     regFile.cpc = regFile.pc;
-
-    //if (regFile.cpc == 0x8000DB90 and regFile.get(u64, @enumToInt(CpuReg.V1)) == 0x20) doDisasm = true;
-    //if (regFile.cpc == 0x8000DB90 and regFile.get(u64, @enumToInt(CpuReg.V1)) == 0x1FFF_FFFE) assert(false);
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
