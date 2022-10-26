@@ -122,26 +122,7 @@ pub fn init() void {
 
 /// Translates virtual address to physical address
 fn translateAddr(addr: u32) u32 {
-    // NOTE: this is Kernel mode only!
-
-    var pAddr: u32 = undefined;
-
-    switch (@truncate(u4, addr >> 28)) {
-        0x8 ... 0x9, 0xA ... 0xB => {
-            pAddr = addr & 0x1FFF_FFFF;
-        },
-        0x0 ... 0x7, 0xC ... 0xF => {
-            if (addr == 0xFFFE_0130) {
-                pAddr = addr;
-            } else {
-                err("  [IOP       ] Unhandled TLB mapped access @ 0x{X:0>8}.", .{addr});
-
-                assert(false);
-            }
-        },
-    }
-
-    return pAddr;
+    return addr & 0x1FFF_FFFF;
 }
 
 /// Reads data from the system bus
@@ -424,11 +405,11 @@ fn iMfc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
-    //if (!cop0.isCopUsable(n)) {
-    //    err("  [IOP       ] Coprocessor {} is unusable!", .{n});
-    //
-    //    assert(false);
-    //}
+    if (!cop0.isCopUsable(n)) {
+        err("  [IOP       ] Coprocessor {} is unusable!", .{n});
+    
+        assert(false);
+    }
 
     var data: u32 = undefined;
 
@@ -455,11 +436,11 @@ fn iMtc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
-    //if (!cop0.isCopUsable(n)) {
-    //    err("  [IOP       ] Coprocessor {} is unusable!", .{n});
-    //
-    //    assert(false);
-    //}
+    if (!cop0.isCopUsable(n)) {
+        err("  [IOP       ] Coprocessor {} is unusable!", .{n});
+    
+        assert(false);
+    }
 
     const data = regFile.get(rt);
 
