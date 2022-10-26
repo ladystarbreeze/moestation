@@ -259,6 +259,15 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = 0;
             },
+            0x1F80_1070 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ I_STAT");
+                }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_STAT).", .{@typeName(T), addr});
+
+                data = intc.getStatIop();
+            },
             0x1F80_1074 ... 0x1F80_1077 => {
                 info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_MASK).", .{@typeName(T), addr});
 
@@ -480,6 +489,7 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
             0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
             0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
             0x1F80_1020, 0x1F80_1060,
+            0x1F80_1800, 0x1F80_1801, 0x1F80_1802, 0x1F80_1803,
             0x1F80_2070 => {
                 warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
             },

@@ -70,6 +70,11 @@ pub fn getStat() u32 {
     return @as(u32, intcStat);
 }
 
+/// Returns I_STAT
+pub fn getStatIop() u32 {
+    return @as(u32, iStat);
+}
+
 /// Sets INTC_MASK, checks for interrupt
 pub fn setMask(data: u32) void {
     intcMask = @truncate(u15, data);
