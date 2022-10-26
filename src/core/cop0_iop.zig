@@ -154,6 +154,15 @@ pub fn enterException() void {
     status.cku = true;
 }
 
+/// Restores IE and KU bits
+pub fn leaveException() void {
+    status.cie = status.pie;
+    status.pie = status.oie;
+
+    status.cku = status.pku;
+    status.pku = status.oku;
+}
+
 /// Returns a COP0 register
 pub fn get(idx: u5) u32 {
     var data: u32 = undefined;
