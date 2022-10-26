@@ -16,6 +16,7 @@ const warn = std.log.warn;
 /// SIF registers (EE)
 const SifReg = enum(u32) {
     SifMscom = 0x1000_F200,
+    SifSmcom = 0x1000_F210,
     SifMsflg = 0x1000_F220,
     SifSmflg = 0x1000_F230,
     SifCtrl  = 0x1000_F240,
@@ -24,14 +25,19 @@ const SifReg = enum(u32) {
 
 /// SIF registers (IOP)
 const SifRegIop = enum(u32) {
-    SifBd6 = 0x1D00_0060,
+    SifSmcom = 0x1D00_0010,
+    SifMsflg = 0x1D00_0020,
+    SifSmflg = 0x1D00_0030,
+    SifCtrl  = 0x1D00_0040,
+    SifBd6   = 0x1D00_0060,
 };
 
 /// SIF registers
-var mscom: u32 = undefined;
-var msflg: u32 = undefined;
-var smflg: u32 = undefined;
-var   bd6: u32 = undefined;
+var mscom: u32 = 0;
+var smcom: u32 = 0;
+var msflg: u32 = 0;
+var smflg: u32 = 0;
+var   bd6: u32 = 0;
 
 /// Reads data from SIF registers (from EE)
 pub fn read(addr: u32) u32 {
@@ -42,6 +48,11 @@ pub fn read(addr: u32) u32 {
             info("   [SIF       ] Read @ 0x{X:0>8} (SIF_MSCOM).", .{addr});
 
             data = mscom;
+        },
+        @enumToInt(SifReg.SifSmcom) => {
+            info("   [SIF       ] Read @ 0x{X:0>8} (SIF_SMCOM).", .{addr});
+
+            data = smcom;
         },
         @enumToInt(SifReg.SifMsflg) => {
             info("   [SIF       ] Read @ 0x{X:0>8} (SIF_MSFLG).", .{addr});
@@ -68,8 +79,28 @@ pub fn readIop(addr: u32) u32 {
     var data: u32 = undefined;
 
     switch (addr) {
+        @enumToInt(SifRegIop.SifSmcom) => {
+            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_SMCOM).", .{addr});
+
+            data = smcom;
+        },
+        @enumToInt(SifRegIop.SifMsflg) => {
+            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_MSFLG).", .{addr});
+
+            data = msflg;
+        },
+        @enumToInt(SifRegIop.SifSmflg) => {
+            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_SMFLG).", .{addr});
+
+            data = smflg;
+        },
+        @enumToInt(SifRegIop.SifCtrl) => {
+            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_CTRL).", .{addr});
+
+            data = 0xF000_0002;
+        },
         @enumToInt(SifRegIop.SifBd6) => {
-            info("   [SIF       ] Read @ 0x{X:0>8} (SIF_BD6).", .{addr});
+            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_BD6).", .{addr});
 
             data = bd6;
         },
@@ -94,7 +125,7 @@ pub fn write(addr: u32, data: u32) void {
         @enumToInt(SifReg.SifMsflg) => {
             info("   [SIF       ] Write @ 0x{X:0>8} (SIF_MSFLG) = 0x{X:0>8}.", .{addr, data});
 
-            msflg = data;
+            msflg |= data;
         },
         @enumToInt(SifReg.SifCtrl) => {
             info("   [SIF       ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
@@ -106,6 +137,30 @@ pub fn write(addr: u32, data: u32) void {
         },
         else => {
             err("  [SIF       ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
+
+            assert(false);
+        }
+    }
+}
+
+/// Writes data to SIF registers (from IOP)
+pub fn writeIop(addr: u32, data: u32) void {
+    switch (addr) {
+        @enumToInt(SifRegIop.SifSmcom) => {
+            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMCOM) = 0x{X:0>8}.", .{addr, data});
+
+            smcom = data;
+        },
+        @enumToInt(SifRegIop.SifSmflg) => {
+            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
+
+            smflg |= data;
+        },
+        @enumToInt(SifRegIop.SifCtrl) => {
+            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
+        },
+        else => {
+            err("  [SIF (IOP) ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
 
             assert(false);
         }
