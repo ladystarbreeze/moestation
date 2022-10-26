@@ -65,6 +65,7 @@ const Special = enum(u6) {
 /// COP instructions
 const CopOpcode = enum(u5) {
     Mf = 0x00,
+    Mt = 0x04,
 };
 
 /// IOP register file
@@ -123,20 +124,24 @@ pub fn init() void {
 fn translateAddr(addr: u32) u32 {
     // NOTE: this is Kernel mode only!
 
-    var data: u32 = undefined;
+    var pAddr: u32 = undefined;
 
     switch (@truncate(u4, addr >> 28)) {
         0x8 ... 0x9, 0xA ... 0xB => {
-            data = addr & 0x1FFF_FFFF;
+            pAddr = addr & 0x1FFF_FFFF;
         },
         0x0 ... 0x7, 0xC ... 0xF => {
-            err("  [IOP       ] Unhandled TLB mapped access @ 0x{X:0>8}.", .{addr});
+            if (addr == 0xFFFE_0130) {
+                pAddr = addr;
+            } else {
+                err("  [IOP       ] Unhandled TLB mapped access @ 0x{X:0>8}.", .{addr});
 
-            assert(false);
+                assert(false);
+            }
         },
     }
 
-    return data;
+    return pAddr;
 }
 
 /// Reads data from the system bus
@@ -230,6 +235,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (rs) {
                 @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
+                @enumToInt(CopOpcode.Mt) => iMtc(instr, 0),
                 else => {
                     err("  [IOP       ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
@@ -441,6 +447,35 @@ fn iMfc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
         info("   [IOP       ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(rt)});
+    }
+}
+
+/// Move To Coprocessor
+fn iMtc(instr: u32, comptime n: u2) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    //if (!cop0.isCopUsable(n)) {
+    //    err("  [IOP       ] Coprocessor {} is unusable!", .{n});
+    //
+    //    assert(false);
+    //}
+
+    const data = regFile.get(rt);
+
+    switch (n) {
+        0 => cop0.set(rd, data),
+        else => {
+            err("  [IOP       ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+
+    if (doDisasm) {
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+    
+        info("   [IOP       ] MTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, data});
     }
 }
 
