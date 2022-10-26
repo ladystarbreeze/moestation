@@ -14,6 +14,48 @@ const info = std.log.info;
 
 const Cop0Reg = @import("cop0.zig").Cop0Reg;
 
+/// Exception codes
+const ExCode = enum(u5) {
+    Interrupt,
+    TlbModification,
+    TlbLoad,
+    TlbStore,
+    AddressErrorLoad,
+    AddressErrorStore,
+    InstructionBusError,
+    DataBusError,
+    Syscall,
+    Breakpoint,
+    ReservedInstruction,
+    CoprocessorUnusable,
+    Overflow,
+};
+
+/// COP0 Cause register
+const Cause = struct {
+    excode: u5   = undefined,
+        ip: u8   = undefined,
+        ce: u2   = undefined,
+        bd: bool = undefined,
+
+    /// Returns Cause
+    pub fn get(self: Cause) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.excode) << 2;
+        data |= @as(u32, self.ip) << 8;
+        data |= @as(u32, self.ce) << 28;
+        data |= @as(u32, @bitCast(u1, self.bd)) << 31;
+
+        return data;
+    }
+
+    /// Sets Cause
+    pub fn set(self: *Cause, data: u32) void {
+        self.ip = @truncate(u8, data >> 8);
+    }
+};
+
 /// COP0 Status register
 const Status = struct {
     cie: bool = undefined, // Current Interrupt Enable
@@ -82,6 +124,7 @@ const Status = struct {
 var compare: u32 = undefined;
 var   count: u32 = undefined;
 
+var  cause: Cause  = Cause{};
 var status: Status = Status{};
 
 /// Returns true if a coprocessor is usable
@@ -118,8 +161,9 @@ pub fn set(idx: u5, data: u32) void {
         @enumToInt(Cop0Reg.Wired   ) => {},
         @enumToInt(Cop0Reg.R7      ) => {},
         @enumToInt(Cop0Reg.Count   ) => count = data,
-        @enumToInt(Cop0Reg.Status  ) => status.set(data),
         @enumToInt(Cop0Reg.Compare ) => compare = data,
+        @enumToInt(Cop0Reg.Status  ) => status.set(data),
+        @enumToInt(Cop0Reg.Cause   ) => cause.set(data),
         else => {
             err("  [COP0 (IOP)] Unhandled register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 
