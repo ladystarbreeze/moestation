@@ -48,9 +48,11 @@ const MemBase = enum(u32) {
 
 /// Memory base addresses (IOP)
 const MemBaseIop = enum(u32) {
+    Sif    = 0x1D00_0000,
     Cdvd   = 0x1F40_2004,
     Dma0   = 0x1F80_1080,
     Timer0 = 0x1F80_1100,
+    Timer1 = 0x1F80_1480,
     Dma1   = 0x1F80_1500,
     Sio2   = 0x1F80_8200,
 };
@@ -249,6 +251,12 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBaseIop.Sif) and addr < (@enumToInt(MemBaseIop.Sif) + @enumToInt(MemSize.Sif))) {
+        if (T != u32) {
+            @panic("Unhandled read @ SIF I/O");
+        }
+
+        data = sif.readIop(addr);
     } else if (addr >= @enumToInt(MemBaseIop.Cdvd) and addr < (@enumToInt(MemBaseIop.Cdvd) + @enumToInt(MemSizeIop.Cdvd))) {
         if (T != u8) {
             @panic("Unhandled read @ CDVD");
@@ -256,6 +264,10 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
         data = cdvd.read(addr);
     } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
+        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (DMA).", .{@typeName(T), addr});
+
+        data = 0;
+    } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (DMA).", .{@typeName(T), addr});
 
         data = 0;
@@ -296,6 +308,9 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = 0;
             },
+            0x1E00_0000 ... 0x1E00_8000,
+            0x1F80_100C,
+            0x1F80_1400,
             0x1F80_1578 => {
                 warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
@@ -489,6 +504,8 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (DMA) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Timer0) and addr < (@enumToInt(MemBaseIop.Timer0) + @enumToInt(MemSizeIop.Timer))) {
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Timer) = 0x{X}.", .{@typeName(T), addr, data});
+    } else if (addr >= @enumToInt(MemBaseIop.Timer1) and addr < (@enumToInt(MemBaseIop.Timer1) + @enumToInt(MemSizeIop.Timer))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Timer) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (DMA) = 0x{X}.", .{@typeName(T), addr, data});
