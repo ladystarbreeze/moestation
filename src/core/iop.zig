@@ -87,6 +87,7 @@ const Special = enum(u6) {
     Mthi    = 0x11,
     Mflo    = 0x12,
     Mtlo    = 0x13,
+    Mult    = 0x18,
     Multu   = 0x19,
     Div     = 0x1A,
     Divu    = 0x1B,
@@ -200,7 +201,9 @@ fn fetchInstr() u32 {
 /// Writes data to the system bus
 fn write(comptime T: type, addr: u32, data: T) void {
     if (cop0.isCacheIsolated()) {
-        return info("   [IOP       ] Cache is isolated!", .{});
+        // info("   [IOP       ] Cache is isolated!", .{});
+
+        return;
     }
 
     bus.writeIop(T, translateAddr(addr), data);
@@ -268,6 +271,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Mthi   ) => iMthi(instr),
                 @enumToInt(Special.Mflo   ) => iMflo(instr),
                 @enumToInt(Special.Mtlo   ) => iMtlo(instr),
+                @enumToInt(Special.Mult   ) => iMult(instr),
                 @enumToInt(Special.Multu  ) => iMultu(instr),
                 @enumToInt(Special.Div    ) => iDiv(instr),
                 @enumToInt(Special.Divu   ) => iDivu(instr),
@@ -1020,6 +1024,24 @@ fn iMtlo(instr: u32) void {
     }
 }
 
+/// MULT - MULTply
+fn iMult(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = @as(i64, @bitCast(i32, regFile.get(rs))) * @as(i64, @bitCast(i32, regFile.get(rt)));
+
+    regFile.lo = @truncate(u32, @bitCast(u64, res >>  0));
+    regFile.hi = @truncate(u32, @bitCast(u64, res >> 32));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] MULT ${s}, ${s}; LO = 0x{X:0>8}, HI = 0x{X:0>8}", .{tagRs, tagRt, regFile.lo, regFile.hi});
+    }
+}
+
 /// MULTU - MULTply Unsigned
 fn iMultu(instr: u32) void {
     const rs = getRs(instr);
@@ -1473,7 +1495,16 @@ pub fn step() void {
     regFile.cpc = regFile.pc;
 
     if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
-        assert(false);
+        var ptr = regFile.get(@enumToInt(CpuReg.A1));
+        var len = regFile.get(@enumToInt(CpuReg.A2));
+
+        const stdOut = std.io.getStdOut().writer();
+
+        while (len != 0) : (len -= 1) {
+            stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
+
+            ptr += 1;
+        }
     }
 
     inDelaySlot[0] = inDelaySlot[1];
