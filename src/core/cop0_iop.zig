@@ -14,6 +14,81 @@ const info = std.log.info;
 
 const Cop0Reg = @import("cop0.zig").Cop0Reg;
 
+/// COP0 Status register
+const Status = struct {
+    cie: bool = undefined, // Current Interrupt Enable
+    cku: bool = undefined, // Current Kernel/User mode
+    pie: bool = undefined, // Previous Interrupt Enable
+    pku: bool = undefined, // Previous Kernel/User mode
+    oie: bool = undefined, // Old Interrupt Enable
+    oku: bool = undefined, // Old Kernel/User mode
+     im: u8   = undefined, // Interrupt Mask
+    isc: bool = undefined, // ISolate Cache
+    swc: bool = undefined, // SWap Caches
+     pz: bool = undefined, // cache Parity Zero
+     ch: bool = undefined, // Cache Hit
+     pe: bool = undefined, // cache Parity Error
+     ts: bool = undefined, // TLB Shutdown
+    bev: bool = true,      // Boot Exception Vector
+     re: bool = undefined, // Reverse Endianness
+     cu: u4   = undefined, // Coprocessor Usable
+
+    // Returns Status
+    pub fn get(self: Status) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, @bitCast(u1, self.cie));
+        data |= @as(u32, @bitCast(u1, self.cku) << 1);
+        data |= @as(u32, @bitCast(u1, self.pie) << 2);
+        data |= @as(u32, @bitCast(u1, self.pku) << 3);
+        data |= @as(u32, @bitCast(u1, self.oku) << 4);
+        data |= @as(u32, @bitCast(u1, self.oku) << 5);
+        data |= @as(u32, self.im) << 8;
+        data |= @as(u32, @bitCast(u1, self.isc)) << 16;
+        data |= @as(u32, @bitCast(u1, self.swc)) << 17;
+        data |= @as(u32, @bitCast(u1, self.pz )) << 18;
+        data |= @as(u32, @bitCast(u1, self.ch )) << 19;
+        data |= @as(u32, @bitCast(u1, self.pe )) << 20;
+        data |= @as(u32, @bitCast(u1, self.ts )) << 21;
+        data |= @as(u32, @bitCast(u1, self.bev)) << 22;
+        data |= @as(u32, @bitCast(u1, self.re )) << 25;
+        data |= @as(u32, self.cu) << 28;
+
+        return data;
+    }
+
+    /// Sets Status
+    pub fn set(self: *Status, data: u32) void {
+        self.cie = (data & 1) != 0;
+        self.cku = (data & (1 << 1)) != 0;
+        self.pie = (data & (1 << 2)) != 0;
+        self.pku = (data & (1 << 3)) != 0;
+        self.oie = (data & (1 << 4)) != 0;
+        self.oku = (data & (1 << 5)) != 0;
+        self.im  = @truncate(u8, data >> 8);
+        self.isc = (data & (1 << 16)) != 0;
+        self.swc = (data & (1 << 17)) != 0;
+        self.pz  = (data & (1 << 18)) != 0;
+        self.ch  = (data & (1 << 19)) != 0;
+        self.pe  = (data & (1 << 20)) != 0;
+        self.ts  = (data & (1 << 21)) != 0;
+        self.bev = (data & (1 << 22)) != 0;
+        self.re  = (data & (1 << 25)) != 0;
+        self.cu  = @truncate(u4, data >> 28);
+    }
+};
+
+/// COP0 registers
+var compare: u32 = undefined;
+var   count: u32 = undefined;
+
+var status: Status = Status{};
+
+/// Returns true if a coprocessor is usable
+pub fn isCopUsable(comptime n: u2) bool {
+    return n == 0 or (status.cu & (1 << n)) != 0;
+}
+
 /// Returns a COP0 register
 pub fn get(idx: u5) u32 {
     var data: u32 = undefined;
@@ -28,4 +103,24 @@ pub fn get(idx: u5) u32 {
     }
 
     return data;
+}
+
+/// Sets a COP0 register
+pub fn set(idx: u5, data: u32) void {
+    switch (idx) {
+        @enumToInt(Cop0Reg.EntryLo1) => {},
+        @enumToInt(Cop0Reg.PageMask) => {},
+        @enumToInt(Cop0Reg.Wired   ) => {},
+        @enumToInt(Cop0Reg.R7      ) => {},
+        @enumToInt(Cop0Reg.Count   ) => count = data,
+        @enumToInt(Cop0Reg.Status  ) => status.set(data),
+        @enumToInt(Cop0Reg.Compare ) => compare = data,
+        else => {
+            err("  [COP0 (IOP)] Unhandled register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
+
+            assert(false);
+        }
+    }
+
+    info("   [COP0 (IOP)] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 }
