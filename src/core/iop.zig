@@ -51,6 +51,7 @@ const Opcode = enum(u6) {
     Addi    = 0x08,
     Addiu   = 0x09,
     Slti    = 0x0A,
+    Sltiu   = 0x0B,
     Andi    = 0x0C,
     Ori     = 0x0D,
     Lui     = 0x0F,
@@ -74,6 +75,7 @@ const Special = enum(u6) {
     Jalr  = 0x09,
     Mflo  = 0x12,
     Div   = 0x1A,
+    Divu  = 0x1B,
     Add   = 0x20,
     Addu  = 0x21,
     Subu  = 0x23,
@@ -85,6 +87,7 @@ const Special = enum(u6) {
 /// REGIMM instructions
 const Regimm = enum(u5) {
     Bltz = 0x00,
+    Bgez = 0x01,
 };
 
 /// COP instructions
@@ -235,6 +238,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jalr) => iJalr(instr),
                 @enumToInt(Special.Mflo) => iMflo(instr),
                 @enumToInt(Special.Div ) => iDiv(instr),
+                @enumToInt(Special.Divu) => iDivu(instr),
                 @enumToInt(Special.Add ) => iAdd(instr),
                 @enumToInt(Special.Addu) => iAddu(instr),
                 @enumToInt(Special.Subu) => iSubu(instr),
@@ -253,6 +257,7 @@ fn decodeInstr(instr: u32) void {
 
             switch (rt) {
                 @enumToInt(Regimm.Bltz) => iBltz(instr),
+                @enumToInt(Regimm.Bgez) => iBgez(instr),
                 else => {
                     err("  [IOP       ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
@@ -269,6 +274,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Addi ) => iAddi(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Sltiu) => iSltiu(instr),
         @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
@@ -451,6 +457,23 @@ fn iBeq(instr: u32) void {
     }
 }
 
+/// Branch on Greater than or Equal Zero
+fn iBgez(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i32, regFile.get(rs)) >= 0, @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [IOP       ] BGEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(rs)});
+    }
+}
+
 /// Branch on Greater Than Zero
 fn iBgtz(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -545,6 +568,27 @@ fn iDiv(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] DIV ${s}, ${s}; LO = 0x{X:0>8}, HI = 0x{X:0>8}", .{tagRs, tagRt, regFile.lo, regFile.hi});
+    }
+}
+
+/// DIVide Unsigned
+fn iDivu(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const n = regFile.get(rs);
+    const d = regFile.get(rt);
+
+    assert(d != 0);
+
+    regFile.lo = n / d;
+    regFile.hi = n % d;
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] DIVU ${s}, ${s}; LO = 0x{X:0>8}, HI = 0x{X:0>8}", .{tagRs, tagRt, regFile.lo, regFile.hi});
     }
 }
 
@@ -930,6 +974,23 @@ fn iSlti(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
+    }
+}
+
+/// Set Less Than Immediate Unsigned
+fn iSltiu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, @as(u32, @bitCast(u1, regFile.get(rs) < imm16s)));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SLTIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
     }
 }
 
