@@ -49,6 +49,7 @@ const MemBase = enum(u32) {
 const MemBaseIop = enum(u32) {
     Dma0 = 0x1F80_1080,
     Dma1 = 0x1F80_1500,
+    Sio2 = 0x1F80_8200,
 };
 
 /// Memory sizes
@@ -68,7 +69,8 @@ const MemSize = enum(u32) {
 
 /// Memory region sizes (IOP)
 const MemSizeIop = enum(u32) {
-    Dma = 0x80,
+    Dma  = 0x80,
+    Sio2 = 0x78,
 };
 
 // Memory arrays
@@ -420,6 +422,8 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
+    } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (SIO2).", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
             0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
