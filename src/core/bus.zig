@@ -69,13 +69,15 @@ const MemSize = enum(u32) {
 
 /// Memory region sizes (IOP)
 const MemSizeIop = enum(u32) {
+    Ram  = 0x20_0000,
     Dma  = 0x80,
     Sio2 = 0x78,
 };
 
 // Memory arrays
-var  bios: []u8 = undefined; // BIOS ROM
-var rdram: []u8 = undefined; // RDRAM
+var   bios: []u8 = undefined; // BIOS ROM
+var iopRam: []u8 = undefined; // IOP RAM
+var  rdram: []u8 = undefined; // RDRAM
 
 // RDRAM registers
 var  mchDrd: u32 = undefined;
@@ -93,7 +95,8 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 
     bios = try biosFile.reader().readAllAlloc(allocator, @enumToInt(MemSize.Bios));
 
-    rdram = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
+    iopRam = try allocator.alloc(u8, @enumToInt(MemSizeIop.Ram));
+    rdram  = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
 
     vu0.vuCode = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
     vu0.vuMem  = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
@@ -103,7 +106,8 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
 
 /// Deinitializes the bus module
 pub fn deinit(allocator: Allocator) void {
-    allocator.free(bios );
+    allocator.free(bios);
+    allocator.free(iopRam);
     allocator.free(rdram);
     allocator.free(vu0.vuCode);
     allocator.free(vu0.vuMem);
@@ -232,7 +236,9 @@ pub fn read(comptime T: type, addr: u32) T {
 pub fn readIop(comptime T: type, addr: u32) T {
     var data: T = undefined;
 
-    if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
@@ -418,7 +424,9 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
 /// Writes data to the IOP bus
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
-    if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
+        @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
