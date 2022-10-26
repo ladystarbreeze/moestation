@@ -253,14 +253,10 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = 0;
             },
-            0x1F80_1074 => {
-                if (T != u32) {
-                    @panic("Unhandled read @ I_MASK");
-                }
-
+            0x1F80_1074 ... 0x1F80_1077 => {
                 info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_MASK).", .{@typeName(T), addr});
 
-                data = intc.getMaskIop();
+                data = intc.getMaskIop(T, @truncate(u2, addr));
             },
             else => {
                 err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
@@ -451,23 +447,15 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SIO2) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
-            0x1F80_1070 => {
-                if (T != u32) {
-                    @panic("Unhandled write @ I_STAT");
-                }
-
+            0x1F80_1070 ... 0x1F80_1073 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_STAT) = 0x{X}.", .{@typeName(T), addr, data});
 
-                intc.setStatIop(data);
+                intc.setStatIop(T, data, @truncate(u2, addr));
             },
-            0x1F80_1074 => {
-                if (T != u32) {
-                    @panic("Unhandled write @ I_MASK");
-                }
-
+            0x1F80_1074 ... 0x1F80_1077 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_MASK) = 0x{X}.", .{@typeName(T), addr, data});
 
-                intc.setMaskIop(data);
+                intc.setMaskIop(T, data, @truncate(u2, addr));
             },
             0x1FA0_0000 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (POST) = 0x{X}.", .{@typeName(T), addr, data});
