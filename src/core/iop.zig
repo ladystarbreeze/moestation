@@ -16,6 +16,8 @@ const bus = @import("bus.zig");
 
 const cop0 = @import("cop0_iop.zig");
 
+const ExCode = cop0.ExCode;
+
 const exts = @import("../common/extend.zig").exts;
 
 /// Enable/disable disassembler
@@ -68,22 +70,26 @@ const Opcode = enum(u6) {
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll   = 0x00,
-    Srl   = 0x02,
-    Sra   = 0x03,
-    Jr    = 0x08,
-    Jalr  = 0x09,
-    Mfhi  = 0x10,
-    Mflo  = 0x12,
-    Div   = 0x1A,
-    Divu  = 0x1B,
-    Add   = 0x20,
-    Addu  = 0x21,
-    Subu  = 0x23,
-    And   = 0x24,
-    Or    = 0x25,
-    Slt   = 0x2A,
-    Sltu  = 0x2B,
+    Sll     = 0x00,
+    Srl     = 0x02,
+    Sra     = 0x03,
+    Sllv    = 0x04,
+    Srlv    = 0x06,
+    Jr      = 0x08,
+    Jalr    = 0x09,
+    Syscall = 0x0C,
+    Mfhi    = 0x10,
+    Mflo    = 0x12,
+    Div     = 0x1A,
+    Divu    = 0x1B,
+    Add     = 0x20,
+    Addu    = 0x21,
+    Sub     = 0x22,
+    Subu    = 0x23,
+    And     = 0x24,
+    Or      = 0x25,
+    Slt     = 0x2A,
+    Sltu    = 0x2B,
 };
 
 /// REGIMM instructions
@@ -233,22 +239,26 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll ) => iSll(instr),
-                @enumToInt(Special.Srl ) => iSrl(instr),
-                @enumToInt(Special.Sra ) => iSra(instr),
-                @enumToInt(Special.Jr  ) => iJr(instr),
-                @enumToInt(Special.Jalr) => iJalr(instr),
-                @enumToInt(Special.Mfhi) => iMfhi(instr),
-                @enumToInt(Special.Mflo) => iMflo(instr),
-                @enumToInt(Special.Div ) => iDiv(instr),
-                @enumToInt(Special.Divu) => iDivu(instr),
-                @enumToInt(Special.Add ) => iAdd(instr),
-                @enumToInt(Special.Addu) => iAddu(instr),
-                @enumToInt(Special.Subu) => iSubu(instr),
-                @enumToInt(Special.And ) => iAnd(instr),
-                @enumToInt(Special.Or  ) => iOr(instr),
-                @enumToInt(Special.Slt ) => iSlt(instr),
-                @enumToInt(Special.Sltu) => iSltu(instr),
+                @enumToInt(Special.Sll    ) => iSll(instr),
+                @enumToInt(Special.Srl    ) => iSrl(instr),
+                @enumToInt(Special.Sra    ) => iSra(instr),
+                @enumToInt(Special.Sllv   ) => iSllv(instr),
+                @enumToInt(Special.Srlv   ) => iSrlv(instr),
+                @enumToInt(Special.Jr     ) => iJr(instr),
+                @enumToInt(Special.Jalr   ) => iJalr(instr),
+                @enumToInt(Special.Syscall) => iSyscall(),
+                @enumToInt(Special.Mfhi   ) => iMfhi(instr),
+                @enumToInt(Special.Mflo   ) => iMflo(instr),
+                @enumToInt(Special.Div    ) => iDiv(instr),
+                @enumToInt(Special.Divu   ) => iDivu(instr),
+                @enumToInt(Special.Add    ) => iAdd(instr),
+                @enumToInt(Special.Addu   ) => iAddu(instr),
+                @enumToInt(Special.Sub    ) => iSub(instr),
+                @enumToInt(Special.Subu   ) => iSubu(instr),
+                @enumToInt(Special.And    ) => iAnd(instr),
+                @enumToInt(Special.Or     ) => iOr(instr),
+                @enumToInt(Special.Slt    ) => iSlt(instr),
+                @enumToInt(Special.Sltu   ) => iSltu(instr),
                 else => {
                     err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -309,6 +319,28 @@ fn decodeInstr(instr: u32) void {
             assert(false);
         }
     }
+}
+
+/// Raises a generic CPU exception
+fn raiseException(excode: ExCode) void {
+    info("   [IOP       ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
+
+    cop0.setExCode(excode);
+    cop0.enterException();
+
+    const exVector: u32 = if (cop0.isBev()) 0xBFC0_0180 else 0x8000_0080;
+
+    if (inDelaySlot[0]) {
+        cop0.setBranchDelay(true);
+
+        cop0.setErrorPc(regFile.cpc - 4);
+    } else {
+        cop0.setBranchDelay(false);
+
+        cop0.setErrorPc(regFile.cpc);
+    }
+
+    regFile.setPc(exVector);
 }
 
 /// Branch helper
@@ -977,6 +1009,23 @@ fn iSll(instr: u32) void {
     }
 }
 
+/// Shift Left Logical Variable
+fn iSllv(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rt) << @truncate(u5, regFile.get(rs)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(rd)});
+    }
+}
+
 /// Set Less Than
 fn iSlt(instr: u32) void {
     const rd = getRd(instr);
@@ -1079,6 +1128,48 @@ fn iSrl(instr: u32) void {
     }
 }
 
+/// Shift Right Logical Variable
+fn iSrlv(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rt) >> @truncate(u5, regFile.get(rs)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(rd)});
+    }
+}
+
+/// SUBtract
+fn iSub(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@subWithOverflow(i32, @bitCast(i32, regFile.get(rs)), @bitCast(i32, regFile.get(rt)), &res)) {
+        err("  [IOP       ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(rd, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SUB ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
+    }
+}
+
 /// SUBtract Unsigned
 fn iSubu(instr: u32) void {
     const rd = getRd(instr);
@@ -1120,6 +1211,15 @@ fn iSw(instr: u32) void {
     }
 
     write(u32, addr, data);
+}
+
+/// SYStem CALL
+pub fn iSyscall() void {
+    if (doDisasm) {
+        info("   [IOP       ] SYSCALL", .{});
+    }
+
+    raiseException(ExCode.Syscall);
 }
 
 /// Steps the IOP interpreter
