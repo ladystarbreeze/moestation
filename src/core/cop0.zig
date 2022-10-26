@@ -274,6 +274,7 @@ var    count: u32 = undefined;
 var pagemask: u12 = undefined;
 var    wired: u6  = undefined;
 var      epc: u32 = undefined;
+var errorepc: u32 = undefined;
 
 var   config: Config  =  Config{};
 var  entryhi: EntryHi = EntryHi{};
@@ -293,6 +294,16 @@ pub fn isCopUsable(comptime n: u2) bool {
     return n == 0 or (status.cu & (1 << n)) != 0;
 }
 
+/// Returns true if EI/DI are enabled
+pub fn isEdiEnabled() bool {
+    return (status.ksu == 0) or status.erl or status.exl or status.edi;
+}
+
+/// Returns true if ERL is set
+pub fn isErl() bool {
+    return status.erl;
+}
+
 /// Returns a COP0 register
 pub fn get(comptime T: type, idx: u5) T {
     assert(T == u32 or T == u64);
@@ -310,6 +321,16 @@ pub fn get(comptime T: type, idx: u5) T {
     }
 
     return data;
+}
+
+/// Returns ErrorEPC
+pub fn getErrorEpc() u32 {
+    return errorepc;
+}
+
+/// Returns EPC
+pub fn getErrorPc() u32 {
+    return epc;
 }
 
 /// Sets a COP0 register
@@ -334,6 +355,21 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
             assert(false);
         }
     }
+}
+
+/// Sets EIE flag
+pub fn setEie(eie: bool) void {
+    status.eie = eie;
+}
+
+/// Sets ERL flag
+pub fn setErl(erl: bool) void {
+    status.erl = erl;
+}
+
+/// Sets EXL flag
+pub fn setExl(exl: bool) void {
+    status.exl = exl;
 }
 
 /// Increments Count, checks for Compare interrupts
