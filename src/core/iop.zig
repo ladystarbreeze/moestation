@@ -79,7 +79,9 @@ const Special = enum(u6) {
     Jalr    = 0x09,
     Syscall = 0x0C,
     Mfhi    = 0x10,
+    Mthi    = 0x11,
     Mflo    = 0x12,
+    Mtlo    = 0x13,
     Div     = 0x1A,
     Divu    = 0x1B,
     Add     = 0x20,
@@ -102,6 +104,12 @@ const Regimm = enum(u5) {
 const CopOpcode = enum(u5) {
     Mf = 0x00,
     Mt = 0x04,
+    Co = 0x10,
+};
+
+/// COP control opcode
+const ControlOpcode = enum(u6) {
+    Rfe = 0x10,
 };
 
 /// IOP register file
@@ -248,7 +256,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Jalr   ) => iJalr(instr),
                 @enumToInt(Special.Syscall) => iSyscall(),
                 @enumToInt(Special.Mfhi   ) => iMfhi(instr),
+                @enumToInt(Special.Mthi   ) => iMthi(instr),
                 @enumToInt(Special.Mflo   ) => iMflo(instr),
+                @enumToInt(Special.Mtlo   ) => iMtlo(instr),
                 @enumToInt(Special.Div    ) => iDiv(instr),
                 @enumToInt(Special.Divu   ) => iDivu(instr),
                 @enumToInt(Special.Add    ) => iAdd(instr),
@@ -298,6 +308,18 @@ fn decodeInstr(instr: u32) void {
             switch (rs) {
                 @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 0),
+                @enumToInt(CopOpcode.Co) => {
+                    const funct = getFunct(instr);
+
+                    switch (funct) {
+                        @enumToInt(ControlOpcode.Rfe) => iRfe(),
+                        else => {
+                            err("  [IOP       ] Unhandled COP0 Control instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 else => {
                     err("  [IOP       ] Unhandled COP0 instruction 0x{X} (0x{X:0>8}).", .{rs, instr});
 
@@ -906,6 +928,32 @@ fn iMtc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// Move To HI
+fn iMthi(instr: u32) void {
+    const rd = getRd(instr);
+
+    regFile.hi = regFile.get(rd);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [IOP       ] MTHI ${s}; HI = 0x{X:0>8}", .{tagRd, regFile.get(rd)});
+    }
+}
+
+/// Move To LO
+fn iMtlo(instr: u32) void {
+    const rd = getRd(instr);
+
+    regFile.lo = regFile.get(rd);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [IOP       ] MTLO ${s}; LO = 0x{X:0>8}", .{tagRd, regFile.get(rd)});
+    }
+}
+
 /// OR
 fn iOr(instr: u32) void {
     const rd = getRd(instr);
@@ -940,6 +988,15 @@ fn iOri(instr: u32) void {
 
         info("   [IOP       ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16, tagRt, regFile.get(rt)});
     }
+}
+
+/// Return From Exception
+fn iRfe() void {
+    if (doDisasm) {
+        info("   [IOP       ] RFE", .{});
+    }
+
+    cop0.leaveException();
 }
 
 /// Store Byte
