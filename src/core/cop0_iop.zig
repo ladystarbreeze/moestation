@@ -15,7 +15,7 @@ const info = std.log.info;
 const Cop0Reg = @import("cop0.zig").Cop0Reg;
 
 /// Exception codes
-const ExCode = enum(u5) {
+pub const ExCode = enum(u5) {
     Interrupt,
     TlbModification,
     TlbLoad,
@@ -123,9 +123,15 @@ const Status = struct {
 /// COP0 registers
 var compare: u32 = undefined;
 var   count: u32 = undefined;
+var     epc: u32 = undefined;
 
 var  cause: Cause  = Cause{};
 var status: Status = Status{};
+
+/// Returns true if boot exception vectors are active
+pub fn isBev() bool {
+    return status.bev;
+}
 
 /// Returns true if a coprocessor is usable
 pub fn isCopUsable(comptime n: u2) bool {
@@ -137,12 +143,24 @@ pub fn isCacheIsolated() bool {
     return status.isc;
 }
 
+/// Saves the current interrupt enable and privilege level bits
+pub fn enterException() void {
+    status.oie = status.pie;
+    status.pie = status.cie;
+    status.cie = false;
+
+    status.oku = status.pku;
+    status.pku = status.cku;
+    status.cku = true;
+}
+
 /// Returns a COP0 register
 pub fn get(idx: u5) u32 {
     var data: u32 = undefined;
 
     switch (idx) {
         @enumToInt(Cop0Reg.Status) => data = status.get(),
+        @enumToInt(Cop0Reg.EPC   ) => data = epc,
         @enumToInt(Cop0Reg.PRId  ) => data = 2,
         else => {
             err("  [COP0 (IOP)] Unhandled register read @ {s}.", .{@tagName(@intToEnum(Cop0Reg, idx))});
@@ -175,4 +193,19 @@ pub fn set(idx: u5, data: u32) void {
     }
 
     info("   [COP0 (IOP)] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
+}
+
+/// Sets BD bit
+pub fn setBranchDelay(bd: bool) void {
+    cause.bd = bd;
+}
+
+/// Sets EPC
+pub fn setErrorPc(pc: u32) void {
+    epc = pc;
+}
+
+/// Sets exception code
+pub fn setExCode(excode: ExCode) void {
+    cause.excode = @enumToInt(excode);
 }
