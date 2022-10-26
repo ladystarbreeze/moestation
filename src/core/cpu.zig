@@ -158,6 +158,8 @@ const Cop2Opcode = enum(u5) {
 /// COP Control instructions
 const ControlOpcode = enum(u6) {
     Tlbwi = 0x02,
+    Eret  = 0x18,
+    Di    = 0x39,
 };
 
 /// MMI instructions
@@ -489,6 +491,8 @@ fn decodeInstr(instr: u32) void {
 
                     switch (funct) {
                         @enumToInt(ControlOpcode.Tlbwi) => iTlbwi(),
+                        @enumToInt(ControlOpcode.Eret ) => iEret(),
+                        @enumToInt(ControlOpcode.Di   ) => iDi(),
                         else => {
                             err("  [EE Core   ] Unhandled COP0 Control instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -987,6 +991,17 @@ fn iDaddu(instr: u32) void {
     }
 }
 
+/// Disable Interrupts
+fn iDi() void {
+    if (doDisasm) {
+        info("   [EE Core   ] DI", .{});
+    }
+
+    if (cop0.isEdiEnabled()) {
+        cop0.setEie(false);
+    }
+}
+
 /// DIVide
 fn iDiv(instr: u32) void {
     const rs = getRs(instr);
@@ -1161,6 +1176,23 @@ fn iDsrl32(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Exception RETurn
+fn iEret() void {
+    if (doDisasm) {
+        info ("   [EE Core   ] ERET", .{});
+    }
+
+    if (cop0.isErl()) {
+        regFile.setPc(cop0.getErrorEpc());
+
+        cop0.setErl(false);
+    } else {
+        regFile.setPc(cop0.getErrorPc());
+
+        cop0.setExl(false);
     }
 }
 
