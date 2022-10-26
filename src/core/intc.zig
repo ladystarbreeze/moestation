@@ -32,8 +32,13 @@ const IntSource = enum(u4) {
 };
 
 // INTC registers
-var intcMask: u15 = 0;
-var intcStat: u15 = 0;
+var intcMask: u15 = undefined;
+var intcStat: u15 = undefined;
+
+// INTC registers (IOP)
+var iStat: u25  = undefined;
+var iMask: u25  = undefined;
+var iCtrl: bool = undefined;
 
 /// Returns INTC_MASK
 pub fn getMask() u32 {
@@ -49,12 +54,42 @@ pub fn getStat() u32 {
 pub fn setMask(data: u32) void {
     intcMask = @truncate(u15, data);
 
-    // TODO: Check for interrupts
+    checkInterrupt();
+}
+
+/// Sets I_MASK, checks for interrupt
+pub fn setMaskIop(data: u32) void {
+    iMask = @truncate(u25, data);
+
+    checkInterruptIop();
 }
 
 /// Sets INTC_STAT, checks for interrupt
 pub fn setStat(data: u32) void {
     intcStat &= ~@truncate(u15, data);
 
-    // TODO: Check for interrupts
+    checkInterrupt();
+}
+
+/// Sets I_STAT, checks for interrupt
+pub fn setStatIop(data: u32) void {
+    iStat &= ~@truncate(u25, data);
+
+    checkInterruptIop();
+}
+
+fn checkInterrupt() void {
+    if ((intcStat & intcMask) != 0) {
+        err("  [INTC      ] Unhandled EE interrupt.", .{});
+
+        assert(false);
+    }
+}
+
+fn checkInterruptIop() void {
+    if (iStat and ((iStat & iMask) != 0)) {
+        err("  [INTC      ] Unhandled IOP interrupt.", .{});
+
+        assert(false);
+    }
 }
