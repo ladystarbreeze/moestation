@@ -51,6 +51,7 @@ const Opcode = enum(u6) {
     Lui     = 0x0F,
     Cop0    = 0x10,
     Lw      = 0x23,
+    Sb      = 0x28,
     Sw      = 0x2B,
 };
 
@@ -237,6 +238,7 @@ fn decodeInstr(instr: u32) void {
             }
         },
         @enumToInt(Opcode.Lw) => iLw(instr),
+        @enumToInt(Opcode.Sb) => iSb(instr),
         @enumToInt(Opcode.Sw) => iSw(instr),
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
@@ -476,6 +478,26 @@ fn iOri(instr: u32) void {
 
         info("   [IOP       ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16, tagRt, regFile.get(rt)});
     }
+}
+
+/// Store Byte
+fn iSb(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const data = @truncate(u8, regFile.get(rt));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SB ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    write(u8, addr, data);
 }
 
 /// Shift Left Logical
