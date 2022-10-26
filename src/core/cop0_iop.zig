@@ -80,11 +80,11 @@ const Status = struct {
         var data: u32 = 0;
 
         data |= @as(u32, @bitCast(u1, self.cie));
-        data |= @as(u32, @bitCast(u1, self.cku) << 1);
-        data |= @as(u32, @bitCast(u1, self.pie) << 2);
-        data |= @as(u32, @bitCast(u1, self.pku) << 3);
-        data |= @as(u32, @bitCast(u1, self.oku) << 4);
-        data |= @as(u32, @bitCast(u1, self.oku) << 5);
+        data |= @as(u32, @bitCast(u1, self.cku)) << 1;
+        data |= @as(u32, @bitCast(u1, self.pie)) << 2;
+        data |= @as(u32, @bitCast(u1, self.pku)) << 3;
+        data |= @as(u32, @bitCast(u1, self.oku)) << 4;
+        data |= @as(u32, @bitCast(u1, self.oku)) << 5;
         data |= @as(u32, self.im) << 8;
         data |= @as(u32, @bitCast(u1, self.isc)) << 16;
         data |= @as(u32, @bitCast(u1, self.swc)) << 17;
@@ -142,13 +142,16 @@ pub fn get(idx: u5) u32 {
     var data: u32 = undefined;
 
     switch (idx) {
-        @enumToInt(Cop0Reg.PRId ) => data = 2,
+        @enumToInt(Cop0Reg.Status) => data = status.get(),
+        @enumToInt(Cop0Reg.PRId  ) => data = 2,
         else => {
             err("  [COP0 (IOP)] Unhandled register read @ {s}.", .{@tagName(@intToEnum(Cop0Reg, idx))});
 
             assert(false);
         }
     }
+
+    info("   [COP0 (IOP)] Register read @ {s}.", .{@tagName(@intToEnum(Cop0Reg, idx))});
 
     return data;
 }
