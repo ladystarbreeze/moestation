@@ -41,6 +41,7 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Jal     = 0x03,
     Beq     = 0x04,
     Bne     = 0x05,
     Addi    = 0x08,
@@ -214,6 +215,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Addi ) => iAddi(instr),
@@ -235,6 +237,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Lb) => iLb(instr),
         @enumToInt(Opcode.Lw) => iLw(instr),
         @enumToInt(Opcode.Sb) => iSb(instr),
         @enumToInt(Opcode.Sw) => iSw(instr),
@@ -354,6 +357,17 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// Jump And Link
+fn iJal(instr: u32) void {
+    const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
+
+    doBranch(target, true, @enumToInt(CpuReg.RA));
+
+    if (doDisasm) {
+        info("   [IOP       ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}, PC = {X:0>8}h", .{target, regFile.get(@enumToInt(CpuReg.RA)), target});
+    }
+}
+
 /// Jump Register
 fn iJr(instr: u32) void {
     const rs = getRs(instr);
@@ -367,6 +381,27 @@ fn iJr(instr: u32) void {
     
         info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
     }
+}
+
+/// Load Byte
+fn iLb(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+
+    const data = read(u8, addr, true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, @as(u32, data));
 }
 
 /// Load Upper Immediate
