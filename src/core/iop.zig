@@ -43,18 +43,22 @@ const Opcode = enum(u6) {
     Special = 0x00,
     Beq     = 0x04,
     Bne     = 0x05,
+    Addi    = 0x08,
     Addiu   = 0x09,
     Slti    = 0x0A,
+    Andi    = 0x0C,
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
     Lw      = 0x23,
+    Sw      = 0x2B,
 };
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll = 0x00,
-    Jr  = 0x08,
+    Sll   = 0x00,
+    Jr    = 0x08,
+    Or    = 0x25,
 };
 
 /// COP instructions
@@ -204,6 +208,7 @@ fn decodeInstr(instr: u32) void {
             switch (funct) {
                 @enumToInt(Special.Sll) => iSll(instr),
                 @enumToInt(Special.Jr ) => iJr(instr),
+                @enumToInt(Special.Or ) => iOr(instr),
                 else => {
                     err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -213,8 +218,10 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
+        @enumToInt(Opcode.Addi ) => iAddi(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
+        @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
         @enumToInt(Opcode.Cop0 ) => {
@@ -230,6 +237,7 @@ fn decodeInstr(instr: u32) void {
             }
         },
         @enumToInt(Opcode.Lw) => iLw(instr),
+        @enumToInt(Opcode.Sw) => iSw(instr),
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -249,6 +257,31 @@ fn doBranch(target: u32, isCond: bool, rd: u5) void {
     }
 }
 
+/// ADD Immediate
+fn iAddi(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@addWithOverflow(i32, @bitCast(i32, regFile.get(rs)), @bitCast(i32, imm16s), &res)) {
+        err("  [IOP       ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(rt, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ADDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
+    }
+}
+
 /// ADD Immediate Unsigned
 fn iAddiu(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -263,6 +296,23 @@ fn iAddiu(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
+    }
+}
+
+/// AND Immediate
+fn iAndi(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, regFile.get(rs) & @as(u32, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16, tagRt, regFile.get(rt)});
     }
 }
 
@@ -392,6 +442,25 @@ fn iMfc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// OR
+fn iOr(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(rs) | regFile.get(rt);
+
+    regFile.set(rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] OR ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// OR Immediate
 fn iOri(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -445,6 +514,32 @@ fn iSlti(instr: u32) void {
 
         info("   [IOP       ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
     }
+}
+
+/// Store Word
+fn iSw(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const data = regFile.get(rt);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    if ((addr & 3) != 0) {
+        err("  [IOP       ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u32, addr, data);
 }
 
 /// Steps the IOP interpreter
