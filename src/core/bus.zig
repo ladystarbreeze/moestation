@@ -434,12 +434,16 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (SIO2).", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
+            0x1FA0_0000 => {
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (POST).", .{@typeName(T), addr, data});
+            },
             0x1FFE_0130 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (Cache Control).", .{@typeName(T), addr, data});
             },
             0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
             0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
             0x1F80_1020, 0x1F80_1060,
+            0x1F80_1D80, 0x1F80_1D82, 0x1F80_1D84, 0x1F80_1D86,
             0x1F80_2070 => {
                 warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (Unknown).", .{@typeName(T), addr, data});
             },
