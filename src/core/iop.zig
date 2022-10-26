@@ -75,6 +75,7 @@ const Special = enum(u6) {
     Sra     = 0x03,
     Sllv    = 0x04,
     Srlv    = 0x06,
+    Srav    = 0x07,
     Jr      = 0x08,
     Jalr    = 0x09,
     Syscall = 0x0C,
@@ -90,6 +91,7 @@ const Special = enum(u6) {
     Subu    = 0x23,
     And     = 0x24,
     Or      = 0x25,
+    Nor     = 0x27,
     Slt     = 0x2A,
     Sltu    = 0x2B,
 };
@@ -252,6 +254,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sra    ) => iSra(instr),
                 @enumToInt(Special.Sllv   ) => iSllv(instr),
                 @enumToInt(Special.Srlv   ) => iSrlv(instr),
+                @enumToInt(Special.Srav   ) => iSrav(instr),
                 @enumToInt(Special.Jr     ) => iJr(instr),
                 @enumToInt(Special.Jalr   ) => iJalr(instr),
                 @enumToInt(Special.Syscall) => iSyscall(),
@@ -266,6 +269,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sub    ) => iSub(instr),
                 @enumToInt(Special.Subu   ) => iSubu(instr),
                 @enumToInt(Special.And    ) => iAnd(instr),
+                @enumToInt(Special.Nor    ) => iNor(instr),
                 @enumToInt(Special.Or     ) => iOr(instr),
                 @enumToInt(Special.Slt    ) => iSlt(instr),
                 @enumToInt(Special.Sltu   ) => iSltu(instr),
@@ -954,6 +958,25 @@ fn iMtlo(instr: u32) void {
     }
 }
 
+/// NOR
+fn iNor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = ~(regFile.get(rs) | regFile.get(rt));
+
+    regFile.set(rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] NOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// OR
 fn iOr(instr: u32) void {
     const rd = getRd(instr);
@@ -1165,6 +1188,23 @@ fn iSra(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
+    }
+}
+
+/// Shift Right Arithmetic Variable
+fn iSrav(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, @bitCast(u32, @bitCast(i32, regFile.get(rt)) >> @truncate(u5, regFile.get(rs))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(rd)});
     }
 }
 
