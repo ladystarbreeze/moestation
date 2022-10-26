@@ -91,6 +91,7 @@ const Special = enum(u6) {
     Subu    = 0x23,
     And     = 0x24,
     Or      = 0x25,
+    Xor     = 0x26,
     Nor     = 0x27,
     Slt     = 0x2A,
     Sltu    = 0x2B,
@@ -269,8 +270,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sub    ) => iSub(instr),
                 @enumToInt(Special.Subu   ) => iSubu(instr),
                 @enumToInt(Special.And    ) => iAnd(instr),
-                @enumToInt(Special.Nor    ) => iNor(instr),
                 @enumToInt(Special.Or     ) => iOr(instr),
+                @enumToInt(Special.Xor    ) => iXor(instr),
+                @enumToInt(Special.Nor    ) => iNor(instr),
                 @enumToInt(Special.Slt    ) => iSlt(instr),
                 @enumToInt(Special.Sltu   ) => iSltu(instr),
                 else => {
@@ -1317,6 +1319,25 @@ pub fn iSyscall() void {
     }
 
     raiseException(ExCode.Syscall);
+}
+
+/// XOR
+fn iXor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(rs) ^ regFile.get(rt);
+
+    regFile.set(rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] XOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
 }
 
 /// Steps the IOP interpreter
