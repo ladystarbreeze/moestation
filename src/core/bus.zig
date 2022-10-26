@@ -273,8 +273,22 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = intc.getMaskIop(T, @truncate(u2, addr));
             },
-            0x1F80_1C00 ... 0x1F80_1DFF => {
+            0x1F80_1078 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ I_CTRL");
+                }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_CTRL).", .{@typeName(T), addr});
+
+                data = intc.getCtrl();
+            },
+            0x1F80_1450 => {
                 //warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+
+                data = 0;
+            },
+            0x1F80_1578 => {
+                warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
                 data = 0;
             },
@@ -477,8 +491,10 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
 
                 intc.setMaskIop(T, data, @truncate(u2, addr));
             },
-            0x1F80_1C00 ... 0x1F80_1DFF, => {
-                // warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
+            0x1F80_1078 => {
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_CTRL) = 0x{X}.", .{@typeName(T), addr, data});
+
+                intc.setCtrl(data);
             },
             0x1FA0_0000 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (POST) = 0x{X}.", .{@typeName(T), addr, data});
@@ -486,10 +502,16 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
             0x1FFE_0130 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Cache Control) = 0x{X}.", .{@typeName(T), addr, data});
             },
-            0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
-            0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
-            0x1F80_1020, 0x1F80_1060,
-            0x1F80_1800, 0x1F80_1801, 0x1F80_1802, 0x1F80_1803,
+            0x1FFE_0140 => {
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Scratchpad End) = 0x{X}.", .{@typeName(T), addr, data});
+            },
+            0x1FFE_0144 => {
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Scratchpad Start) = 0x{X}.", .{@typeName(T), addr, data});
+            },
+            0x1F80_1000 ... 0x1F80_1020,
+            0x1F80_1060,
+            0x1F80_1400 ... 0x1F80_1420,
+            0x1F80_1450,
             0x1F80_2070 => {
                 warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
             },
