@@ -273,6 +273,7 @@ var  compare: u32 = undefined;
 var    count: u32 = undefined;
 var pagemask: u12 = undefined;
 var    wired: u6  = undefined;
+var      epc: u32 = undefined;
 
 var   config: Config  =  Config{};
 var  entryhi: EntryHi = EntryHi{};
@@ -325,6 +326,7 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
         @enumToInt(Cop0Reg.EntryHi ) => entryhi.set(data),
         @enumToInt(Cop0Reg.Compare ) => compare = data,
         @enumToInt(Cop0Reg.Status  ) => status.set(data),
+        @enumToInt(Cop0Reg.EPC     ) => epc = @truncate(u32, data),
         @enumToInt(Cop0Reg.Config  ) => config.set(data),
         else => {
             err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
