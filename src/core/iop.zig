@@ -41,10 +41,13 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    Regimm  = 0x01,
     J       = 0x02,
     Jal     = 0x03,
     Beq     = 0x04,
     Bne     = 0x05,
+    Blez    = 0x06,
+    Bgtz    = 0x07,
     Addi    = 0x08,
     Addiu   = 0x09,
     Slti    = 0x0A,
@@ -55,6 +58,7 @@ const Opcode = enum(u6) {
     Lb      = 0x20,
     Lh      = 0x21,
     Lw      = 0x23,
+    Lbu     = 0x24,
     Lhu     = 0x25,
     Sb      = 0x28,
     Sh      = 0x29,
@@ -72,6 +76,11 @@ const Special = enum(u6) {
     And   = 0x24,
     Or    = 0x25,
     Sltu  = 0x2B,
+};
+
+/// REGIMM instructions
+const Regimm = enum(u5) {
+    Bltz = 0x00,
 };
 
 /// COP instructions
@@ -231,10 +240,24 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.Regimm) => {
+            const rt = getRt(instr);
+
+            switch (rt) {
+                @enumToInt(Regimm.Bltz) => iBltz(instr),
+                else => {
+                    err("  [IOP       ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
+
+                    assert(false);
+                }
+            }
+        },
         @enumToInt(Opcode.J    ) => iJ(instr),
         @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
+        @enumToInt(Opcode.Blez ) => iBlez(instr),
+        @enumToInt(Opcode.Bgtz ) => iBgtz(instr),
         @enumToInt(Opcode.Addi ) => iAddi(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
@@ -257,6 +280,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Lb ) => iLb(instr),
         @enumToInt(Opcode.Lh ) => iLh(instr),
         @enumToInt(Opcode.Lw ) => iLw(instr),
+        @enumToInt(Opcode.Lbu) => iLbu(instr),
         @enumToInt(Opcode.Lhu) => iLhu(instr),
         @enumToInt(Opcode.Sb ) => iSb(instr),
         @enumToInt(Opcode.Sh ) => iSh(instr),
@@ -419,6 +443,57 @@ fn iBeq(instr: u32) void {
     }
 }
 
+/// Branch on Greater Than Zero
+fn iBgtz(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i32, regFile.get(rs)) > 0, @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [IOP       ] BGTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(rs)});
+    }
+}
+
+/// Branch on Less than or Equal Zero
+fn iBlez(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i32, regFile.get(rs)) <= 0, @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [IOP       ] BLEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(rs)});
+    }
+}
+
+/// Branch on Less Than Zero
+fn iBltz(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i32, regFile.get(rs)) < 0, @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [IOP       ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(rs)});
+    }
+}
+
 /// Branch on Not Equal
 fn iBne(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -488,7 +563,7 @@ fn iJr(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
     
-        info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
+        info("   [IOP       ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
     }
 }
 
@@ -511,6 +586,27 @@ fn iLb(instr: u32) void {
     }
 
     regFile.set(rt, data);
+}
+
+/// Load Byte Unsigned
+fn iLbu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+
+    const data = read(u8, addr, true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LBU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, @as(u32, data));
 }
 
 /// Load Halfword
