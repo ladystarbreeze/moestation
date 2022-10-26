@@ -41,6 +41,7 @@ const CpuReg = enum(u5) {
 /// Opcodes
 const Opcode = enum(u6) {
     Special = 0x00,
+    J       = 0x02,
     Jal     = 0x03,
     Beq     = 0x04,
     Bne     = 0x05,
@@ -52,8 +53,11 @@ const Opcode = enum(u6) {
     Lui     = 0x0F,
     Cop0    = 0x10,
     Lb      = 0x20,
+    Lh      = 0x21,
     Lw      = 0x23,
+    Lhu     = 0x25,
     Sb      = 0x28,
+    Sh      = 0x29,
     Sw      = 0x2B,
 };
 
@@ -61,7 +65,10 @@ const Opcode = enum(u6) {
 const Special = enum(u6) {
     Sll   = 0x00,
     Jr    = 0x08,
+    Addu  = 0x21,
+    And   = 0x24,
     Or    = 0x25,
+    Sltu  = 0x2B,
 };
 
 /// COP instructions
@@ -205,9 +212,12 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll) => iSll(instr),
-                @enumToInt(Special.Jr ) => iJr(instr),
-                @enumToInt(Special.Or ) => iOr(instr),
+                @enumToInt(Special.Sll ) => iSll(instr),
+                @enumToInt(Special.Jr  ) => iJr(instr),
+                @enumToInt(Special.Addu) => iAddu(instr),
+                @enumToInt(Special.And ) => iAnd(instr),
+                @enumToInt(Special.Or  ) => iOr(instr),
+                @enumToInt(Special.Sltu) => iSltu(instr),
                 else => {
                     err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -215,6 +225,7 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
+        @enumToInt(Opcode.J    ) => iJ(instr),
         @enumToInt(Opcode.Jal  ) => iJal(instr),
         @enumToInt(Opcode.Beq  ) => iBeq(instr),
         @enumToInt(Opcode.Bne  ) => iBne(instr),
@@ -237,10 +248,13 @@ fn decodeInstr(instr: u32) void {
                 }
             }
         },
-        @enumToInt(Opcode.Lb) => iLb(instr),
-        @enumToInt(Opcode.Lw) => iLw(instr),
-        @enumToInt(Opcode.Sb) => iSb(instr),
-        @enumToInt(Opcode.Sw) => iSw(instr),
+        @enumToInt(Opcode.Lb ) => iLb(instr),
+        @enumToInt(Opcode.Lh ) => iLh(instr),
+        @enumToInt(Opcode.Lw ) => iLw(instr),
+        @enumToInt(Opcode.Lhu) => iLhu(instr),
+        @enumToInt(Opcode.Sb ) => iSb(instr),
+        @enumToInt(Opcode.Sh ) => iSh(instr),
+        @enumToInt(Opcode.Sw ) => iSw(instr),
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -302,6 +316,42 @@ fn iAddiu(instr: u32) void {
     }
 }
 
+/// ADD Unsigned
+fn iAddu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rs) +% regFile.get(rt));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
+    }
+}
+
+/// AND
+fn iAnd(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(rs) & regFile.get(rt);
+
+    regFile.set(rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] AND ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// AND Immediate
 fn iAndi(instr: u32) void {
     const imm16 = getImm16(instr);
@@ -357,6 +407,17 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// Jump
+fn iJ(instr: u32) void {
+    const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
+
+    doBranch(target, true, @enumToInt(CpuReg.R0));
+
+    if (doDisasm) {
+        info("   [IOP       ] J 0x{X:0>8}; PC = {X:0>8}h", .{target, target});
+    }
+}
+
 /// Jump And Link
 fn iJal(instr: u32) void {
     const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
@@ -392,13 +453,67 @@ fn iLb(instr: u32) void {
 
     const addr = regFile.get(rs) +% imm16s;
 
-    const data = read(u8, addr, true);
+    const data = exts(u32, u8, read(u8, addr, true));
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [IOP       ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        info("   [IOP       ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, data);
+}
+
+/// Load Halfword
+fn iLh(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+
+    if ((addr & 1) != 0) {
+        err("  [IOP       ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = exts(u32, u16, read(u16, addr, true));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LH ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, data);
+}
+
+/// Load Halfword Unsigned
+fn iLhu(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+
+    if ((addr & 1) != 0) {
+        err("  [IOP       ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = read(u16, addr, true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LH ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(rt, @as(u32, data));
@@ -562,6 +677,32 @@ fn iSb(instr: u32) void {
     write(u8, addr, data);
 }
 
+/// Store Halfword
+fn iSh(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const data = @truncate(u16, regFile.get(rt));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SH ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>4}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    if ((addr & 1) != 0) {
+        err("  [IOP       ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    write(u16, addr, data);
+}
+
 /// Shift Left Logical
 fn iSll(instr: u32) void {
     const sa = getSa(instr);
@@ -597,6 +738,23 @@ fn iSlti(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(rt)});
+    }
+}
+
+/// Set Less Than Unsigned
+fn iSltu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, @as(u32, @bitCast(u1, regFile.get(rs) < regFile.get(rt))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
     }
 }
 
