@@ -69,10 +69,14 @@ const Opcode = enum(u6) {
 const Special = enum(u6) {
     Sll   = 0x00,
     Srl   = 0x02,
+    Sra   = 0x03,
     Jr    = 0x08,
     Jalr  = 0x09,
+    Mflo  = 0x12,
+    Div   = 0x1A,
     Add   = 0x20,
     Addu  = 0x21,
+    Subu  = 0x23,
     And   = 0x24,
     Or    = 0x25,
     Sltu  = 0x2B,
@@ -226,10 +230,14 @@ fn decodeInstr(instr: u32) void {
             switch (funct) {
                 @enumToInt(Special.Sll ) => iSll(instr),
                 @enumToInt(Special.Srl ) => iSrl(instr),
+                @enumToInt(Special.Sra ) => iSra(instr),
                 @enumToInt(Special.Jr  ) => iJr(instr),
                 @enumToInt(Special.Jalr) => iJalr(instr),
+                @enumToInt(Special.Mflo) => iMflo(instr),
+                @enumToInt(Special.Div ) => iDiv(instr),
                 @enumToInt(Special.Add ) => iAdd(instr),
                 @enumToInt(Special.Addu) => iAddu(instr),
+                @enumToInt(Special.Subu) => iSubu(instr),
                 @enumToInt(Special.And ) => iAnd(instr),
                 @enumToInt(Special.Or  ) => iOr(instr),
                 @enumToInt(Special.Sltu) => iSltu(instr),
@@ -513,6 +521,33 @@ fn iBne(instr: u32) void {
     }
 }
 
+/// DIVide
+fn iDiv(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const n = @bitCast(i32, regFile.get(rs));
+    const d = @bitCast(i32, regFile.get(rt));
+
+    assert(d != 0);
+    assert(!(n == -0x80000000 and d == -1));
+
+    regFile.lo = @bitCast(u32, @divFloor(n, d));
+
+    if (d < 0) {
+        regFile.hi = @bitCast(u32, @rem(n, -d));
+    } else {
+        regFile.hi = @bitCast(u32, n) % @bitCast(u32, d);
+    }
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] DIV ${s}, ${s}; LO = 0x{X:0>8}, HI = 0x{X:0>8}", .{tagRs, tagRt, regFile.lo, regFile.hi});
+    }
+}
+
 /// Jump
 fn iJ(instr: u32) void {
     const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
@@ -736,6 +771,19 @@ fn iMfc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// Move From LO
+fn iMflo(instr: u32) void {
+    const rd = getRd(instr);
+
+    regFile.set(rd, regFile.lo);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [IOP       ] MFLO ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRd, regFile.get(rd)});
+    }
+}
+
 /// Move To Coprocessor
 fn iMtc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
@@ -902,6 +950,23 @@ fn iSltu(instr: u32) void {
     }
 }
 
+/// Shift Right Arithmetic
+fn iSra(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, @bitCast(u32, @bitCast(i32, regFile.get(rt)) >> sa));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
+    }
+}
+
 /// Shift Right Logical
 fn iSrl(instr: u32) void {
     const sa = getSa(instr);
@@ -916,6 +981,23 @@ fn iSrl(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
+    }
+}
+
+/// SUBtract Unsigned
+fn iSubu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rs) -% regFile.get(rt));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
     }
 }
 
