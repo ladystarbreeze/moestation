@@ -89,6 +89,11 @@ pub fn isCopUsable(comptime n: u2) bool {
     return n == 0 or (status.cu & (1 << n)) != 0;
 }
 
+/// Returns true if data cache is isolated
+pub fn isCacheIsolated() bool {
+    return status.isc;
+}
+
 /// Returns a COP0 register
 pub fn get(idx: u5) u32 {
     var data: u32 = undefined;

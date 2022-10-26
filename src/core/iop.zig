@@ -126,13 +126,19 @@ fn translateAddr(addr: u32) u32 {
 }
 
 /// Reads data from the system bus
-fn read(comptime T: type, addr: u32) T {
+fn read(comptime T: type, addr: u32, comptime isData: bool) T {
+    if (isData and cop0.isCacheIsolated()) {
+        err("  [IOP       ] Cache is isolated!", .{});
+
+        assert(false);
+    }
+
     return bus.readIop(T, translateAddr(addr));
 }
 
 /// Fetches an instruction from memory and increments PC
 fn fetchInstr() u32 {
-    const instr = read(u32, regFile.pc);
+    const instr = read(u32, regFile.pc, false);
 
     regFile.stepPc();
 
@@ -141,6 +147,10 @@ fn fetchInstr() u32 {
 
 /// Writes data to the system bus
 fn write(comptime T: type, addr: u32, data: T) void {
+    if (cop0.isCacheIsolated()) {
+        return info("   [IOP       ] Cache is isolated!", .{});
+    }
+
     bus.writeIop(T, translateAddr(addr), data);
 }
 
@@ -388,7 +398,7 @@ fn iLw(instr: u32) void {
         assert(false);
     }
 
-    const data = read(u32, addr);
+    const data = read(u32, addr, true);
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
