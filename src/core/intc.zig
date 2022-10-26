@@ -80,6 +80,13 @@ pub fn getStatIop() u32 {
     return @as(u32, iStat);
 }
 
+/// Sets I_CTRL
+pub fn setCtrl(data: u32) void {
+    iCtrl = (data & 1) != 0;
+
+    checkInterrupt();
+}
+
 /// Sets INTC_MASK, checks for interrupt
 pub fn setMask(data: u32) void {
     intcMask = @truncate(u15, data);
