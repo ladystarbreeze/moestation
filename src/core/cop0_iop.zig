@@ -160,6 +160,7 @@ pub fn get(idx: u5) u32 {
 
     switch (idx) {
         @enumToInt(Cop0Reg.Status) => data = status.get(),
+        @enumToInt(Cop0Reg.Cause ) => data = cause.get(),
         @enumToInt(Cop0Reg.EPC   ) => data = epc,
         @enumToInt(Cop0Reg.PRId  ) => data = 2,
         else => {
