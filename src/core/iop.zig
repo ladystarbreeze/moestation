@@ -19,7 +19,7 @@ const cop0 = @import("cop0_iop.zig");
 const exts = @import("../common/extend.zig").exts;
 
 /// Enable/disable disassembler
-var doDisasm = true;
+var doDisasm = false;
 
 const resetVector: u32 = 0xBFC0_0000;
 
@@ -73,6 +73,7 @@ const Special = enum(u6) {
     Sra   = 0x03,
     Jr    = 0x08,
     Jalr  = 0x09,
+    Mfhi  = 0x10,
     Mflo  = 0x12,
     Div   = 0x1A,
     Divu  = 0x1B,
@@ -81,6 +82,7 @@ const Special = enum(u6) {
     Subu  = 0x23,
     And   = 0x24,
     Or    = 0x25,
+    Slt   = 0x2A,
     Sltu  = 0x2B,
 };
 
@@ -236,6 +238,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sra ) => iSra(instr),
                 @enumToInt(Special.Jr  ) => iJr(instr),
                 @enumToInt(Special.Jalr) => iJalr(instr),
+                @enumToInt(Special.Mfhi) => iMfhi(instr),
                 @enumToInt(Special.Mflo) => iMflo(instr),
                 @enumToInt(Special.Div ) => iDiv(instr),
                 @enumToInt(Special.Divu) => iDivu(instr),
@@ -244,6 +247,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Subu) => iSubu(instr),
                 @enumToInt(Special.And ) => iAnd(instr),
                 @enumToInt(Special.Or  ) => iOr(instr),
+                @enumToInt(Special.Slt ) => iSlt(instr),
                 @enumToInt(Special.Sltu) => iSltu(instr),
                 else => {
                     err("  [IOP       ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -815,6 +819,19 @@ fn iMfc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// Move From HI
+fn iMfhi(instr: u32) void {
+    const rd = getRd(instr);
+
+    regFile.set(rd, regFile.hi);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [IOP       ] MFHI ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRd, regFile.get(rd)});
+    }
+}
+
 /// Move From LO
 fn iMflo(instr: u32) void {
     const rd = getRd(instr);
@@ -957,6 +974,23 @@ fn iSll(instr: u32) void {
 
             info("   [IOP       ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
         }
+    }
+}
+
+/// Set Less Than
+fn iSlt(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, @as(u32, @bitCast(u1, @bitCast(i32, regFile.get(rs)) < @bitCast(i32, regFile.get(rt)))));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
     }
 }
 
