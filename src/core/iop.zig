@@ -64,7 +64,10 @@ const Opcode = enum(u6) {
 /// SPECIAL instructions
 const Special = enum(u6) {
     Sll   = 0x00,
+    Srl   = 0x02,
     Jr    = 0x08,
+    Jalr  = 0x09,
+    Add   = 0x20,
     Addu  = 0x21,
     And   = 0x24,
     Or    = 0x25,
@@ -213,7 +216,10 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(Special.Sll ) => iSll(instr),
+                @enumToInt(Special.Srl ) => iSrl(instr),
                 @enumToInt(Special.Jr  ) => iJr(instr),
+                @enumToInt(Special.Jalr) => iJalr(instr),
+                @enumToInt(Special.Add ) => iAdd(instr),
                 @enumToInt(Special.Addu) => iAddu(instr),
                 @enumToInt(Special.And ) => iAnd(instr),
                 @enumToInt(Special.Or  ) => iOr(instr),
@@ -271,6 +277,31 @@ fn doBranch(target: u32, isCond: bool, rd: u5) void {
 
     if (isCond) {
         regFile.npc = target;
+    }
+}
+
+/// ADD
+fn iAdd(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@addWithOverflow(i32, @bitCast(i32, regFile.get(rs)), @bitCast(i32, regFile.get(rt)), &res)) {
+        err("  [IOP       ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(rd, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] ADD ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(rd)});
     }
 }
 
@@ -426,6 +457,23 @@ fn iJal(instr: u32) void {
 
     if (doDisasm) {
         info("   [IOP       ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}, PC = {X:0>8}h", .{target, regFile.get(@enumToInt(CpuReg.RA)), target});
+    }
+}
+
+/// Jump And Link Register
+fn iJalr(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+
+    const target = regFile.get(rs);
+
+    doBranch(target, true, rd);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+    
+        info("   [IOP       ] JAL ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(rd), target});
     }
 }
 
@@ -758,6 +806,23 @@ fn iSltu(instr: u32) void {
     }
 }
 
+/// Shift Right Logical
+fn iSrl(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rd, regFile.get(rt) >> sa);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>8}", .{tagRd, tagRt, sa, tagRd, regFile.get(rd)});
+    }
+}
+
 /// Store Word
 fn iSw(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -787,6 +852,10 @@ fn iSw(instr: u32) void {
 /// Steps the IOP interpreter
 pub fn step() void {
     regFile.cpc = regFile.pc;
+
+    if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
+        assert(false);
+    }
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
