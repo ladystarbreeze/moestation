@@ -238,6 +238,10 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
+        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (DMA).", .{@typeName(T), addr});
+
+        data = 0;
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -427,25 +431,43 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (DMA) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (DMA) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (SIO2).", .{@typeName(T), addr, data});
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SIO2) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
+            0x1F80_1070 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ I_STAT");
+                }
+
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_STAT) = 0x{X}.", .{@typeName(T), addr, data});
+
+                intc.setStatIop(data);
+            },
+            0x1F80_1074 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ I_MASK");
+                }
+
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_MASK) = 0x{X}.", .{@typeName(T), addr, data});
+
+                intc.setMaskIop(data);
+            },
             0x1FA0_0000 => {
-                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (POST).", .{@typeName(T), addr, data});
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (POST) = 0x{X}.", .{@typeName(T), addr, data});
             },
             0x1FFE_0130 => {
-                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (Cache Control).", .{@typeName(T), addr, data});
+                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Cache Control) = 0x{X}.", .{@typeName(T), addr, data});
             },
             0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
             0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
             0x1F80_1020, 0x1F80_1060,
             0x1F80_1D80, 0x1F80_1D82, 0x1F80_1D84, 0x1F80_1D86,
             0x1F80_2070 => {
-                warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (Unknown).", .{@typeName(T), addr, data});
+                warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
             },
             else => {
                 err("  [Bus (IOP) ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
