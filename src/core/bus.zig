@@ -143,6 +143,12 @@ pub fn read(comptime T: type, addr: u32) T {
         }
 
         data = dmac.read(addr);
+    } else if (addr >= @enumToInt(MemBase.Sif) and addr < (@enumToInt(MemBase.Sif) + @enumToInt(MemSize.Sif))) {
+        if (T != u32) {
+            @panic("Unhandled read @ SIF I/O");
+        }
+
+        data = sif.read(addr);
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
@@ -258,6 +264,11 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = intc.getMaskIop(T, @truncate(u2, addr));
             },
+            0x1F80_1C00 ... 0x1F80_1DFF => {
+                //warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
+
+                data = 0;
+            },
             else => {
                 err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
@@ -308,7 +319,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             @panic("Unhandled write @ SIF I/O");
         }
 
-        sif.writeEe(addr, data);
+        sif.write(addr, data);
     } else if (addr >= @enumToInt(MemBase.Vu0Code) and addr < (@enumToInt(MemBase.Vu0Code) + @enumToInt(MemSize.Vu0))) {
         //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
 
@@ -457,6 +468,9 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
 
                 intc.setMaskIop(T, data, @truncate(u2, addr));
             },
+            0x1F80_1C00 ... 0x1F80_1DFF, => {
+                // warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
+            },
             0x1FA0_0000 => {
                 info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (POST) = 0x{X}.", .{@typeName(T), addr, data});
             },
@@ -466,7 +480,6 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
             0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
             0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
             0x1F80_1020, 0x1F80_1060,
-            0x1F80_1D80, 0x1F80_1D82, 0x1F80_1D84, 0x1F80_1D86,
             0x1F80_2070 => {
                 warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
             },
