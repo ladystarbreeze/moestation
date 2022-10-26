@@ -60,12 +60,16 @@ const Opcode = enum(u6) {
     Cop0    = 0x10,
     Lb      = 0x20,
     Lh      = 0x21,
+    Lwl     = 0x22,
     Lw      = 0x23,
     Lbu     = 0x24,
     Lhu     = 0x25,
+    Lwr     = 0x26,
     Sb      = 0x28,
     Sh      = 0x29,
+    Swl     = 0x2A,
     Sw      = 0x2B,
+    Swr     = 0x2E,
 };
 
 /// SPECIAL instructions
@@ -83,6 +87,7 @@ const Special = enum(u6) {
     Mthi    = 0x11,
     Mflo    = 0x12,
     Mtlo    = 0x13,
+    Multu   = 0x19,
     Div     = 0x1A,
     Divu    = 0x1B,
     Add     = 0x20,
@@ -263,6 +268,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Mthi   ) => iMthi(instr),
                 @enumToInt(Special.Mflo   ) => iMflo(instr),
                 @enumToInt(Special.Mtlo   ) => iMtlo(instr),
+                @enumToInt(Special.Multu  ) => iMultu(instr),
                 @enumToInt(Special.Div    ) => iDiv(instr),
                 @enumToInt(Special.Divu   ) => iDivu(instr),
                 @enumToInt(Special.Add    ) => iAdd(instr),
@@ -335,12 +341,16 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Lb ) => iLb(instr),
         @enumToInt(Opcode.Lh ) => iLh(instr),
+        @enumToInt(Opcode.Lwl) => iLwl(instr),
         @enumToInt(Opcode.Lw ) => iLw(instr),
         @enumToInt(Opcode.Lbu) => iLbu(instr),
         @enumToInt(Opcode.Lhu) => iLhu(instr),
+        @enumToInt(Opcode.Lwr) => iLwr(instr),
         @enumToInt(Opcode.Sb ) => iSb(instr),
         @enumToInt(Opcode.Sh ) => iSh(instr),
+        @enumToInt(Opcode.Swl) => iSwl(instr),
         @enumToInt(Opcode.Sw ) => iSw(instr),
+        @enumToInt(Opcode.Swr) => iSwr(instr),
         else => {
             err("  [IOP       ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
 
@@ -848,6 +858,56 @@ fn iLw(instr: u32) void {
     regFile.set(rt, data);
 }
 
+/// LWL - Load Word Left
+fn iLwl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 24 - 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) << shift);
+
+    const data = (regFile.get(rt) & mask) | (read(u32, addrMask, true) << shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LWL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, data);
+}
+
+/// LWR - Load Word Right
+fn iLwr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) >> shift);
+
+    const data = (regFile.get(rt) & mask) | (read(u32, addrMask, true) >> shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] LWR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(rt, data);
+}
+
 /// Move From Coprocessor
 fn iMfc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
@@ -957,6 +1017,24 @@ fn iMtlo(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
         info("   [IOP       ] MTLO ${s}; LO = 0x{X:0>8}", .{tagRd, regFile.get(rd)});
+    }
+}
+
+/// MULTU - MULTply Unsigned
+fn iMultu(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = @as(u64, regFile.get(rs)) * @as(u64, regFile.get(rt));
+
+    regFile.lo = @truncate(u32, res >>  0);
+    regFile.hi = @truncate(u32, res >> 32);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] MULTU ${s}, ${s}; LO = 0x{X:0>8}, HI = 0x{X:0>8}", .{tagRs, tagRt, regFile.lo, regFile.hi});
     }
 }
 
@@ -1310,6 +1388,56 @@ fn iSw(instr: u32) void {
     }
 
     write(u32, addr, data);
+}
+
+/// SWL - Store Word Left
+fn iSwl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 24 - 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) >> shift);
+
+    const data = (read(u32, addrMask, true) & mask) | (regFile.get(rt) >> shift);
+
+    write(u32, addrMask, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SWL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+}
+
+/// SWR - Store Word Right
+fn iSwr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) << shift);
+
+    const data = (read(u32, addrMask, true) & mask) | (regFile.get(rt) << shift);
+
+    write(u32, addrMask, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] SWR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
 }
 
 /// SYStem CALL
