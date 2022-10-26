@@ -165,7 +165,13 @@ const MmiOpcode = enum(u6) {
     Mflo1 = 0x12,
     Mult1 = 0x18,
     Divu1 = 0x1B,
+    Mmi1  = 0x28,
     Mmi3  = 0x29,
+};
+
+/// MMI1 instructions
+const Mmi1Opcode = enum(u5) {
+    Padduw = 0x10,
 };
 
 /// MMI3 instructions
@@ -595,7 +601,19 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
                 @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
                 @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
-                @enumToInt(MmiOpcode.Mmi3 ) => {
+                @enumToInt(MmiOpcode.Mmi1 ) => {
+                    const sa = getSa(instr);
+
+                    switch (sa) {
+                        @enumToInt(Mmi1Opcode.Padduw) => iPadduw(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled MMI1 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
+                @enumToInt(MmiOpcode.Mmi3) => {
                     const sa = getSa(instr);
 
                     switch (sa) {
@@ -1691,6 +1709,33 @@ fn iOri(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Parallel ADD Unsigned saturation Word
+fn iPadduw(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const a = regFile.get(u128, rs);
+    const b = regFile.get(u128, rt);
+
+    var res: u128 = 0;
+
+    var i: u7 = 0;
+    while (i < 4) : (i += 1) {
+        res |= @as(u128, @truncate(u32, a >> (32 * i)) +| @truncate(u32, b >> (32 * i))) << (32 * i);
+    }
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PADDUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
