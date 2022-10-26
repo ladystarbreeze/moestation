@@ -87,7 +87,7 @@ fn checkInterrupt() void {
 }
 
 fn checkInterruptIop() void {
-    if (iStat and ((iStat & iMask) != 0)) {
+    if (iCtrl and ((iStat & iMask) != 0)) {
         err("  [INTC      ] Unhandled IOP interrupt.", .{});
 
         assert(false);
