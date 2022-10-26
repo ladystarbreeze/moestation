@@ -40,6 +40,11 @@ var iStat: u25  = undefined;
 var iMask: u25  = undefined;
 var iCtrl: bool = undefined;
 
+/// Returns I_CTRL
+pub fn getCtrl() u32 {
+    return @as(u32, @bitCast(u1, iCtrl));
+}
+
 /// Returns INTC_MASK
 pub fn getMask() u32 {
     return @as(u32, intcMask);
