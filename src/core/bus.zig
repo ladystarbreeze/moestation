@@ -45,6 +45,12 @@ const MemBase = enum(u32) {
     Bios    = 0x1FC0_0000,
 };
 
+/// Memory base addresses (IOP)
+const MemBaseIop = enum(u32) {
+    Dma0 = 0x1F80_1080,
+    Dma1 = 0x1F80_1500,
+};
+
 /// Memory sizes
 const MemSize = enum(u32) {
     Ram   = 0x200_0000,
@@ -58,6 +64,11 @@ const MemSize = enum(u32) {
     Sif   = 0x000_0070,
     Gs    = 0x000_2000,
     Bios  = 0x040_0000,
+};
+
+/// Memory region sizes (IOP)
+const MemSizeIop = enum(u32) {
+    Dma = 0x80,
 };
 
 // Memory arrays
@@ -223,6 +234,11 @@ pub fn readIop(comptime T: type, addr: u32) T {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
+            0x1F80_1010 => {
+                warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
+
+                data = 0;
+            },
             else => {
                 err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
@@ -400,9 +416,25 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
 /// Writes data to the IOP bus
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
-    err("  [Bus (IOP) ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
+    if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
+    } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (DMA).", .{@typeName(T), addr, data});
+    } else {
+        switch (addr) {
+            0x1F80_1000, 0x1F80_1004, 0x1F80_1008, 0x1F80_100C,
+            0x1F80_1010, 0x1F80_1014, 0x1F80_1018, 0x1F80_101C,
+            0x1F80_1020,
+            0x1F80_2070 => {
+                warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} = 0x{X} (Unknown).", .{@typeName(T), addr, data});
+            },
+            else => {
+                err("  [Bus (IOP) ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
-    assert(false);
+                assert(false);
+            }
+        }
+    }
 }
 
 /// Dumps RDRAM image
