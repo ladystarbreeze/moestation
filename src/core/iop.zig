@@ -50,6 +50,7 @@ const Opcode = enum(u6) {
     Ori     = 0x0D,
     Lui     = 0x0F,
     Cop0    = 0x10,
+    Lb      = 0x20,
     Lw      = 0x23,
     Sb      = 0x28,
     Sw      = 0x2B,
