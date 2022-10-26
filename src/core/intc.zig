@@ -45,6 +45,11 @@ pub fn getMask() u32 {
     return @as(u32, intcMask);
 }
 
+/// Returns I_MASK
+pub fn getMaskIop() u32 {
+    return @as(u32, iMask);
+}
+
 /// Returns INTC_STAT
 pub fn getStat() u32 {
     return @as(u32, intcStat);
