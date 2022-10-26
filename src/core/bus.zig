@@ -285,12 +285,12 @@ pub fn readIop(comptime T: type, addr: u32) T {
                     @panic("Unhandled read @ I_STAT");
                 }
 
-                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_STAT).", .{@typeName(T), addr});
+                info("   [Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (I_STAT).", .{@typeName(T), addr});
 
                 data = intc.getStatIop();
             },
             0x1F80_1074 ... 0x1F80_1077 => {
-                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_MASK).", .{@typeName(T), addr});
+                info("   [Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (I_MASK).", .{@typeName(T), addr});
 
                 data = intc.getMaskIop(T, @truncate(u2, addr));
             },
@@ -299,7 +299,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
                     @panic("Unhandled read @ I_CTRL");
                 }
 
-                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (I_CTRL).", .{@typeName(T), addr});
+                info("   [Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (I_CTRL).", .{@typeName(T), addr});
 
                 data = intc.getCtrl();
             },
@@ -495,6 +495,12 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBaseIop.Sif) and addr < (@enumToInt(MemBaseIop.Sif) + @enumToInt(MemSize.Sif))) {
+        if (T != u32) {
+            @panic("Unhandled write @ SIF I/O");
+        }
+
+        sif.writeIop(addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Cdvd) and addr < (@enumToInt(MemBaseIop.Cdvd) + @enumToInt(MemSizeIop.Cdvd))) {
         if (T != u8) {
             @panic("Unhandled write @ CDVD");
