@@ -46,8 +46,23 @@ pub fn getMask() u32 {
 }
 
 /// Returns I_MASK
-pub fn getMaskIop() u32 {
-    return @as(u32, iMask);
+pub fn getMaskIop(comptime T: type, offset: u2) T {
+    var data: T = undefined;
+
+    switch (T) {
+        u8  => assert(false),
+        u16 => {
+            if ((offset & 1) == 0) {
+                data = @truncate(u16, iMask);
+            } else {
+                data = @truncate(u16, iMask >> 16);
+            }
+        },
+        u32 => data = @as(u32, iMask),
+        else => unreachable,
+    }
+
+    return data;
 }
 
 /// Returns INTC_STAT
@@ -63,8 +78,19 @@ pub fn setMask(data: u32) void {
 }
 
 /// Sets I_MASK, checks for interrupt
-pub fn setMaskIop(data: u32) void {
-    iMask = @truncate(u25, data);
+pub fn setMaskIop(comptime T: type, data: T, offset: u2) void {
+    switch (T) {
+        u8  => assert(false),
+        u16 => {
+            if ((offset & 1) == 0) {
+                iMask = (iMask & 0x1F_0000) | @as(u25, data);
+            } else {
+                iMask = (@as(u25, data) << 16) | (iMask & 0xFFFF);
+            }
+        },
+        u32 => iMask = @truncate(u25, data),
+        else => unreachable,
+    }
 
     checkInterruptIop();
 }
@@ -77,8 +103,19 @@ pub fn setStat(data: u32) void {
 }
 
 /// Sets I_STAT, checks for interrupt
-pub fn setStatIop(data: u32) void {
-    iStat &= ~@truncate(u25, data);
+pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
+    switch (T) {
+        u8  => assert(false),
+        u16 => {
+            if ((offset & 1) == 0) {
+                iStat &= ~@as(u25, data);
+            } else {
+                iStat &= ~@as(u25, data) << 16;
+            }
+        },
+        u32 => iStat = ~@truncate(u25, data),
+        else => unreachable,
+    }
 
     checkInterruptIop();
 }
