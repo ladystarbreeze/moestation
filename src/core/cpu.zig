@@ -128,8 +128,10 @@ const Special = enum(u6) {
 
 /// REGIMM instructions
 const Regimm = enum(u5) {
-    Bltz = 0x00,
-    Bgez = 0x01,
+    Bltz  = 0x00,
+    Bgez  = 0x01,
+    Bltzl = 0x02,
+    Bgezl = 0x03,
 };
 
 /// COP instructions
@@ -161,6 +163,7 @@ const Cop2Opcode = enum(u5) {
 const ControlOpcode = enum(u6) {
     Tlbwi = 0x02,
     Eret  = 0x18,
+    Ei    = 0x38,
     Di    = 0x39,
 };
 
@@ -461,8 +464,10 @@ fn decodeInstr(instr: u32) void {
             const rt = getRt(instr);
 
             switch (rt) {
-                @enumToInt(Regimm.Bltz) => iBltz(instr),
-                @enumToInt(Regimm.Bgez) => iBgez(instr),
+                @enumToInt(Regimm.Bltz ) => iBltz(instr),
+                @enumToInt(Regimm.Bgez ) => iBgez(instr),
+                @enumToInt(Regimm.Bltzl) => iBltzl(instr),
+                @enumToInt(Regimm.Bgezl) => iBgezl(instr),
                 else => {
                     err("  [EE Core   ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
@@ -495,6 +500,7 @@ fn decodeInstr(instr: u32) void {
                     switch (funct) {
                         @enumToInt(ControlOpcode.Tlbwi) => iTlbwi(),
                         @enumToInt(ControlOpcode.Eret ) => iEret(),
+                        @enumToInt(ControlOpcode.Ei   ) => iEi(),
                         @enumToInt(ControlOpcode.Di   ) => iDi(),
                         else => {
                             err("  [EE Core   ] Unhandled COP0 Control instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -833,6 +839,23 @@ fn iBgez(instr: u32) void {
     }
 }
 
+/// Branch on Greater than or Equal Zero Likely
+fn iBgezl(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) >= 0, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
 /// Branch on Greater Than Zero
 fn iBgtz(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -881,6 +904,23 @@ fn iBltz(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
         info("   [EE Core   ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Less Than Zero Likely
+fn iBltzl(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) < 0, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1208,6 +1248,17 @@ fn iDsrl32(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Enable Interrupts
+fn iEi() void {
+    if (doDisasm) {
+        info("   [EE Core   ] EI", .{});
+    }
+
+    if (cop0.isEdiEnabled()) {
+        cop0.setEie(true);
     }
 }
 
