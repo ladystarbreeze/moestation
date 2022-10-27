@@ -127,6 +127,11 @@ pub fn write(addr: u32, data: u32) void {
 
             msflg |= data;
         },
+        @enumToInt(SifReg.SifSmflg) => {
+            info("   [SIF       ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
+
+            msflg &= ~data;
+        },
         @enumToInt(SifReg.SifCtrl) => {
             info("   [SIF       ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
         },
