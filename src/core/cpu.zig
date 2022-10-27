@@ -17,6 +17,7 @@ const bus = @import("bus.zig");
 const cop0 = @import("cop0.zig");
 
 const Cop0Reg = cop0.Cop0Reg;
+const ExCode  = cop0.ExCode;
 
 const cop1 = @import("cop1.zig");
 
@@ -91,37 +92,38 @@ const Opcode = enum(u6) {
 
 /// SPECIAL instructions
 const Special = enum(u6) {
-    Sll    = 0x00,
-    Srl    = 0x02,
-    Sra    = 0x03,
-    Sllv   = 0x04,
-    Srlv   = 0x06,
-    Srav   = 0x07,
-    Jr     = 0x08,
-    Jalr   = 0x09,
-    Movz   = 0x0A,
-    Movn   = 0x0B,
-    Sync   = 0x0F,
-    Mfhi   = 0x10,
-    Mflo   = 0x12,
-    Dsllv  = 0x14,
-    Dsrav  = 0x17,
-    Mult   = 0x18,
-    Div    = 0x1A,
-    Divu   = 0x1B,
-    Addu   = 0x21,
-    Subu   = 0x23,
-    And    = 0x24,
-    Or     = 0x25,
-    Nor    = 0x27,
-    Slt    = 0x2A,
-    Sltu   = 0x2B,
-    Daddu  = 0x2D,
-    Dsll   = 0x38,
-    Dsrl   = 0x3A,
-    Dsll32 = 0x3C,
-    Dsrl32 = 0x3E,
-    Dsra32 = 0x3F,
+    Sll     = 0x00,
+    Srl     = 0x02,
+    Sra     = 0x03,
+    Sllv    = 0x04,
+    Srlv    = 0x06,
+    Srav    = 0x07,
+    Jr      = 0x08,
+    Jalr    = 0x09,
+    Movz    = 0x0A,
+    Movn    = 0x0B,
+    Syscall = 0x0C,
+    Sync    = 0x0F,
+    Mfhi    = 0x10,
+    Mflo    = 0x12,
+    Dsllv   = 0x14,
+    Dsrav   = 0x17,
+    Mult    = 0x18,
+    Div     = 0x1A,
+    Divu    = 0x1B,
+    Addu    = 0x21,
+    Subu    = 0x23,
+    And     = 0x24,
+    Or      = 0x25,
+    Nor     = 0x27,
+    Slt     = 0x2A,
+    Sltu    = 0x2B,
+    Daddu   = 0x2D,
+    Dsll    = 0x38,
+    Dsrl    = 0x3A,
+    Dsll32  = 0x3C,
+    Dsrl32  = 0x3E,
+    Dsra32  = 0x3F,
 };
 
 /// REGIMM instructions
@@ -416,37 +418,38 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
-                @enumToInt(Special.Sll   ) => iSll(instr),
-                @enumToInt(Special.Srl   ) => iSrl(instr),
-                @enumToInt(Special.Sra   ) => iSra(instr),
-                @enumToInt(Special.Sllv  ) => iSllv(instr),
-                @enumToInt(Special.Srlv  ) => iSrlv(instr),
-                @enumToInt(Special.Srav  ) => iSrav(instr),
-                @enumToInt(Special.Jr    ) => iJr(instr),
-                @enumToInt(Special.Jalr  ) => iJalr(instr),
-                @enumToInt(Special.Movz  ) => iMovz(instr),
-                @enumToInt(Special.Movn  ) => iMovn(instr),
-                @enumToInt(Special.Sync  ) => iSync(instr),
-                @enumToInt(Special.Mfhi  ) => iMfhi(instr, false),
-                @enumToInt(Special.Mflo  ) => iMflo(instr, false),
-                @enumToInt(Special.Dsllv ) => iDsllv(instr),
-                @enumToInt(Special.Dsrav ) => iDsrav(instr),
-                @enumToInt(Special.Mult  ) => iMult(instr, 0),
-                @enumToInt(Special.Div   ) => iDiv(instr),
-                @enumToInt(Special.Divu  ) => iDivu(instr, 0),
-                @enumToInt(Special.Addu  ) => iAddu(instr),
-                @enumToInt(Special.Subu  ) => iSubu(instr),
-                @enumToInt(Special.And   ) => iAnd(instr),
-                @enumToInt(Special.Or    ) => iOr(instr),
-                @enumToInt(Special.Nor   ) => iNor(instr),
-                @enumToInt(Special.Slt   ) => iSlt(instr),
-                @enumToInt(Special.Sltu  ) => iSltu(instr),
-                @enumToInt(Special.Daddu ) => iDaddu(instr),
-                @enumToInt(Special.Dsll  ) => iDsll(instr),
-                @enumToInt(Special.Dsrl  ) => iDsrl(instr),
-                @enumToInt(Special.Dsll32) => iDsll32(instr),
-                @enumToInt(Special.Dsrl32) => iDsrl32(instr),
-                @enumToInt(Special.Dsra32) => iDsra32(instr),
+                @enumToInt(Special.Sll    ) => iSll(instr),
+                @enumToInt(Special.Srl    ) => iSrl(instr),
+                @enumToInt(Special.Sra    ) => iSra(instr),
+                @enumToInt(Special.Sllv   ) => iSllv(instr),
+                @enumToInt(Special.Srlv   ) => iSrlv(instr),
+                @enumToInt(Special.Srav   ) => iSrav(instr),
+                @enumToInt(Special.Jr     ) => iJr(instr),
+                @enumToInt(Special.Jalr   ) => iJalr(instr),
+                @enumToInt(Special.Movz   ) => iMovz(instr),
+                @enumToInt(Special.Movn   ) => iMovn(instr),
+                @enumToInt(Special.Syscall) => iSyscall(),
+                @enumToInt(Special.Sync   ) => iSync(instr),
+                @enumToInt(Special.Mfhi   ) => iMfhi(instr, false),
+                @enumToInt(Special.Mflo   ) => iMflo(instr, false),
+                @enumToInt(Special.Dsllv  ) => iDsllv(instr),
+                @enumToInt(Special.Dsrav  ) => iDsrav(instr),
+                @enumToInt(Special.Mult   ) => iMult(instr, 0),
+                @enumToInt(Special.Div    ) => iDiv(instr),
+                @enumToInt(Special.Divu   ) => iDivu(instr, 0),
+                @enumToInt(Special.Addu   ) => iAddu(instr),
+                @enumToInt(Special.Subu   ) => iSubu(instr),
+                @enumToInt(Special.And    ) => iAnd(instr),
+                @enumToInt(Special.Or     ) => iOr(instr),
+                @enumToInt(Special.Nor    ) => iNor(instr),
+                @enumToInt(Special.Slt    ) => iSlt(instr),
+                @enumToInt(Special.Sltu   ) => iSltu(instr),
+                @enumToInt(Special.Daddu  ) => iDaddu(instr),
+                @enumToInt(Special.Dsll   ) => iDsll(instr),
+                @enumToInt(Special.Dsrl   ) => iDsrl(instr),
+                @enumToInt(Special.Dsll32 ) => iDsll32(instr),
+                @enumToInt(Special.Dsrl32 ) => iDsrl32(instr),
+                @enumToInt(Special.Dsra32 ) => iDsra32(instr),
                 else => {
                     err("  [EE Core   ] Unhandled SPECIAL instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -659,6 +662,35 @@ fn decodeInstr(instr: u32) void {
             assert(false);
         }
     }
+}
+
+/// Raises a generic Level 1 CPU exception
+fn raiseExceptionL1(excode: ExCode) void {
+    info("   [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
+
+    cop0.setExCode(excode);
+
+    var exVector: u32 = if (cop0.isBev()) 0xBFC0_0000 else 0x8000_0000;
+
+    if (excode == ExCode.Interrupt) {
+        exVector |= 0x200;
+    } else {
+        exVector |= 0x180;
+    }
+
+    if (!cop0.isExl()) {
+        cop0.setBranchDelay(inDelaySlot[0]);
+
+        if (inDelaySlot[0]) {
+            cop0.setErrorPc(regFile.cpc - 4);
+        } else {
+            cop0.setErrorPc(regFile.cpc);
+        }
+    }
+
+    cop0.setExl(true);
+
+    regFile.setPc(exVector);
 }
 
 /// Branch helper
@@ -2234,6 +2266,15 @@ fn iSwc(instr: u32, comptime n: u2) void {
     }
 
     write(u32, addr, data);
+}
+
+/// SYStem CALL
+fn iSyscall() void {
+    if (true) {
+        info("   [EE Core   ] SYSCALL 0x{X}", .{regFile.get(u64, @enumToInt(CpuReg.V1))});
+    }
+
+    raiseExceptionL1(ExCode.Syscall);
 }
 
 /// Synchronize
