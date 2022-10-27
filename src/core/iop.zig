@@ -372,13 +372,11 @@ fn raiseException(excode: ExCode) void {
 
     const exVector: u32 = if (cop0.isBev()) 0xBFC0_0180 else 0x8000_0080;
 
-    if (inDelaySlot[0]) {
-        cop0.setBranchDelay(true);
+    cop0.setBranchDelay(inDelaySlot[0]);
 
+    if (inDelaySlot[0]) {
         cop0.setErrorPc(regFile.cpc - 4);
     } else {
-        cop0.setBranchDelay(false);
-
         cop0.setErrorPc(regFile.cpc);
     }
 
