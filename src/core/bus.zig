@@ -229,7 +229,8 @@ pub fn read(comptime T: type, addr: u32) T {
                 }
             },
             0x1000_F130 => data = 0,
-            0x1000_F400, 0x1000_F410 => {
+            0x1000_F400, 0x1000_F410,
+            0x1000_F520 => {
                 warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
                 data = 0;
@@ -265,6 +266,10 @@ pub fn readIop(comptime T: type, addr: u32) T {
         data = cdvd.read(addr);
     } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
         warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (DMA).", .{@typeName(T), addr});
+
+        data = 0;
+    } else if (addr >= @enumToInt(MemBaseIop.Timer1) and addr < (@enumToInt(MemBaseIop.Timer1) + @enumToInt(MemSizeIop.Timer))) {
+        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (Timer).", .{@typeName(T), addr});
 
         data = 0;
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
@@ -477,7 +482,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             },
             0x1000_F100, 0x1000_F120, 0x1000_F140, 0x1000_F150,
             0x1000_F400, 0x1000_F410, 0x1000_F420, 0x1000_F450, 0x1000_F460, 0x1000_F480, 0x1000_F490,
-            0x1000_F500, 0x1000_F510 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
+            0x1000_F500, 0x1000_F510, 0x1000_F590 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
             else => {
                 err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
