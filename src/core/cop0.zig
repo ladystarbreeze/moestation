@@ -50,6 +50,55 @@ pub const Cop0Reg = enum(u32) {
     R31         = 31,
 };
 
+/// Exception codes
+pub const ExCode = enum(u5) {
+    Interrupt,
+    TlbModification,
+    TlbLoad,
+    TlbStore,
+    AddressErrorLoad,
+    AddressErrorStore,
+    InstructionBusError,
+    DataBusError,
+    Syscall,
+    Breakpoint,
+    ReservedInstruction,
+    CoprocessorUnusable,
+    Overflow,
+    Trap,
+};
+
+/// COP0 Cause register
+const Cause = struct {
+     excode: u5   = undefined, // EXception CODE
+         ip: u3   = undefined, // Interrupt Pending
+    errcode: u3   = undefined, // ERRor CODE
+         ce: u2   = undefined, // Coprocessor Exception
+        bd2: bool = undefined, // Branch Delay slot (level 2)
+         bd: bool = undefined, // Branch Delay slot (level 1)
+
+    /// Returns Cause
+    pub fn get(self: Cause) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.excode) << 2;
+        data |= @as(u32, (self.ip & 3)) << 10;
+        data |= @as(u32, (self.ip & 4)) << 13;
+        data |= @as(u32, self.errcode) << 16;
+        data |= @as(u32, self.ce) << 28;
+        data |= @as(u32, @bitCast(u1, self.bd2)) << 30;
+        data |= @as(u32, @bitCast(u1, self.bd)) << 31;
+
+        return data;
+    }
+
+    /// Sets Cause
+    pub fn set(self: *Cause, data: u32) void {
+        self.ip  = @truncate(u3, (data >> 10) & 3);
+        self.ip |= @truncate(u3, (data >> 10) & 4);
+    }
+};
+
 /// COP0 Config register
 const Config = struct {
      k0: u3   = undefined, // KSEG0 cache mode
@@ -276,6 +325,7 @@ var    wired: u6  = undefined;
 var      epc: u32 = undefined;
 var errorepc: u32 = undefined;
 
+var    cause: Cause   =   Cause{};
 var   config: Config  =  Config{};
 var  entryhi: EntryHi = EntryHi{};
 var entrylo0: EntryLo = EntryLo{.is0 = true};
@@ -294,6 +344,11 @@ pub fn isCopUsable(comptime n: u2) bool {
     return n == 0 or (status.cu & (1 << n)) != 0;
 }
 
+/// Returns true if BEV is set
+pub fn isBev() bool {
+    return status.bev;
+}
+
 /// Returns true if EI/DI are enabled
 pub fn isEdiEnabled() bool {
     return (status.ksu == 0) or status.erl or status.exl or status.edi;
@@ -304,6 +359,11 @@ pub fn isErl() bool {
     return status.erl;
 }
 
+/// Returns true if EXL is set
+pub fn isExl() bool {
+    return status.exl;
+}
+
 /// Returns a COP0 register
 pub fn get(comptime T: type, idx: u5) T {
     assert(T == u32 or T == u64);
@@ -311,8 +371,11 @@ pub fn get(comptime T: type, idx: u5) T {
     var data: T = undefined;
 
     switch (idx) {
-        @enumToInt(Cop0Reg.Count) => data = count,
-        @enumToInt(Cop0Reg.PRId ) => data = @as(T, 0x59),
+        @enumToInt(Cop0Reg.Count ) => data = count,
+        @enumToInt(Cop0Reg.Status) => data = status.get(),
+        @enumToInt(Cop0Reg.Cause ) => data = cause.get(),
+        @enumToInt(Cop0Reg.EPC   ) => data = epc,
+        @enumToInt(Cop0Reg.PRId  ) => data = @as(T, 0x59),
         else => {
             err("  [COP0 (EE) ] Unhandled register read ({s}) @ {s}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx))});
 
@@ -357,6 +420,11 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
     }
 }
 
+/// Sets BD bit
+pub fn setBranchDelay(bd: bool) void {
+    cause.bd = bd;
+}
+
 /// Sets EIE flag
 pub fn setEie(eie: bool) void {
     status.eie = eie;
@@ -365,6 +433,16 @@ pub fn setEie(eie: bool) void {
 /// Sets ERL flag
 pub fn setErl(erl: bool) void {
     status.erl = erl;
+}
+
+/// Sets EPC
+pub fn setErrorPc(pc: u32) void {
+    epc = pc;
+}
+
+/// Sets exception code
+pub fn setExCode(excode: ExCode) void {
+    cause.excode = @enumToInt(excode);
 }
 
 /// Sets EXL flag
