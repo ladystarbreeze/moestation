@@ -11,10 +11,11 @@ const err  = std.log.err;
 const info = std.log.info;
 
 // Submodules
-const bus  = @import("core/bus.zig");
-const cpu  = @import("core/cpu.zig");
-const dmac = @import("core/dmac.zig");
-const iop  = @import("core/iop.zig");
+const bus     = @import("core/bus.zig");
+const cpu     = @import("core/cpu.zig");
+const dmac    = @import("core/dmac.zig");
+const dmacIop = @import("core/dmac_iop.zig");
+const iop     = @import("core/iop.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
@@ -36,6 +37,7 @@ pub fn main() void {
 
     cpu.init();
     dmac.init();
+    dmacIop.init();
     iop.init();
 
     while (true) {
