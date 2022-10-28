@@ -13,6 +13,9 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const LinearFifo = std.fifo.LinearFifo;
+const LinearFifoBufferType = std.fifo.LinearFifoBufferType;
+
 /// SIF registers (EE)
 const SifReg = enum(u32) {
     SifMscom = 0x1000_F200,
@@ -38,6 +41,12 @@ var smcom: u32 = 0;
 var msflg: u32 = 0;
 var smflg: u32 = 0;
 var   bd6: u32 = 0;
+
+const SifFifo = LinearFifo(u32, LinearFifoBufferType{.Static = 32});
+
+/// SBUS FIFOs
+var sif0Fifo = SifFifo.init();
+var sif1Fifo = SifFifo.init();
 
 /// Reads data from SIF registers (from EE)
 pub fn read(addr: u32) u32 {
@@ -175,4 +184,17 @@ pub fn writeIop(addr: u32, data: u32) void {
 /// Writes data to SIF1 FIFO
 pub fn writeSif1(data: u128) void {
     info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
+
+    var i: u7 = 0;
+    while (i < 4) : (i += 1) {
+        sif1Fifo.writeItem(@truncate(u32, data >> (32 * i))) catch {
+            err("  [SIF (DMAC)] Unable to write to SIF1 FIFO.", .{});
+            
+            assert(false);
+        };
+    }
+
+    if (sif1Fifo.writableLength() < 16) {
+        info("   [SIF (DMAC)] Clear EE request.", .{});
+    }
 }
