@@ -694,6 +694,9 @@ fn raiseExceptionL1(excode: ExCode) void {
         }
     }
 
+    inDelaySlot[0] = false;
+    inDelaySlot[1] = false;
+
     cop0.setExl(true);
 
     regFile.setPc(exVector);
