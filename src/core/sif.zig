@@ -171,3 +171,8 @@ pub fn writeIop(addr: u32, data: u32) void {
         }
     }
 }
+
+/// Writes data to SIF1 FIFO
+pub fn writeSif1(data: u128) void {
+    info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
+}
