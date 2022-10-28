@@ -430,7 +430,13 @@ fn doChain(chn: Channel) void {
 
         if (tagEnd) {
             switch (chn) {
-                Channel.Sif1 => channels[chnId].chcr.req = false,
+                Channel.Sif1 => {
+                    channels[chnId].chcr.req = false;
+
+                    err("  [SIF (DMAC)] Unhandled IOP request.", .{});
+
+                    assert(false);
+                },
                 else => {
                     err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
 
