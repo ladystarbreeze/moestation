@@ -716,12 +716,12 @@ fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
 
 /// ADD Immediate Unsigned
 fn iAddiu(instr: u32) void {
-    const imm16s = exts(u64, u16, getImm16(instr));
+    const imm16s = exts(u32, u16, getImm16(instr));
 
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rt, @truncate(u32, regFile.get(u64, rs) +% imm16s));
+    regFile.set(u32, rt, regFile.get(u32, rs) +% imm16s);
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
@@ -737,7 +737,7 @@ fn iAddu(instr: u32) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rd, @truncate(u32, regFile.get(u64, rs) +% regFile.get(u64, rt)));
+    regFile.set(u32, rd, regFile.get(u32, rs) +% regFile.get(u32, rt));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2174,7 +2174,7 @@ fn iSra(instr: u32) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rd, @truncate(u32, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> sa)));
+    regFile.set(u32, rd, @bitCast(u32, @bitCast(i32, regFile.get(u32, rt)) >> sa));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2190,7 +2190,7 @@ fn iSrav(instr: u32) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rd, @truncate(u32, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> @truncate(u6, regFile.get(u64, rs)))));
+    regFile.set(u32, rd, @bitCast(u32, @bitCast(i32, regFile.get(u32, rt)) >> @truncate(u5, regFile.get(u64, rs))));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2208,7 +2208,7 @@ fn iSrl(instr: u32) void {
     const rd = getRd(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rd, @truncate(u32, regFile.get(u64, rt) >> sa));
+    regFile.set(u32, rd, regFile.get(u32, rt) >> sa);
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2241,7 +2241,7 @@ fn iSubu(instr: u32) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    regFile.set(u32, rd, @truncate(u32, regFile.get(u32, rs) -% regFile.get(u64, rt)));
+    regFile.set(u32, rd, regFile.get(u32, rs) -% regFile.get(u32, rt));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
