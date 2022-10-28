@@ -246,6 +246,23 @@ pub fn read(comptime T: type, addr: u32) T {
     return data;
 }
 
+/// Reads data from the system bus (for DMAC)
+pub fn readDmac(addr: u32) u128 {
+    assert((addr & 3) == 0);
+
+    var data: u128 = undefined;
+
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(u128));
+    } else {
+        err("  [Bus (DMAC)] Unhandled read @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    return data;
+}
+
 /// Reads data from the IOP bus
 pub fn readIop(comptime T: type, addr: u32) T {
     var data: T = undefined;
