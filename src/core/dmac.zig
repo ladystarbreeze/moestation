@@ -20,7 +20,7 @@ const dmacIop = @import("dmac_iop.zig");
 const sif = @import("sif.zig");
 
 /// DMA channels
-const Channel = enum(u4) {
+pub const Channel = enum(u4) {
     Vif0,
     Vif1,
     Path3,
@@ -317,6 +317,17 @@ pub fn write(addr: u32, data: u32) void {
             }
         }
     }
+}
+
+/// Sets request flag
+pub fn setRequest(chn: Channel, req: bool) void {
+    if (req) {
+        info("   [DMAC      ] {s} DMA requested.", .{@tagName(chn)});
+    }
+
+    channels[@enumToInt(chn)].chcr.req = req;
+
+    checkRunning();
 }
 
 /// Checks if DMA transfer is running
