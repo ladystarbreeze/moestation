@@ -16,6 +16,8 @@ const warn = std.log.warn;
 const LinearFifo = std.fifo.LinearFifo;
 const LinearFifoBufferType = std.fifo.LinearFifoBufferType;
 
+const dmac = @import("dmac.zig");
+
 /// SIF registers (EE)
 const SifReg = enum(u32) {
     SifMscom = 0x1000_F200,
@@ -195,6 +197,6 @@ pub fn writeSif1(data: u128) void {
     }
 
     if (sif1Fifo.writableLength() < 16) {
-        info("   [SIF (DMAC)] Clear EE request.", .{});
+        dmac.setRequest(dmac.Channel.Sif1, false);
     }
 }
