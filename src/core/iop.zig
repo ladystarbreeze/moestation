@@ -380,6 +380,9 @@ fn raiseException(excode: ExCode) void {
         cop0.setErrorPc(regFile.cpc);
     }
 
+    inDelaySlot[0] = false;
+    inDelaySlot[1] = false;
+
     regFile.setPc(exVector);
 }
 
