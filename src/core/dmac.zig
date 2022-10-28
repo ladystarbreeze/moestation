@@ -14,6 +14,9 @@ const info = std.log.info;
 const warn = std.log.warn;
 
 const bus = @import("bus.zig");
+
+const dmacIop = @import("dmac_iop.zig");
+
 const sif = @import("sif.zig");
 
 /// DMA channels
@@ -433,9 +436,7 @@ fn doChain(chn: Channel) void {
                 Channel.Sif1 => {
                     channels[chnId].chcr.req = false;
 
-                    err("  [SIF (DMAC)] Unhandled IOP request.", .{});
-
-                    assert(false);
+                    dmacIop.setRequest(dmacIop.Channel.Sif1, true);
                 },
                 else => {
                     err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
