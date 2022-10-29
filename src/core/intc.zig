@@ -156,9 +156,9 @@ pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
         u8  => assert(false),
         u16 => {
             if ((offset & 1) == 0) {
-                iStat &= ~@as(u25, data);
+                iStat &= ~@as(u25, data & 0xFFFF);
             } else {
-                iStat &= ~@as(u25, data) << 16;
+                iStat &= ~(@as(u25, (data & 0xFFFF)) << 16);
             }
         },
         u32 => iStat = ~@truncate(u25, data),
