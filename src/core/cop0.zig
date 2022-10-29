@@ -12,6 +12,8 @@ const assert = std.debug.assert;
 const err  = std.log.err;
 const info = std.log.info;
 
+const cpu  = @import("cpu.zig");
+
 const exts = @import("../common/extend.zig").exts;
 
 /// COP0 register aliases
@@ -71,7 +73,7 @@ pub const ExCode = enum(u5) {
 /// COP0 Cause register
 const Cause = struct {
      excode: u5   = undefined, // EXception CODE
-         ip: u3   = undefined, // Interrupt Pending
+         ip: u3   = 0,         // Interrupt Pending
     errcode: u3   = undefined, // ERRor CODE
          ce: u2   = undefined, // Coprocessor Exception
         bd2: bool = undefined, // Branch Delay slot (level 2)
@@ -354,6 +356,11 @@ pub fn isEdiEnabled() bool {
     return (status.ksu == 0) or status.erl or status.exl or status.edi;
 }
 
+/// Returns true if EIE is set
+pub fn isEie() bool {
+    return status.eie;
+}
+
 /// Returns true if ERL is set
 pub fn isErl() bool {
     return status.erl;
@@ -362,6 +369,11 @@ pub fn isErl() bool {
 /// Returns true if EXL is set
 pub fn isExl() bool {
     return status.exl;
+}
+
+/// Returns true if IE is set
+pub fn isIe() bool {
+    return status.ie;
 }
 
 /// Returns a COP0 register
@@ -384,6 +396,16 @@ pub fn get(comptime T: type, idx: u5) T {
     }
 
     return data;
+}
+
+/// Returns interrupt mask in Status
+pub fn getIm() u3 {
+    return status.im;
+}
+
+/// Returns interrupt pending field in Cause
+pub fn getIp() u3 {
+    return cause.ip;
 }
 
 /// Returns ErrorEPC
@@ -409,7 +431,11 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
         @enumToInt(Cop0Reg.Count   ) => count = data,
         @enumToInt(Cop0Reg.EntryHi ) => entryhi.set(data),
         @enumToInt(Cop0Reg.Compare ) => compare = data,
-        @enumToInt(Cop0Reg.Status  ) => status.set(data),
+        @enumToInt(Cop0Reg.Status  ) => {
+            status.set(data);
+
+            cpu.checkIntPending();
+        },
         @enumToInt(Cop0Reg.EPC     ) => epc = @truncate(u32, data),
         @enumToInt(Cop0Reg.Config  ) => config.set(data),
         else => {
@@ -418,6 +444,8 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
             assert(false);
         }
     }
+
+    info("   [COP0 (EE) ] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 }
 
 /// Sets BD bit
@@ -425,14 +453,27 @@ pub fn setBranchDelay(bd: bool) void {
     cause.bd = bd;
 }
 
+/// Sets Cause.11
+pub fn setDmacIrqPending(irq: bool) void {
+    cause.ip &= ~@as(u3, 2);
+
+    cause.ip |= @as(u3, @bitCast(u1, irq)) << 1;
+
+    cpu.checkIntPending();
+}
+
 /// Sets EIE flag
 pub fn setEie(eie: bool) void {
     status.eie = eie;
+
+    cpu.checkIntPending();
 }
 
 /// Sets ERL flag
 pub fn setErl(erl: bool) void {
     status.erl = erl;
+
+    cpu.checkIntPending();
 }
 
 /// Sets EPC
@@ -448,6 +489,8 @@ pub fn setExCode(excode: ExCode) void {
 /// Sets EXL flag
 pub fn setExl(exl: bool) void {
     status.exl = exl;
+
+    cpu.checkIntPending();
 }
 
 /// Increments Count, checks for Compare interrupts
