@@ -18,6 +18,8 @@ const LinearFifoBufferType = std.fifo.LinearFifoBufferType;
 
 const dmac = @import("dmac.zig");
 
+const dmacIop = @import("dmac_iop.zig");
+
 /// SIF registers (EE)
 const SifReg = enum(u32) {
     SifMscom = 0x1000_F200,
@@ -125,6 +127,21 @@ pub fn readIop(addr: u32) u32 {
     return data;
 }
 
+/// Reads data from SIF1 FIFO
+pub fn readSif1() u32 {
+    const data = sif1Fifo.readItem();
+
+    if (sif1Fifo.writableLength() == 32) {
+        dmacIop.setRequest(dmacIop.Channel.Sif1, false);
+    }
+
+    //if (sif1Fifo.writableLength() >= 16) {
+    //    dmac.setRequest(dmac.Channel.Sif1, true);
+    //}
+
+    return data.?;
+}
+
 /// Writes data to SIF registers (from EE)
 pub fn write(addr: u32, data: u32) void {
     switch (addr) {
@@ -141,7 +158,7 @@ pub fn write(addr: u32, data: u32) void {
         @enumToInt(SifReg.SifSmflg) => {
             info("   [SIF       ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
 
-            msflg &= ~data;
+            smflg &= ~data;
         },
         @enumToInt(SifReg.SifCtrl) => {
             info("   [SIF       ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
@@ -195,6 +212,8 @@ pub fn writeSif1(data: u128) void {
             assert(false);
         };
     }
+
+    //dmacIop.setRequest(dmacIop.Channel.Sif1, true);
 
     if (sif1Fifo.writableLength() < 16) {
         dmac.setRequest(dmac.Channel.Sif1, false);
