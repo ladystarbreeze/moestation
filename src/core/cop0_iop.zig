@@ -14,6 +14,8 @@ const info = std.log.info;
 
 const Cop0Reg = @import("cop0.zig").Cop0Reg;
 
+const iop = @import("iop.zig");
+
 /// Exception codes
 pub const ExCode = enum(u5) {
     Interrupt,
@@ -184,6 +186,21 @@ pub fn get(idx: u5) u32 {
     return data;
 }
 
+/// Returns interrupt enable flag in Status
+pub fn getCie() bool {
+    return status.cie;
+}
+
+/// Returns interrupt mask in Status
+pub fn getIm() u8 {
+    return status.im;
+}
+
+/// Returns interrupt pending field in Cause
+pub fn getIp() u8 {
+    return cause.ip;
+}
+
 /// Sets a COP0 register
 pub fn set(idx: u5, data: u32) void {
     switch (idx) {
@@ -193,8 +210,16 @@ pub fn set(idx: u5, data: u32) void {
         @enumToInt(Cop0Reg.R7      ) => {},
         @enumToInt(Cop0Reg.Count   ) => count = data,
         @enumToInt(Cop0Reg.Compare ) => compare = data,
-        @enumToInt(Cop0Reg.Status  ) => status.set(data),
-        @enumToInt(Cop0Reg.Cause   ) => cause.set(data),
+        @enumToInt(Cop0Reg.Status  ) => {
+            status.set(data);
+
+            iop.checkIntPending();
+        },
+        @enumToInt(Cop0Reg.Cause   ) => {
+            cause.set(data);
+
+            iop.checkIntPending();
+        },
         else => {
             err("  [COP0 (IOP)] Unhandled register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 
@@ -218,4 +243,11 @@ pub fn setErrorPc(pc: u32) void {
 /// Sets exception code
 pub fn setExCode(excode: ExCode) void {
     cause.excode = @enumToInt(excode);
+}
+
+/// Sets Cause.10
+pub fn setPending(irq: bool) void {
+    cause.ip &= ~(@as(u8, 1) << 2);
+
+    cause.ip |= @as(u8, @bitCast(u1, irq)) << 2;
 }
