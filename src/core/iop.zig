@@ -28,6 +28,9 @@ const resetVector: u32 = 0xBFC0_0000;
 /// Branch delay slot helper
 var inDelaySlot: [2]bool = undefined;
 
+/// Interrupt pending
+var intPending: bool = false;
+
 /// Register aliases
 const CpuReg = enum(u5) {
     R0 =  0, AT =  1, V0 =  2, V1 =  3,
@@ -361,6 +364,18 @@ fn decodeInstr(instr: u32) void {
             assert(false);
         }
     }
+}
+
+/// Sets COP0 IRQ flag, checks for interrupt
+pub fn setIntPending(irq: bool) void {
+    cop0.setPending(irq);
+
+    checkIntPending();
+}
+
+/// Sets irqPending if interrupt is pending
+pub fn checkIntPending() void {
+    intPending = cop0.getCie() and (cop0.getIm() & cop0.getIp()) != 0;
 }
 
 /// Raises a generic CPU exception
@@ -1510,6 +1525,12 @@ pub fn step() void {
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
+
+    if (intPending) {
+        intPending = false;
+
+        return raiseException(ExCode.Interrupt);
+    }
 
     decodeInstr(fetchInstr());
 }
