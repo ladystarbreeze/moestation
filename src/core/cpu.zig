@@ -292,6 +292,9 @@ const RegFile = struct {
 /// RegFile instance
 var regFile = RegFile{};
 
+/// Interrupt pending flag
+var intPending = false;
+
 /// Scratchpad RAM
 var spram: [0x4000]u8 = undefined;
 
@@ -670,18 +673,28 @@ fn decodeInstr(instr: u32) void {
     }
 }
 
+/// Sets irqPending if interrupt is pending
+pub fn checkIntPending() void {
+    const intEnabled = cop0.isIe() and cop0.isEie() and !cop0.isErl() and !cop0.isExl();
+
+    // info("   [EE Core   ] IE = {}, EIE = {}, ERL = {}, EXL = {}", .{cop0.isIe(), cop0.isEie(), cop0.isErl(), cop0.isExl()});
+    // info("   [EE Core   ] IM = 0b{b:0>3}, IP = 0b{b:0>3}", .{cop0.getIm(), cop0.getIp()});
+
+    intPending = intEnabled and (cop0.getIm() & cop0.getIp()) != 0;
+}
+
 /// Raises a generic Level 1 CPU exception
 fn raiseExceptionL1(excode: ExCode) void {
     info("   [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
 
     cop0.setExCode(excode);
 
-    var exVector: u32 = if (cop0.isBev()) 0xBFC0_0000 else 0x8000_0000;
+    var exVector: u32 = if (cop0.isBev()) 0xBFC0_0200 else 0x8000_0000;
 
     if (excode == ExCode.Interrupt) {
-        exVector |= 0x200;
+        exVector += 0x200;
     } else {
-        exVector |= 0x180;
+        exVector += 0x180;
     }
 
     if (!cop0.isExl()) {
@@ -2375,9 +2388,15 @@ pub fn step() void {
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
 
-    decodeInstr(fetchInstr());
-
     cop0.incrementCount();
+
+    if (intPending) {
+        intPending = false;
+
+        return raiseExceptionL1(ExCode.Interrupt);
+    }
+
+    decodeInstr(fetchInstr());
 }
 
 pub fn dumpRegs() void {
