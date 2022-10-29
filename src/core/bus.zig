@@ -229,9 +229,17 @@ pub fn read(comptime T: type, addr: u32) T {
                     data = 0;
                 }
             },
-            0x1000_F130 => data = 0,
-            0x1000_F400, 0x1000_F410,
             0x1000_F520 => {
+                if (T != u32) {
+                    @panic("Unhandled read @ D_ENABLER");
+                }
+
+                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (D_ENABLER).", .{@typeName(T), addr});
+
+                data = dmac.getEnable();
+            },
+            0x1000_F130 => data = 0,
+            0x1000_F400, 0x1000_F410 => {
                 warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
                 data = 0;
@@ -502,9 +510,18 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
                 mchDrd = data;
             },
+            0x1000_F590 => {
+                if (T != u32) {
+                    @panic("Unhandled write @ D_ENABLEW");
+                }
+
+                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (D_ENABLEW) = 0x{X}.", .{@typeName(T), addr, data});
+
+                dmac.setEnable(data);
+            },
             0x1000_F100, 0x1000_F120, 0x1000_F140, 0x1000_F150,
             0x1000_F400, 0x1000_F410, 0x1000_F420, 0x1000_F450, 0x1000_F460, 0x1000_F480, 0x1000_F490,
-            0x1000_F500, 0x1000_F510, 0x1000_F590 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
+            0x1000_F500, 0x1000_F510 => warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data}),
             else => {
                 err("  [Bus       ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
 
@@ -587,6 +604,17 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
                 assert(false);
             }
         }
+    }
+}
+
+/// Writes data to the IOP bus (from IOP DMA)
+pub fn writeIopDmac(addr: u24, data: u32) void {
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
+        @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(u32));
+    } else {
+        err("  [Bus (DMAC)] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
+
+        assert(false);
     }
 }
 
