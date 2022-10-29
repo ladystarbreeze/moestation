@@ -129,7 +129,9 @@ const Tag = enum(u3) {
 
 var channels: [10]DmaChannel = undefined;
 
-var dmaEnable = false;
+var dEnable: u32 = 0x1201;
+var    dpcr: u32 = undefined;
+var   dctrl: u32 = undefined;
 
 /// Initializes the DMAC module
 pub fn init() void {
@@ -215,12 +217,16 @@ pub fn read(addr: u32) u32 {
         switch (addr) {
             @enumToInt(ControlReg.DCtrl) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_CTRL).", .{addr});
+
+                data = dctrl;
             },
             @enumToInt(ControlReg.DStat) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_STAT).", .{addr});
             },
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_PCR).", .{addr});
+
+                data = dpcr;
             },
             else => {
                 err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
@@ -289,9 +295,9 @@ pub fn write(addr: u32, data: u32) void {
             @enumToInt(ControlReg.DCtrl) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_CTRL) = 0x{X:0>8}.", .{addr, data});
 
-                dmaEnable = (data & 1) != 0;
+                dctrl = data;
 
-                if (dmaEnable) {
+                if ((dctrl & 1) != 0) {
                     checkRunning();
                 }
             },
@@ -300,6 +306,8 @@ pub fn write(addr: u32, data: u32) void {
             },
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_PCR) = 0x{X:0>8}.", .{addr, data});
+
+                dpcr = data;
             },
             @enumToInt(ControlReg.DSqwc) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_SQWC) = 0x{X:0>8}.", .{addr, data});
@@ -319,9 +327,21 @@ pub fn write(addr: u32, data: u32) void {
     }
 }
 
+/// Returns D_ENABLER
+pub fn getEnable() u32 {
+    return dEnable;
+}
+
+/// Sets D_ENABLEW
+pub fn setEnable(data: u32) void {
+    dEnable = data;
+
+    checkRunning();
+}
+
 /// Sets request flag
 pub fn setRequest(chn: Channel, req: bool) void {
-    if (req) {
+    if (!channels[@enumToInt(chn)].chcr.req and req) {
         info("   [DMAC      ] {s} DMA requested.", .{@tagName(chn)});
     }
 
@@ -332,7 +352,7 @@ pub fn setRequest(chn: Channel, req: bool) void {
 
 /// Checks if DMA transfer is running
 fn checkRunning() void {
-    if (!dmaEnable) return;
+    if ((dEnable & (1 << 16)) != 0 or (dctrl & 1) == 0) return;
 
     var chnId: u4 = 0;
     while (chnId < 10) : (chnId += 1) {
@@ -443,10 +463,10 @@ fn doChain(chn: Channel) void {
         }
 
         if (tagEnd) {
+            channels[chnId].chcr.str = false;
+
             switch (chn) {
                 Channel.Sif1 => {
-                    channels[chnId].chcr.req = false;
-
                     dmacIop.setRequest(dmacIop.Channel.Sif1, true);
                 },
                 else => {
@@ -455,8 +475,6 @@ fn doChain(chn: Channel) void {
                     assert(false);
                 }
             }
-
-            channels[chnId].chcr.str = false;
 
             break;
         }
