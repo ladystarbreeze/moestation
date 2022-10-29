@@ -12,6 +12,8 @@ const assert = std.debug.assert;
 const err  = std.log.err;
 const info = std.log.info;
 
+const iop = @import("iop.zig");
+
 /// Interrupt sources
 const IntSource = enum(u4) {
     Gs,
@@ -29,6 +31,35 @@ const IntSource = enum(u4) {
     Timer3,
     Sfifo,
     Vu0Watchdog,
+};
+
+pub const IntSourceIop = enum(u5) {
+    VblankStart,
+    Gpu,
+    Cdvd,
+    Dma,
+    Timer0,
+    Timer1,
+    Timer2,
+    Sio0,
+    Sio1,
+    Spu2,
+    Pio,
+    VblankEnd,
+    Dvd,
+    Pcmcia,
+    Timer3,
+    Timer4,
+    Timer5,
+    Sio2,
+    Htr0,
+    Htr1,
+    Htr2,
+    Htr3,
+    Usb,
+    Extr,
+    Fwre,
+    Fdma,
 };
 
 // INTC registers
@@ -137,6 +168,15 @@ pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
     checkInterruptIop();
 }
 
+/// Sends an IOP interrupt request
+pub fn sendInterruptIop(src: IntSourceIop) void {
+    info("   [INTC (IOP)] {s} interrupt request.", .{@tagName(src)});
+
+    iStat |= @as(u25, 1) << @enumToInt(src);
+
+    checkInterruptIop();
+}
+
 fn checkInterrupt() void {
     if ((intcStat & intcMask) != 0) {
         err("  [INTC      ] Unhandled EE interrupt.", .{});
@@ -146,9 +186,7 @@ fn checkInterrupt() void {
 }
 
 fn checkInterruptIop() void {
-    if (iCtrl and ((iStat & iMask) != 0)) {
-        err("  [INTC      ] Unhandled IOP interrupt.", .{});
+    info("   [INTC (IOP)] I_CTRL = {}, I_STAT = 0b{b:0>25}, I_MASK = 0b{b:0>25}", .{iCtrl, iStat, iMask});
 
-        assert(false);
-    }
+    iop.setIntPending(iCtrl and ((iStat & iMask) != 0));
 }
