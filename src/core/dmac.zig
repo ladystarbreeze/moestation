@@ -15,6 +15,8 @@ const warn = std.log.warn;
 
 const bus = @import("bus.zig");
 
+const cop0 = @import("cop0.zig");
+
 const dmacIop = @import("dmac_iop.zig");
 
 const sif = @import("sif.zig");
@@ -115,6 +117,43 @@ const DmaChannel = struct {
     sadr: u32            = undefined, // Scratchpad ADdress Register
 };
 
+/// D_STAT register
+const DmaStatus = struct {
+     ip: u10  = undefined, // Interrupt Pending
+     ds: bool = undefined, // DMA Stall interrupt
+     mf: bool = undefined, // MFIFO empty interrupt
+     be: bool = undefined, // Bus Error interrupt
+     im: u10  = 0,         // Interrupt Mask
+    dsm: bool = undefined, // DMA Stall Mask
+    mfm: bool = undefined, // MFIFO empty Mask
+
+    /// Returns D_STAT
+    pub fn get(self: DmaStatus) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.ip);
+        data |= @as(u32, @bitCast(u1, self.ds)) << 13;
+        data |= @as(u32, @bitCast(u1, self.mf)) << 14;
+        data |= @as(u32, @bitCast(u1, self.be)) << 15;
+        data |= @as(u32, self.im) << 16;
+        data |= @as(u32, @bitCast(u1, self.dsm)) << 29;
+        data |= @as(u32, @bitCast(u1, self.mfm)) << 30;
+
+        return data;
+    }
+
+    /// Sets D_STAT
+    pub fn set(self: *DmaStatus, data: u32) void {
+        self.ip &= ~@truncate(u10, data);
+        self.ds  = (data & (1 << 13)) != 0;
+        self.mf  = (data & (1 << 14)) != 0;
+        self.be  = (data & (1 << 15)) != 0;
+        self.im ^= @truncate(u10, data >> 16);
+        self.dsm = (data & (1 << 29)) != 0;
+        self.mfm = (data & (1 << 30)) != 0;
+    }
+};
+
 /// DMAtags
 const Tag = enum(u3) {
     Refe,
@@ -128,6 +167,8 @@ const Tag = enum(u3) {
 };
 
 var channels: [10]DmaChannel = undefined;
+
+var dStat: DmaStatus = DmaStatus{};
 
 var dEnable: u32 = 0x1201;
 var    dpcr: u32 = undefined;
@@ -222,6 +263,8 @@ pub fn read(addr: u32) u32 {
             },
             @enumToInt(ControlReg.DStat) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_STAT).", .{addr});
+
+                data = dStat.get();
             },
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_PCR).", .{addr});
@@ -303,6 +346,10 @@ pub fn write(addr: u32, data: u32) void {
             },
             @enumToInt(ControlReg.DStat) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_STAT) = 0x{X:0>8}.", .{addr, data});
+
+                dStat.set(data);
+
+                checkInterrupt();
             },
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_PCR) = 0x{X:0>8}.", .{addr, data});
@@ -350,6 +397,22 @@ pub fn setRequest(chn: Channel, req: bool) void {
     checkRunning();
 }
 
+/// Sets interrupt flag
+fn transferEnd(chnId: u4) void {
+    info("   [DMAC      ] Channel {} transfer end.", .{chnId});
+
+    dStat.ip |= @as(u10, 1) << chnId;
+
+    checkInterrupt();
+}
+
+/// Checks for DMA interrupts
+fn checkInterrupt() void {
+    info("   [DMAC      ] IM = 0b{b:0>10}, IP = 0b{b:0>10}", .{dStat.im, dStat.ip});
+
+    cop0.setDmacIrqPending((dStat.im & dStat.ip) != 0);
+}
+
 /// Checks if DMA transfer is running
 fn checkRunning() void {
     if ((dEnable & (1 << 16)) != 0 or (dctrl & 1) == 0) return;
@@ -379,6 +442,8 @@ fn checkRunning() void {
 
                 assert(false);
             }
+
+            transferEnd(chnId);
         }
     }
 }
@@ -396,15 +461,13 @@ fn doChain(chn: Channel) void {
         assert(false);
     }
 
-    var tadr = channels[chnId].tadr;
-
     var tagEnd = false;
 
     while (true) {
         var dmaTag: u128 = undefined;
         
         if (dir == Direction.To) {
-            dmaTag = bus.readDmac(tadr);
+            dmaTag = bus.readDmac(channels[chnId].tadr);
         } else {
             err("  [DMAC      ] Unhandled Destination Chain transfer.", .{});
 
@@ -417,16 +480,22 @@ fn doChain(chn: Channel) void {
 
         const tagId = @truncate(u3, dmaTag >> 28);
 
-        var qwc  = @truncate(u16, dmaTag);
-        var madr: u32 = undefined;
+        channels[chnId].qwc = @truncate(u16, dmaTag);
 
         switch (tagId) {
             @enumToInt(Tag.Refe) => {
-                madr = @truncate(u32, dmaTag >> 32);
+                channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
+                channels[chnId].tadr += @sizeOf(u128);
 
-                info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, QWC = {}", .{madr, qwc});
+                info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
 
                 tagEnd = true;
+            },
+            @enumToInt(Tag.Ref) => {
+                channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
+                channels[chnId].tadr += @sizeOf(u128);
+
+                info("   [DMAC      ] New tag: ref. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
             },
             else => {
                 const tag = @intToEnum(Tag, tagId);
@@ -443,10 +512,10 @@ fn doChain(chn: Channel) void {
             assert(false);
         }
 
-        while (qwc > 0) : (qwc -= 1) {
+        while (channels[chnId].qwc > 0) : (channels[chnId].qwc -= 1) {
             if (dir == Direction.To) {
                 switch (chn) {
-                    Channel.Sif1 => sif.writeSif1(bus.readDmac(madr)),
+                    Channel.Sif1 => sif.writeSif1(bus.readDmac(channels[chnId].madr)),
                     else => {
                         err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
 
@@ -459,7 +528,7 @@ fn doChain(chn: Channel) void {
                 assert(false);
             }
 
-            madr += @sizeOf(u128);
+            channels[chnId].madr += @sizeOf(u128);
         }
 
         if (tagEnd) {
