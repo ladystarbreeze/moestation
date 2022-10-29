@@ -17,6 +17,8 @@ const bus = @import("bus.zig");
 
 const Direction = @import("dmac.zig").Direction;
 
+const intc = @import("intc.zig");
+
 const sif = @import("sif.zig");
 
 /// DMA channels
@@ -465,13 +467,13 @@ fn transferEnd(chnId: u4) void {
     }
 
     checkInterrupt();
-
-    assert(false);
 }
 
 /// Checks for DMA interrupts
 fn checkInterrupt() void {
     // NOTE: DobieStation ignores DMACEN and DMACINTEN, so we will do the same.
+
+    const oldMif = dicr.mif;
 
     // dicr.mif = dicr.be or (dmacIntEn.cie and dicr.mie and (dicr.ip | dicr2.ip) != 0);
     dicr.mif = dicr.be or (dicr.mie and (dicr.ip | dicr2.ip) != 0);
@@ -479,10 +481,8 @@ fn checkInterrupt() void {
     //info("   [DMAC (IOP)] Master Interrupt Flag = {}, Channel Interrupt Enable = {}", .{dicr.mif, dmacIntEn.cie});
     info("   [DMAC (IOP)] Master Interrupt Flag = {}", .{dicr.mif});
 
-    if (dicr.mif and !dmacIntEn.mid) {
-        err("  [DMAC (IOP)] Unhandled DMA interrupt.", .{});
-
-        assert(false);
+    if (!oldMif and dicr.mif) {
+        intc.sendInterruptIop(intc.IntSourceIop.Dma);
     }
 }
 
