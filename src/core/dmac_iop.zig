@@ -521,6 +521,7 @@ pub fn checkRunning() void {
             info("   [DMAC (IOP)] Channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
 
             switch (chn) {
+                Channel.Sif0 => doSif0(),
                 Channel.Sif1 => doSif1(),
                 else => {
                     err("  [DMAC (IOP)] Unhandled channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
@@ -532,12 +533,68 @@ pub fn checkRunning() void {
     }
 }
 
+/// Performs SIF0 DMA
+fn doSif0() void {
+    const chnId = @enumToInt(Channel.Sif0);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Chain));
+    assert(!channels[chnId].chcr.inc);
+    assert(channels[chnId].chcr.tte);
+
+    info("   [DMAC (IOP)] Chain mode.", .{});
+
+    while (true) {
+        const tag = @as(u64, bus.readDmacIop(channels[chnId].tadr)) | (@as(u64, bus.readDmacIop(channels[chnId].tadr + 4)) << 32);
+
+        const tagEnd = (tag & (1 << 31)) != 0 or (tag & (1 << 30)) != 0;
+
+        info("   [DMAC (IOP)] Tag = 0x{X:0>16} (Tag end = {})", .{tag, tagEnd});
+
+        channels[chnId].tadr += 8;
+
+        if (channels[chnId].chcr.tte) {
+            sif.writeSif0(bus.readDmacIop(channels[chnId].tadr));
+            sif.writeSif0(bus.readDmacIop(channels[chnId].tadr + 4));
+
+            channels[chnId].tadr += 8;
+        }
+
+        channels[chnId].madr = @truncate(u24, tag);
+        channels[chnId].bcr.count = @truncate(u16, tag >> 32);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
+
+        const offset = 4;
+
+        while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
+            const data = bus.readDmacIop(channels[chnId].madr);
+
+            sif.writeSif0(data);
+
+            channels[chnId].madr +%= offset;
+        }
+
+        //if ((tag & (1 << 30)) != 0) {
+        //    setTagInterrupt(chnId);
+        //}
+
+        if (tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+            break;
+        }
+    }
+}
+
 /// Performs SIF1 DMA
 fn doSif1() void {
     // NOTE: Code logic taken from DobieStation.
     // NOTE: SIF1 DMA uses destination chain mode.
 
     const chnId = @enumToInt(Channel.Sif1);
+
+    assert(channels[chnId].chcr.tte);
 
     info("   [DMAC (IOP)] Destination Chain mode.", .{});
 
@@ -565,9 +622,9 @@ fn doSif1() void {
             channels[chnId].madr +%= offset;
         }
 
-        if ((tag & (1 << 30)) != 0) {
-            setTagInterrupt(chnId);
-        }
+        //if ((tag & (1 << 30)) != 0) {
+        //    setTagInterrupt(chnId);
+        //}
 
         if (tagEnd) {
             channels[chnId].chcr.str = false;
