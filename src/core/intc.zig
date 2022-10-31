@@ -73,7 +73,11 @@ var iCtrl: bool = undefined;
 
 /// Returns I_CTRL
 pub fn getCtrl() u32 {
-    return @as(u32, @bitCast(u1, iCtrl));
+    const data = @as(u32, @bitCast(u1, iCtrl));
+
+    iCtrl = false;
+
+    return data;
 }
 
 /// Returns INTC_MASK
@@ -115,7 +119,7 @@ pub fn getStatIop() u32 {
 pub fn setCtrl(data: u32) void {
     iCtrl = (data & 1) != 0;
 
-    checkInterrupt();
+    checkInterruptIop();
 }
 
 /// Sets INTC_MASK, checks for interrupt
@@ -156,12 +160,12 @@ pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
         u8  => assert(false),
         u16 => {
             if ((offset & 1) == 0) {
-                iStat &= ~@as(u25, data & 0xFFFF);
+                iStat &= @as(u25, data & 0xFFFF);
             } else {
-                iStat &= ~(@as(u25, (data & 0xFFFF)) << 16);
+                iStat &= (@as(u25, (data & 0xFFFF)) << 16);
             }
         },
-        u32 => iStat = ~@truncate(u25, data),
+        u32 => iStat &= @truncate(u25, data),
         else => unreachable,
     }
 
@@ -186,7 +190,7 @@ fn checkInterrupt() void {
 }
 
 fn checkInterruptIop() void {
-    info("   [INTC (IOP)] I_CTRL = {}, I_STAT = 0b{b:0>25}, I_MASK = 0b{b:0>25}", .{iCtrl, iStat, iMask});
+    // info("   [INTC (IOP)] I_CTRL = {}, I_STAT = 0b{b:0>25}, I_MASK = 0b{b:0>25}", .{iCtrl, iStat, iMask});
 
     iop.setIntPending(iCtrl and ((iStat & iMask) != 0));
 }
