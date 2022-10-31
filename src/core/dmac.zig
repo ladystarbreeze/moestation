@@ -393,8 +393,6 @@ pub fn setRequest(chn: Channel, req: bool) void {
     }
 
     channels[@enumToInt(chn)].chcr.req = req;
-
-    checkRunning();
 }
 
 /// Sets interrupt flag
