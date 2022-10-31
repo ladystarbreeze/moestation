@@ -48,5 +48,8 @@ pub fn main() void {
         }
 
         iop.step();
+
+        dmac.checkRunning();
+        dmacIop.checkRunning();
     }
 }
