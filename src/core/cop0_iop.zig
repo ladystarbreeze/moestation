@@ -163,6 +163,8 @@ pub fn leaveException() void {
 
     status.cku = status.pku;
     status.pku = status.oku;
+
+    iop.checkIntPending();
 }
 
 /// Returns a COP0 register
