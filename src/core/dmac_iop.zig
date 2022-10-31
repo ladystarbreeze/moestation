@@ -189,9 +189,9 @@ const Dicr2 = struct {
 
     /// Sets DICR2
     pub fn set(self: *Dicr2, data: u32) void {
-        self.tie =  @truncate(u12, data);
-        self.im  =  @truncate(u6, data >> 16);
-        self.ip &= ~@truncate(u6, data >> 24);
+        self.tie &= ~@truncate(u12, data);
+        self.im   =  @truncate(u6, data >> 16);
+        self.ip  &= ~@truncate(u6, data >> 24);
     }
 };
 
@@ -446,8 +446,6 @@ pub fn setRequest(chn: Channel, req: bool) void {
     }
 
     channels[@enumToInt(chn)].chcr.req = req;
-
-    checkRunning();
 }
 
 /// Sets interrupt flag if not masked
@@ -469,25 +467,31 @@ fn transferEnd(chnId: u4) void {
     checkInterrupt();
 }
 
+fn setTagInterrupt(chnId: u4) void {
+    dicr2.tie |= @as(u12, 1) << chnId;
+
+    checkInterrupt();
+}
+
 /// Checks for DMA interrupts
 fn checkInterrupt() void {
     // NOTE: DobieStation ignores DMACEN and DMACINTEN, so we will do the same.
 
-    const oldMif = dicr.mif;
+    //const oldMif = dicr.mif;
 
-    // dicr.mif = dicr.be or (dmacIntEn.cie and dicr.mie and (dicr.ip | dicr2.ip) != 0);
-    dicr.mif = dicr.be or (dicr.mie and (dicr.ip | dicr2.ip) != 0);
+    //dicr.mif = dicr.be or (dmacIntEn.cie and dicr.mie and (dicr.ip | dicr2.ip) != 0);
+    dicr.mif = dicr.be or (dicr.mie and (dicr.ip | dicr2.ip) != 0) or dicr2.tie != 0;
 
     //info("   [DMAC (IOP)] Master Interrupt Flag = {}, Channel Interrupt Enable = {}", .{dicr.mif, dmacIntEn.cie});
     info("   [DMAC (IOP)] Master Interrupt Flag = {}", .{dicr.mif});
 
-    if (!oldMif and dicr.mif) {
+    if (dicr.mif and !dmacIntEn.mid) {
         intc.sendInterruptIop(intc.IntSourceIop.Dma);
     }
 }
 
 /// Checks if DMA transfer is running
-fn checkRunning() void {
+pub fn checkRunning() void {
     if (!dmacEn) return;
 
     var chnId: u4 = 0;
@@ -513,10 +517,6 @@ fn checkRunning() void {
                     assert(false);
                 }
             }
-
-            channels[chnId].chcr.str = false;
-
-            transferEnd(chnId);
         }
     }
 }
@@ -529,8 +529,6 @@ fn doSif1() void {
     const chnId = @enumToInt(Channel.Sif1);
 
     info("   [DMAC (IOP)] Destination Chain mode.", .{});
-
-    //assert(!channels[chnId].chcr.tte);
 
     while (true) {
         const tag = @as(u128, sif.readSif1()) | (@as(u128, sif.readSif1()) << 32) | (@as(u128, sif.readSif1()) << 64) | (@as(u128, sif.readSif1()) << 96);
@@ -546,6 +544,17 @@ fn doSif1() void {
 
         const offset = if (channels[chnId].chcr.inc) 4 else @bitCast(u24, @as(i24, -4));
 
+        if (channels[chnId].chcr.tte) {
+            var i: u7 = 0;
+            while (i < 2) : (i += 1) {
+                const data = @truncate(u32, tag >> (32 * i));
+
+                bus.writeIopDmac(channels[chnId].madr, data);
+
+                channels[chnId].madr +%= offset;
+            }
+        }
+
         while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
             const data = sif.readSif1();
 
@@ -554,7 +563,14 @@ fn doSif1() void {
             channels[chnId].madr +%= offset;
         }
 
+        if ((tag & (1 << 30)) != 0) {
+            setTagInterrupt(chnId);
+        }
+
         if (tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
             break;
         }
     }
