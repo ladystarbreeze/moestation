@@ -98,7 +98,7 @@ pub fn readIop(addr: u32) u32 {
             data = smcom;
         },
         @enumToInt(SifRegIop.SifMsflg) => {
-            info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_MSFLG).", .{addr});
+            //info("   [SIF (IOP) ] Read @ 0x{X:0>8} (SIF_MSFLG).", .{addr});
 
             data = msflg;
         },
@@ -131,13 +131,13 @@ pub fn readIop(addr: u32) u32 {
 pub fn readSif1() u32 {
     const data = sif1Fifo.readItem();
 
-    if (sif1Fifo.writableLength() == 32) {
+    if (sif1Fifo.readableLength() == 0) {
         dmacIop.setRequest(dmacIop.Channel.Sif1, false);
     }
 
-    //if (sif1Fifo.writableLength() >= 16) {
-    //    dmac.setRequest(dmac.Channel.Sif1, true);
-    //}
+    if (sif1Fifo.readableLength() < 16) {
+        dmac.setRequest(dmac.Channel.Sif1, true);
+    }
 
     return data.?;
 }
@@ -180,17 +180,17 @@ pub fn write(addr: u32, data: u32) void {
 pub fn writeIop(addr: u32, data: u32) void {
     switch (addr) {
         @enumToInt(SifRegIop.SifSmcom) => {
-            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMCOM) = 0x{X:0>8}.", .{addr, data});
+            //info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMCOM) = 0x{X:0>8}.", .{addr, data});
 
             smcom = data;
         },
         @enumToInt(SifRegIop.SifSmflg) => {
-            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
+            //info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
 
             smflg |= data;
         },
         @enumToInt(SifRegIop.SifCtrl) => {
-            info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
+            //info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_CTRL) = 0x{X:0>8}.", .{addr, data});
         },
         else => {
             err("  [SIF (IOP) ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
@@ -213,9 +213,9 @@ pub fn writeSif1(data: u128) void {
         };
     }
 
-    //dmacIop.setRequest(dmacIop.Channel.Sif1, true);
+    dmacIop.setRequest(dmacIop.Channel.Sif1, true);
 
-    if (sif1Fifo.writableLength() < 16) {
+    if (sif1Fifo.readableLength() >= 16) {
         dmac.setRequest(dmac.Channel.Sif1, false);
     }
 }
