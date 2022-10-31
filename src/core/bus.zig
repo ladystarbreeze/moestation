@@ -334,7 +334,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
                     @panic("Unhandled read @ I_CTRL");
                 }
 
-                info("   [Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (I_CTRL).", .{@typeName(T), addr});
+                //info("   [Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (I_CTRL).", .{@typeName(T), addr});
 
                 data = intc.getCtrl();
             },
@@ -574,7 +574,7 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
                 intc.setMaskIop(T, data, @truncate(u2, addr));
             },
             0x1F80_1078 => {
-                info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_CTRL) = 0x{X}.", .{@typeName(T), addr, data});
+                //info("   [Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (I_CTRL) = 0x{X}.", .{@typeName(T), addr, data});
 
                 intc.setCtrl(data);
             },
