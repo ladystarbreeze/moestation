@@ -184,6 +184,11 @@ pub fn writeIop(addr: u32, data: u32) void {
 
             smcom = data;
         },
+        @enumToInt(SifRegIop.SifMsflg) => {
+            //info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_MSFLG) = 0x{X:0>8}.", .{addr, data});
+
+            smflg &= ~data;
+        },
         @enumToInt(SifRegIop.SifSmflg) => {
             //info("   [SIF (IOP) ] Write @ 0x{X:0>8} (SIF_SMFLG) = 0x{X:0>8}.", .{addr, data});
 
