@@ -18,16 +18,17 @@ const Allocator = std.mem.Allocator;
 const openFile = std.fs.cwd().openFile;
 const OpenMode = std.fs.File.OpenMode;
 
-const cpu     = @import("cpu.zig");
-const cdvd    = @import("cdvd.zig");
-const dmac    = @import("dmac.zig");
-const dmacIop = @import("dmac_iop.zig");
-const gif     = @import("gif.zig");
-const gs      = @import("gs.zig");
-const intc    = @import("intc.zig");
-const sif     = @import("sif.zig");
-const timer   = @import("timer.zig");
-const vu0     = @import("vu0.zig");
+const cpu      = @import("cpu.zig");
+const cdvd     = @import("cdvd.zig");
+const dmac     = @import("dmac.zig");
+const dmacIop  = @import("dmac_iop.zig");
+const gif      = @import("gif.zig");
+const gs       = @import("gs.zig");
+const intc     = @import("intc.zig");
+const sif      = @import("sif.zig");
+const timer    = @import("timer.zig");
+const timerIop = @import("timer_iop.zig");
+const vu0      = @import("vu0.zig");
 
 /// Memory base addresses
 const MemBase = enum(u32) {
@@ -297,9 +298,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
         data = dmacIop.read(addr);
     } else if (addr >= @enumToInt(MemBaseIop.Timer1) and addr < (@enumToInt(MemBaseIop.Timer1) + @enumToInt(MemSizeIop.Timer))) {
-        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (Timer).", .{@typeName(T), addr});
-
-        data = 0;
+        data = timerIop.read(T, addr);
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         if (T != u32) {
             @panic("Unhandled read @ DMAC I/O");
@@ -554,9 +553,9 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBaseIop.Dma0) and addr < (@enumToInt(MemBaseIop.Dma0) + @enumToInt(MemSizeIop.Dma))) {
         dmacIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Timer0) and addr < (@enumToInt(MemBaseIop.Timer0) + @enumToInt(MemSizeIop.Timer))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Timer) = 0x{X}.", .{@typeName(T), addr, data});
+        timerIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Timer1) and addr < (@enumToInt(MemBaseIop.Timer1) + @enumToInt(MemSizeIop.Timer))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Timer) = 0x{X}.", .{@typeName(T), addr, data});
+        timerIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         dmacIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
