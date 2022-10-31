@@ -264,9 +264,20 @@ pub fn read(addr: u32) u32 {
     var data: u32 = undefined;
 
     if (addr < @enumToInt(ControlReg.Dpcr) or (addr > @enumToInt(ControlReg.Dicr) and addr < @enumToInt(ControlReg.Dpcr2))) {
-        err("  [DMAC (IOP)] Unhandled channel read @ 0x{X:0>8}.", .{addr});
+        const chn = @enumToInt(getChannel(@truncate(u8, addr >> 4)));
 
-        assert(false);
+        switch (addr & ~@as(u32, 0xFF0)) {
+            @enumToInt(ChannelReg.DChcr) => {
+                info("   [DMAC (IOP)] Read @ 0x{X:0>8} (D{}_CHCR).", .{addr, chn});
+
+                data = channels[chn].chcr.get();
+            },
+            else => {
+                err("  [DMAC (IOP)] Unhandled read @ 0x{X:0>8}.", .{addr});
+
+                assert(false);
+            }
+        }
     } else {
         switch (addr) {
             @enumToInt(ControlReg.Dpcr) => {
@@ -542,21 +553,12 @@ fn doSif1() void {
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
 
-        const offset = if (channels[chnId].chcr.inc) 4 else @bitCast(u24, @as(i24, -4));
-
-        if (channels[chnId].chcr.tte) {
-            var i: u7 = 0;
-            while (i < 2) : (i += 1) {
-                const data = @truncate(u32, tag >> (32 * i));
-
-                bus.writeIopDmac(channels[chnId].madr, data);
-
-                channels[chnId].madr +%= offset;
-            }
-        }
+        const offset = 4;
 
         while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
             const data = sif.readSif1();
+
+            info("   [DMAC (IOP)] [0x{X:0>6}] = 0x{X:0>8}", .{channels[chnId].madr, data});
 
             bus.writeIopDmac(channels[chnId].madr, data);
 
