@@ -414,7 +414,7 @@ fn checkInterrupt() void {
 }
 
 /// Checks if DMA transfer is running
-fn checkRunning() void {
+pub fn checkRunning() void {
     if ((dEnable & (1 << 16)) != 0 or (dctrl & 1) == 0) return;
 
     var chnId: u4 = 0;
@@ -476,6 +476,8 @@ fn doChain(chn: Channel) void {
 
         info("   [DMAC      ] Tag = 0x{X:0>16}", .{dmaTag});
 
+        assert(!channels[chnId].chcr.tte);
+
         channels[chnId].chcr.tag = @truncate(u16, dmaTag >> 16);
 
         const tagId = @truncate(u3, dmaTag >> 28);
@@ -536,7 +538,7 @@ fn doChain(chn: Channel) void {
 
             switch (chn) {
                 Channel.Sif1 => {
-                    dmacIop.setRequest(dmacIop.Channel.Sif1, true);
+                    //dmacIop.setRequest(dmacIop.Channel.Sif1, true);
                 },
                 else => {
                     err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
