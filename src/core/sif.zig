@@ -205,6 +205,25 @@ pub fn writeIop(addr: u32, data: u32) void {
     }
 }
 
+/// Writes data to SIF0 FIFO
+pub fn writeSif0(data: u32) void {
+    info("   [SIF (DMAC)] Write @ SIF0 FIFO = 0x{X:0>8}.", .{data});
+
+    sif1Fifo.writeItem(data) catch {
+        err("  [SIF (DMAC)] Unable to write to SIF0 FIFO.", .{});
+        
+        assert(false);
+    };
+
+    if (sif1Fifo.readableLength() == 32) {
+        dmacIop.setRequest(dmacIop.Channel.Sif0, false);
+    }
+
+    if (sif1Fifo.readableLength() >= 4) {
+        dmac.setRequest(dmac.Channel.Sif0, true);
+    }
+}
+
 /// Writes data to SIF1 FIFO
 pub fn writeSif1(data: u128) void {
     info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
