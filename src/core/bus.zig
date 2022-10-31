@@ -361,6 +361,23 @@ pub fn readIop(comptime T: type, addr: u32) T {
     return data;
 }
 
+
+
+/// Reads data from the system bus (from IOP DMA)
+pub fn readDmacIop(addr: u32) u32 {
+    var data: u32 = undefined;
+
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(u32));
+    } else {
+        err("  [Bus (DMAC)] Unhandled read @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    return data;
+}
+
 /// Writes data to the system bus
 pub fn write(comptime T: type, addr: u32, data: T) void {
     assert(T == u8 or T == u16 or T == u32 or T == u64 or T == u128);
