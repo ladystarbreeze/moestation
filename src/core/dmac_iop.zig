@@ -564,6 +564,10 @@ fn doSif0() void {
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
 
+        if ((channels[chnId].bcr.count & 3) != 0) {
+            channels[chnId].bcr.count = (channels[chnId].bcr.count | 3) + 1;
+        }
+
         const offset = 4;
 
         while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
