@@ -85,6 +85,7 @@ const Opcode = enum(u6) {
     Sdl     = 0x2C,
     Sdr     = 0x2D,
     Cache   = 0x2F,
+    Lwc1    = 0x31,
     Ld      = 0x37,
     Swc1    = 0x39,
     Sd      = 0x3F,
@@ -123,6 +124,7 @@ const Special = enum(u6) {
     Slt     = 0x2A,
     Sltu    = 0x2B,
     Daddu   = 0x2D,
+    Dsubu   = 0x2F,
     Dsll    = 0x38,
     Dsrl    = 0x3A,
     Dsll32  = 0x3C,
@@ -155,6 +157,7 @@ const Cop1Opcode = enum(u5) {
 /// COP1 Single instructions
 const Cop1Single = enum(u6) {
     Adda = 0x18,
+    Madd = 0x1C,
 };
 
 /// COP2 instructions
@@ -461,9 +464,11 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Or     ) => iOr(instr),
                 @enumToInt(Special.Nor    ) => iNor(instr),
                 @enumToInt(Special.Mfsa   ) => iMfsa(instr),
+                @enumToInt(Special.Mtsa   ) => iMtsa(instr),
                 @enumToInt(Special.Slt    ) => iSlt(instr),
                 @enumToInt(Special.Sltu   ) => iSltu(instr),
                 @enumToInt(Special.Daddu  ) => iDaddu(instr),
+                @enumToInt(Special.Dsubu  ) => iDsubu(instr),
                 @enumToInt(Special.Dsll   ) => iDsll(instr),
                 @enumToInt(Special.Dsrl   ) => iDsrl(instr),
                 @enumToInt(Special.Dsll32 ) => iDsll32(instr),
@@ -536,6 +541,7 @@ fn decodeInstr(instr: u32) void {
             const rs = getRs(instr);
 
             switch (rs) {
+                @enumToInt(CopOpcode.Cf) => iCfc(instr, 1),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 1),
                 @enumToInt(CopOpcode.Ct) => iCtc(instr, 1),
                 @enumToInt(Cop1Opcode.S) => {
@@ -543,6 +549,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (funct) {
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
+                        @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
                         else => {
                             err("  [EE Core   ] Unhandled FPU Single instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -679,6 +686,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Sdl  ) => iSdl(instr),
         @enumToInt(Opcode.Sdr  ) => iSdr(instr),
         @enumToInt(Opcode.Cache) => iCache(instr),
+        @enumToInt(Opcode.Lwc1 ) => iLwc(instr, 1),
         @enumToInt(Opcode.Ld   ) => iLd(instr),
         @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
         @enumToInt(Opcode.Sd   ) => iSd(instr),
@@ -1019,6 +1027,7 @@ fn iCfc(instr: u32, comptime n: u2) void {
     var data: u32 = undefined;
 
     switch (n) {
+        1 => data = cop1.getControl(rd),
         2 => data = vu0.getControl(u32, rd),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
@@ -1281,6 +1290,25 @@ fn iDsrl32(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Doubleword SUBtract Unsigned
+fn iDsubu(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u64, rs) -% regFile.get(u64, rt);
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -1600,6 +1628,45 @@ fn iLw(instr: u32) void {
     regFile.set(u64, rt, data);
 }
 
+/// Load Word Coprocessor
+fn iLwc(instr: u32, comptime n: u2) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+
+    if (!cop0.isCopUsable(n)) {
+        err("  [EE Core   ] Coprocessor {} is unusable!", .{n});
+
+        assert(false);
+    }
+
+    if ((addr & 3) != 0) {
+        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+
+        assert(false);
+    }
+
+    const data = read(u32, addr);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] LWC{} ${}, 0x{X}(${s}); ${}, [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, rt, addr, data});
+    }
+
+    switch (n) {
+        1 => cop1.setRaw(rt, data),
+        else => {
+            err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
+
+            assert(false);
+        }
+    }
+}
+
 /// Load Word Unsigned
 fn iLwu(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -1824,6 +1891,19 @@ fn iMtlo(instr: u32, isHi: bool) void {
         const is1 = if (isHi) "1" else "";
 
         info("   [EE Core   ] MTLO{s} ${s}; LO{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
+    }
+}
+
+/// Move To Shift Amount
+fn iMtsa(instr: u32) void {
+    const rs = getRs(instr);
+
+    regFile.sa = @truncate(u8, regFile.get(u32, rs));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] MTSA ${s}; SA = 0x{X:0>2}", .{tagRs, regFile.sa});
     }
 }
 
