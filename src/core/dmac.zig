@@ -445,8 +445,6 @@ pub fn checkRunning() void {
 
                 assert(false);
             }
-
-            transferEnd(chnId);
         }
     }
 }
@@ -516,6 +514,8 @@ fn doChain(chn: Channel) void {
                 channels[chnId].tadr += @sizeOf(u128);
 
                 info("   [DMAC      ] New tag: ref. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
+
+                tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
             },
             else => {
                 const tag = @intToEnum(Tag, tagId);
@@ -567,6 +567,8 @@ fn doChain(chn: Channel) void {
                     assert(false);
                 }
             }
+
+            transferEnd(chnId);
 
             break;
         }
