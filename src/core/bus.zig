@@ -258,8 +258,6 @@ pub fn read(comptime T: type, addr: u32) T {
 
 /// Reads data from the system bus (for DMAC)
 pub fn readDmac(addr: u32) u128 {
-    assert((addr & 3) == 0);
-
     var data: u128 = undefined;
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
@@ -548,6 +546,19 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 assert(false);
             }
         }
+    }
+}
+
+/// Reads data from the system bus (for DMAC)
+pub fn writeDmac(addr: u32, data: u128) void {
+    info("   [Bus (DMAC)] [0x{X:0>8}] = 0x{X:0>32}", .{addr, data});
+
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
+        @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(u128));
+    } else {
+        err("  [Bus (DMAC)] Unhandled write @ 0x{X:0>8} = 0x{X:0>32}.", .{addr, data});
+
+        assert(false);
     }
 }
 
