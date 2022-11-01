@@ -105,7 +105,9 @@ const Special = enum(u6) {
     Syscall = 0x0C,
     Sync    = 0x0F,
     Mfhi    = 0x10,
+    Mthi    = 0x11,
     Mflo    = 0x12,
+    Mtlo    = 0x13,
     Dsllv   = 0x14,
     Dsrav   = 0x17,
     Mult    = 0x18,
@@ -116,6 +118,8 @@ const Special = enum(u6) {
     And     = 0x24,
     Or      = 0x25,
     Nor     = 0x27,
+    Mfsa    = 0x28,
+    Mtsa    = 0x29,
     Slt     = 0x2A,
     Sltu    = 0x2B,
     Daddu   = 0x2D,
@@ -169,7 +173,11 @@ const ControlOpcode = enum(u6) {
 
 /// MMI instructions
 const MmiOpcode = enum(u6) {
+    Plzcw = 0x04,
+    Mfhi1 = 0x10,
+    Mthi1 = 0x11,
     Mflo1 = 0x12,
+    Mtlo1 = 0x13,
     Mult1 = 0x18,
     Divu1 = 0x1B,
     Mmi1  = 0x28,
@@ -261,6 +269,8 @@ const RegFile = struct {
 
     lo: Gpr = undefined,
     hi: Gpr = undefined,
+
+    sa: u8 = 0,
 
     /// Returns GPR
     pub fn get(self: RegFile, comptime T: type, idx: u5) T {
@@ -437,7 +447,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Syscall) => iSyscall(),
                 @enumToInt(Special.Sync   ) => iSync(instr),
                 @enumToInt(Special.Mfhi   ) => iMfhi(instr, false),
+                @enumToInt(Special.Mthi   ) => iMthi(instr, false),
                 @enumToInt(Special.Mflo   ) => iMflo(instr, false),
+                @enumToInt(Special.Mtlo   ) => iMtlo(instr, false),
                 @enumToInt(Special.Dsllv  ) => iDsllv(instr),
                 @enumToInt(Special.Dsrav  ) => iDsrav(instr),
                 @enumToInt(Special.Mult   ) => iMult(instr, 0),
@@ -448,6 +460,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.And    ) => iAnd(instr),
                 @enumToInt(Special.Or     ) => iOr(instr),
                 @enumToInt(Special.Nor    ) => iNor(instr),
+                @enumToInt(Special.Mfsa   ) => iMfsa(instr),
                 @enumToInt(Special.Slt    ) => iSlt(instr),
                 @enumToInt(Special.Sltu   ) => iSltu(instr),
                 @enumToInt(Special.Daddu  ) => iDaddu(instr),
@@ -614,7 +627,11 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
+                @enumToInt(MmiOpcode.Plzcw) => iPlzcw(instr),
+                @enumToInt(MmiOpcode.Mfhi1) => iMfhi(instr, true),
+                @enumToInt(MmiOpcode.Mthi1) => iMthi(instr, true),
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
+                @enumToInt(MmiOpcode.Mtlo1) => iMtlo(instr, true),
                 @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
                 @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
                 @enumToInt(MmiOpcode.Mmi1 ) => {
@@ -1687,6 +1704,19 @@ fn iMflo(instr: u32, isHi: bool) void {
     }
 }
 
+/// Move From Shift Amount
+fn iMfsa(instr: u32) void {
+    const rd = getRd(instr);
+
+    regFile.set(u64, rd, @as(u64, regFile.sa));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] MFSA ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, regFile.sa});
+    }
+}
+
 /// MOVe on Not equal
 fn iMovn(instr: u32) void {
     const rd = getRd(instr);
@@ -1752,6 +1782,48 @@ fn iMtc(instr: u32, comptime n: u2) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
         info("   [EE Core   ] MTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, regFile.get(u32, rt)});
+    }
+}
+
+/// Move To HI
+fn iMthi(instr: u32, isHi: bool) void {
+    const rs = getRd(instr);
+
+    const data = regFile.get(u64, rs);
+    
+    if (isHi) {
+        regFile.hi.setHi(u64, data);
+    } else {
+        regFile.hi.set(u64, data);
+    }
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        const is1 = if (isHi) "1" else "";
+
+        info("   [EE Core   ] MTHI{s} ${s}; HI{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
+    }
+}
+
+/// Move To LO
+fn iMtlo(instr: u32, isHi: bool) void {
+    const rs = getRd(instr);
+
+    const data = regFile.get(u64, rs);
+    
+    if (isHi) {
+        regFile.lo.setHi(u64, data);
+    } else {
+        regFile.lo.set(u64, data);
+    }
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        const is1 = if (isHi) "1" else "";
+
+        info("   [EE Core   ] MTLO{s} ${s}; LO{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
     }
 }
 
@@ -1867,6 +1939,38 @@ fn iPadduw(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PADDUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel Leading Zero or one Count Word
+fn iPlzcw(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+
+    const lo = @truncate(u32, regFile.get(u64, rs));
+    const hi = @truncate(u32, regFile.get(u64, rs) >> 32);
+
+    var res: u64 = undefined;
+
+    if ((lo & (1 << 31)) != 0) {
+        res = @as(u64, @clz(u32, ~lo) - 1);
+    } else {
+        res = @as(u64, @clz(u32, lo) - 1);
+    }
+
+    if ((hi & (1 << 31)) != 0) {
+        res |= @as(u64, @clz(u32, ~hi) - 1) << 32;
+    } else {
+        res |= @as(u64, @clz(u32, hi) - 1) << 32;
+    }
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] PLZCW ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRd, res});
     }
 }
 
