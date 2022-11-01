@@ -293,14 +293,19 @@ pub fn write(addr: u32, data: u32) void {
 
                 channels[chn].chcr.set(data);
 
+                // Force correct transfer direction
+                switch (chn) {
+                    @enumToInt(Channel.Sif0) => channels[chn].chcr.dir = @enumToInt(Direction.To),
+                    @enumToInt(Channel.Sif1) => channels[chn].chcr.dir = @enumToInt(Direction.From),
+                    else => {},
+                }
+
                 checkRunning();
             },
             @enumToInt(ChannelReg.DMadr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D{}_MADR) = 0x{X:0>8}.", .{addr, chn, data});
 
                 channels[chn].madr = data;
-
-                if (chn == 6 and data != 0) assert(false);
             },
             @enumToInt(ChannelReg.DQwc) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D{}_QWC) = 0x{X:0>8}.", .{addr, chn, data});
@@ -420,7 +425,7 @@ pub fn checkRunning() void {
         if (channels[chnId].chcr.str and channels[chnId].chcr.req) {
             const chn = @intToEnum(Channel, chnId);
 
-            if (chn == Channel.Sif1) {
+            if (chn == Channel.Sif0 or chn == Channel.Sif1) {
                 info("   [DMAC      ] Channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
 
                 assert(channels[chnId].chcr.mod < 3);
@@ -451,11 +456,13 @@ fn doChain(chn: Channel) void {
     const chnId = @enumToInt(chn);
 
     const dir = @intToEnum(Direction, channels[chnId].chcr.dir);
-    const isSrc = if (dir == Direction.To) "Source" else "Destination";
+    const isSrc = if (dir == Direction.From) "Source" else "Destination";
 
     info("   [DMAC      ] {s} Chain mode. Tag address = 0x{X:0>8}", .{isSrc, channels[chnId].tadr});
 
     if (channels[chnId].qwc != 0) {
+        err("   [DMAC      ] QWC is not 0!", .{});
+
         assert(false);
     }
 
@@ -463,13 +470,18 @@ fn doChain(chn: Channel) void {
 
     while (true) {
         var dmaTag: u128 = undefined;
-        
-        if (dir == Direction.To) {
-            dmaTag = bus.readDmac(channels[chnId].tadr);
-        } else {
-            err("  [DMAC      ] Unhandled Destination Chain transfer.", .{});
 
-            assert(false);
+        if (dir == Direction.To) {
+            switch (chn) {
+                Channel.Sif0 => dmaTag = @as(u128, sif.readSif0(u64)),
+                else => {
+                    err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
+
+                    assert(false);
+                }
+            }
+        } else {
+            dmaTag = bus.readDmac(channels[chnId].tadr);
         }
 
         info("   [DMAC      ] Tag = 0x{X:0>16}", .{dmaTag});
@@ -490,6 +502,14 @@ fn doChain(chn: Channel) void {
                 info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
 
                 tagEnd = true;
+            },
+            @enumToInt(Tag.Cnt) => {
+                channels[chnId].madr = @truncate(u32, dmaTag >> 32);
+                channels[chnId].tadr = channels[chnId].madr + 8 * channels[chnId].qwc;
+
+                info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
+
+                tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
             },
             @enumToInt(Tag.Ref) => {
                 channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
@@ -515,7 +535,7 @@ fn doChain(chn: Channel) void {
         while (channels[chnId].qwc > 0) : (channels[chnId].qwc -= 1) {
             if (dir == Direction.To) {
                 switch (chn) {
-                    Channel.Sif1 => sif.writeSif1(bus.readDmac(channels[chnId].madr)),
+                    Channel.Sif0 => bus.writeDmac(channels[chnId].madr, sif.readSif0(u128)),
                     else => {
                         err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
 
@@ -523,9 +543,14 @@ fn doChain(chn: Channel) void {
                     }
                 }
             } else {
-                err("  [DMAC      ] Unhandled Destination Chain transfer.", .{});
+                switch (chn) {
+                    Channel.Sif1 => sif.writeSif1(bus.readDmac(channels[chnId].madr)),
+                    else => {
+                        err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
 
-                assert(false);
+                        assert(false);
+                    }
+                }
             }
 
             channels[chnId].madr += @sizeOf(u128);
@@ -535,9 +560,7 @@ fn doChain(chn: Channel) void {
             channels[chnId].chcr.str = false;
 
             switch (chn) {
-                Channel.Sif1 => {
-                    //dmacIop.setRequest(dmacIop.Channel.Sif1, true);
-                },
+                Channel.Sif0, Channel.Sif1 => {},
                 else => {
                     err("  [DMAC      ] Unhandled {s} transfer.", .{@tagName(chn)});
 
