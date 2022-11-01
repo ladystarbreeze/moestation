@@ -23,6 +23,11 @@ const RegFile = struct {
         return @bitCast(f32, self.regs[idx]);
     }
 
+    /// Return Accumulator
+    pub fn getAcc(self: RegFile) f32 {
+        return @bitCast(f32, self.acc);
+    }
+
     /// Set FP register
     pub fn set(self: *RegFile, idx: u5, data: f32) void {
         self.regs[idx] = @bitCast(u32, data);
@@ -41,6 +46,19 @@ var regFile: RegFile = RegFile{};
 /// Returns raw FP register
 pub fn getRaw(idx: u5) u32 {
     return regFile.regs[idx];
+}
+
+/// Returns FPU control register
+pub fn getControl(idx: u5) u32 {
+    var data: u32 = 0;
+
+    switch (idx) {
+        else => {
+            warn("[COP1      ] Control register read @ ${}.", .{idx});
+        }
+    }
+
+    return data;
 }
 
 /// Sets FPU control register
@@ -74,7 +92,7 @@ fn getRt(instr: u32) u5 {
 
 /// ADD Accumulator
 pub fn iAdda(instr: u32) void {
-    const fs = getRt(instr);
+    const fs = getRs(instr);
     const ft = getRt(instr);
 
     const res = regFile.get(fs) + regFile.get(ft);
@@ -83,5 +101,20 @@ pub fn iAdda(instr: u32) void {
 
     if (doDisasm) {
         info("   [COP1      ] ADDA.S ${}, ${}; ACC = {}", .{fs, ft, res});
+    }
+}
+
+/// Multiply ADD
+pub fn iMadd(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) * regFile.get(ft) + regFile.getAcc();
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        info("   [COP1      ] MADD.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
     }
 }
