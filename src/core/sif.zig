@@ -127,6 +127,27 @@ pub fn readIop(addr: u32) u32 {
     return data;
 }
 
+/// Reads data from SIF0 FIFO
+pub fn readSif0(comptime T: type) T {
+    assert(T == u64 or T == u128);
+
+    var data: T = undefined;
+    
+    if (T == u64) {
+        data = @as(u64, sif0Fifo.readItem().?) | (@as(u64, sif0Fifo.readItem().?) << 32);
+    } else {
+        data = @as(u128, sif0Fifo.readItem().?) | (@as(u128, sif0Fifo.readItem().?) << 32) | (@as(u128, sif0Fifo.readItem().?) << 64) | (@as(u128, sif0Fifo.readItem().?) << 96);
+    }
+
+    dmacIop.setRequest(dmacIop.Channel.Sif0, true);
+
+    if (sif1Fifo.readableLength() < 4) {
+        dmac.setRequest(dmac.Channel.Sif0, false);
+    }
+
+    return data;
+}
+
 /// Reads data from SIF1 FIFO
 pub fn readSif1() u32 {
     const data = sif1Fifo.readItem();
@@ -209,17 +230,17 @@ pub fn writeIop(addr: u32, data: u32) void {
 pub fn writeSif0(data: u32) void {
     info("   [SIF (DMAC)] Write @ SIF0 FIFO = 0x{X:0>8}.", .{data});
 
-    sif1Fifo.writeItem(data) catch {
+    sif0Fifo.writeItem(data) catch {
         err("  [SIF (DMAC)] Unable to write to SIF0 FIFO.", .{});
         
         assert(false);
     };
 
-    if (sif1Fifo.readableLength() == 32) {
+    if (sif0Fifo.readableLength() == 32) {
         dmacIop.setRequest(dmacIop.Channel.Sif0, false);
     }
 
-    if (sif1Fifo.readableLength() >= 4) {
+    if (sif0Fifo.readableLength() >= 4) {
         dmac.setRequest(dmac.Channel.Sif0, true);
     }
 }
