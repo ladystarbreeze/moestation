@@ -46,12 +46,13 @@ pub fn main() void {
 
         while (i < 8) : (i += 1) {
             cpu.step();
+
+            dmac.checkRunning();
         }
 
         iop.step();
         timerIop.step();
 
-        dmac.checkRunning();
         dmacIop.checkRunning();
     }
 }
