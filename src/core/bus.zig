@@ -129,7 +129,7 @@ pub fn deinit(allocator: Allocator) void {
 // Taken from DobieStation. Replace "rom0:OSDSYS" with "cdrom0:[game executable]"
 pub fn fastBoot() void {
     const osdsysPath = "rom0:OSDSYS";
-    const dvdPath    = "cdrom0:SLUS_211.13"; // Atelier Iris
+    const dvdPath    = "cdrom0:\\\\SLUS_211.13;1"; // Atelier Iris
 
     var i = @enumToInt(MemBase.EeLoad);
     while (i < (@enumToInt(MemBase.EeLoad) + @enumToInt(MemSize.EeLoad))) : (i += 1) {
