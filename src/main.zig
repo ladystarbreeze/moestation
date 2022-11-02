@@ -21,6 +21,7 @@ const timerIop = @import("core/timer_iop.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
+const cdvdPath = "moeFiles/atelier_iris.iso";
 
 /// main()
 pub fn main() void {
@@ -37,8 +38,14 @@ pub fn main() void {
 
     defer bus.deinit(allocator);
 
+    if (cdvd.init(cdvdPath)) |_| {} else |e| switch (e) {
+        error.FileNotFound => return err("  [moestation] Unable to find ISO.", .{}),
+        else => return err("  [moestation] Unhandled error {}.", .{e})
+    }
+
+    defer cdvd.deinit();
+
     cpu.init();
-    cdvd.init();
     dmac.init();
     dmacIop.init();
     iop.init();
