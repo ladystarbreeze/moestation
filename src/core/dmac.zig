@@ -438,19 +438,19 @@ fn decodeTag(chnId: u4, dmaTag: u128) void {
     const tag = @intToEnum(Tag, @truncate(u3, dmaTag >> 28));
 
     switch (tag) {
-        Tag.Refe => {
-            channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
-            channels[chnId].tadr += @sizeOf(u128);
-
-            info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
-
-            channels[chnId].tagEnd = true;
-        },
         Tag.Cnt => {
             channels[chnId].madr = @truncate(u32, dmaTag >> 32);
             channels[chnId].tadr = channels[chnId].madr + 8 * channels[chnId].qwc;
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        Tag.Next => {
+            channels[chnId].madr = channels[chnId].tadr + 8;
+            channels[chnId].tadr = @truncate(u32, dmaTag >> 32);
+
+            info("   [DMAC      ] New tag: next. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
@@ -461,6 +461,14 @@ fn decodeTag(chnId: u4, dmaTag: u128) void {
             info("   [DMAC      ] New tag: ref. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        Tag.Refe => {
+            channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
+            channels[chnId].tadr += @sizeOf(u128);
+
+            info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = true;
         },
         else => {
             err("  [DMAC      ] Unhandled tag {s}.", .{@tagName(tag)});
