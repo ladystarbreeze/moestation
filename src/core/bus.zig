@@ -155,6 +155,10 @@ pub fn read(comptime T: type, addr: u32) T {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(T));
+    } else if (addr >= @enumToInt(MemBase.Timer) and addr < (@enumToInt(MemBase.Timer) + @enumToInt(MemSize.Timer))) {
+        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Timer).", .{@typeName(T), addr});
+
+        data = 0;
     } else if (addr >= @enumToInt(MemBase.Ipu) and addr < (@enumToInt(MemBase.Ipu) + @enumToInt(MemSize.Ipu))) {
         if (T != u32) {
             @panic("Unhandled read @ IPU I/O");
