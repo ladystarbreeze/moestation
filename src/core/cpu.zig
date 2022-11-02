@@ -76,15 +76,19 @@ const Opcode = enum(u6) {
     Sq      = 0x1F,
     Lb      = 0x20,
     Lh      = 0x21,
+    Lwl     = 0x22,
     Lw      = 0x23,
     Lbu     = 0x24,
     Lhu     = 0x25,
+    Lwr     = 0x26,
     Lwu     = 0x27,
     Sb      = 0x28,
     Sh      = 0x29,
+    Swl     = 0x2A,
     Sw      = 0x2B,
     Sdl     = 0x2C,
     Sdr     = 0x2D,
+    Swr     = 0x2E,
     Cache   = 0x2F,
     Lwc1    = 0x31,
     Ld      = 0x37,
@@ -206,6 +210,7 @@ const Mmi2Opcode = enum(u5) {
     Pmfhi  = 0x08,
     Pmflo  = 0x09,
     Pcpyld = 0x0E,
+    Pand   = 0x12,
 };
 
 /// MMI3 instructions
@@ -676,6 +681,7 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Mmi2Opcode.Pmfhi ) => iPmfhi(instr),
                         @enumToInt(Mmi2Opcode.Pmflo ) => iPmflo(instr),
                         @enumToInt(Mmi2Opcode.Pcpyld) => iPcpyld(instr),
+                        @enumToInt(Mmi2Opcode.Pand  ) => iPand(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI2 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -728,15 +734,19 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Sq   ) => iSq(instr),
         @enumToInt(Opcode.Lb   ) => iLb(instr),
         @enumToInt(Opcode.Lh   ) => iLh(instr),
+        @enumToInt(Opcode.Lwl  ) => iLwl(instr),
         @enumToInt(Opcode.Lw   ) => iLw(instr),
         @enumToInt(Opcode.Lbu  ) => iLbu(instr),
         @enumToInt(Opcode.Lhu  ) => iLhu(instr),
+        @enumToInt(Opcode.Lwr  ) => iLwr(instr),
         @enumToInt(Opcode.Lwu  ) => iLwu(instr),
         @enumToInt(Opcode.Sb   ) => iSb(instr),
         @enumToInt(Opcode.Sh   ) => iSh(instr),
+        @enumToInt(Opcode.Swl  ) => iSwl(instr),
         @enumToInt(Opcode.Sw   ) => iSw(instr),
         @enumToInt(Opcode.Sdl  ) => iSdl(instr),
         @enumToInt(Opcode.Sdr  ) => iSdr(instr),
+        @enumToInt(Opcode.Swr  ) => iSwr(instr),
         @enumToInt(Opcode.Cache) => iCache(instr),
         @enumToInt(Opcode.Lwc1 ) => iLwc(instr, 1),
         @enumToInt(Opcode.Ld   ) => iLd(instr),
@@ -1740,6 +1750,56 @@ fn iLwc(instr: u32, comptime n: u2) void {
     }
 }
 
+/// LWL - Load Word Left
+fn iLwl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 24 - 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) << shift);
+
+    const data = (regFile.get(u32, rt) & mask) | (read(u32, addrMask) << shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LWL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u32, rt, data);
+}
+
+/// LWR - Load Word Right
+fn iLwr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) >> shift);
+
+    const data = (regFile.get(u32, rt) & mask) | (read(u32, addrMask) >> shift);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] LWR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+    }
+
+    regFile.set(u32, rt, data);
+}
+
 /// Load Word Unsigned
 fn iLwu(instr: u32) void {
     const imm16s = exts(u32, u16, getImm16(instr));
@@ -2092,6 +2152,25 @@ fn iPadduw(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PADDUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel AND
+fn iPand(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u128, rs) & regFile.get(u128, rt);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PAND ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2761,6 +2840,56 @@ fn iSwc(instr: u32, comptime n: u2) void {
     }
 
     write(u32, addr, data);
+}
+
+/// SWL - Store Word Left
+fn iSwl(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 24 - 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) >> shift);
+
+    const data = (read(u32, addrMask) & mask) | (regFile.get(u32, rt) >> shift);
+
+    write(u32, addrMask, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SWL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+}
+
+/// SWR - Store Word Right
+fn iSwr(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = regFile.get(u32, rs) +% imm16s;
+    const addrMask = addr & ~@as(u32, 3);
+
+    const shift = @truncate(u5, 8 * (addr & 3));
+    const mask = ~((~@as(u32, 0)) << shift);
+
+    const data = (read(u32, addrMask) & mask) | (regFile.get(u32, rt) << shift);
+
+    write(u32, addrMask, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SWR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+    }
 }
 
 /// SYStem CALL
