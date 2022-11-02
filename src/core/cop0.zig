@@ -35,17 +35,17 @@ pub const Cop0Reg = enum(u32) {
     EPC         = 14,
     PRId        = 15,
     Config      = 16,
-    LLAddr      = 17,
-    WatchLo     = 18,
-    WatchHi     = 19,
-    XContext    = 20,
+    R17         = 17,
+    R18         = 18,
+    R19         = 19,
+    R20         = 20,
     R21         = 21,
     R22         = 22,
-    R23         = 23,
-    R24         = 24,
-    R25         = 25,
-    ParityError = 26,
-    CacheError  = 27,
+    BadPAddr    = 23,
+    Debug       = 24,
+    Perf        = 25,
+    R26         = 26,
+    R27         = 27,
     TagLo       = 28,
     TagHi       = 29,
     ErrorEPC    = 30,
@@ -383,11 +383,16 @@ pub fn get(comptime T: type, idx: u5) T {
     var data: T = undefined;
 
     switch (idx) {
-        @enumToInt(Cop0Reg.Count ) => data = count,
-        @enumToInt(Cop0Reg.Status) => data = status.get(),
-        @enumToInt(Cop0Reg.Cause ) => data = cause.get(),
-        @enumToInt(Cop0Reg.EPC   ) => data = epc,
-        @enumToInt(Cop0Reg.PRId  ) => data = @as(T, 0x59),
+        @enumToInt(Cop0Reg.BadVAddr) => data = 0,
+        @enumToInt(Cop0Reg.Count   ) => data = count,
+        @enumToInt(Cop0Reg.Status  ) => data = status.get(),
+        @enumToInt(Cop0Reg.Cause   ) => data = cause.get(),
+        @enumToInt(Cop0Reg.EPC     ) => data = epc,
+        @enumToInt(Cop0Reg.PRId    ) => data = @as(T, 0x59),
+        @enumToInt(Cop0Reg.BadPAddr) => data = 0,
+        @enumToInt(Cop0Reg.Debug   ) => data = 0,
+        @enumToInt(Cop0Reg.Perf    ) => data = 0,
+        @enumToInt(Cop0Reg.ErrorEPC) => data = errorepc,
         else => {
             err("  [COP0 (EE) ] Unhandled register read ({s}) @ {s}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx))});
 
@@ -438,6 +443,15 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
         },
         @enumToInt(Cop0Reg.EPC     ) => epc = @truncate(u32, data),
         @enumToInt(Cop0Reg.Config  ) => config.set(data),
+        @enumToInt(Cop0Reg.Debug   ) => {},
+        @enumToInt(Cop0Reg.Perf    ) => {
+            if ((data & (1 << 31)) != 0) {
+                err("  [COP0 (EE) ] Unhandled performance counter.", .{});
+
+                assert(false);
+            }
+        },
+        @enumToInt(Cop0Reg.ErrorEPC) => errorepc = @truncate(u32, data),
         else => {
             err("  [COP0 (EE) ] Unhandled register write ({s}) @ {s} = 0x{X:0>8}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx)), data});
 
