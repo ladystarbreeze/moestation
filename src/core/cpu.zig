@@ -67,6 +67,7 @@ const Opcode = enum(u6) {
     Cop2    = 0x12,
     Beql    = 0x14,
     Bnel    = 0x15,
+    Blezl   = 0x16,
     Daddiu  = 0x19,
     Ldl     = 0x1A,
     Ldr     = 0x1B,
@@ -177,6 +178,7 @@ const ControlOpcode = enum(u6) {
 /// MMI instructions
 const MmiOpcode = enum(u6) {
     Plzcw = 0x04,
+    Mmi2  = 0x09,
     Mfhi1 = 0x10,
     Mthi1 = 0x11,
     Mflo1 = 0x12,
@@ -190,6 +192,12 @@ const MmiOpcode = enum(u6) {
 /// MMI1 instructions
 const Mmi1Opcode = enum(u5) {
     Padduw = 0x10,
+};
+
+/// MMI2 instructions
+const Mmi2Opcode = enum(u5) {
+    Pmfhi = 0x08,
+    Pmflo = 0x09,
 };
 
 /// MMI3 instructions
@@ -627,6 +635,7 @@ fn decodeInstr(instr: u32) void {
         },
         @enumToInt(Opcode.Beql  ) => iBeql(instr),
         @enumToInt(Opcode.Bnel  ) => iBnel(instr),
+        @enumToInt(Opcode.Blezl ) => iBlezl(instr),
         @enumToInt(Opcode.Daddiu) => iDaddiu(instr),
         @enumToInt(Opcode.Ldl   ) => iLdl(instr),
         @enumToInt(Opcode.Ldr   ) => iLdr(instr),
@@ -635,6 +644,19 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(MmiOpcode.Plzcw) => iPlzcw(instr),
+                @enumToInt(MmiOpcode.Mmi2 ) => {
+                    const sa = getSa(instr);
+
+                    switch (sa) {
+                        @enumToInt(Mmi2Opcode.Pmfhi) => iPmfhi(instr),
+                        @enumToInt(Mmi2Opcode.Pmflo) => iPmflo(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled MMI2 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 @enumToInt(MmiOpcode.Mfhi1) => iMfhi(instr, true),
                 @enumToInt(MmiOpcode.Mthi1) => iMthi(instr, true),
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
@@ -928,6 +950,23 @@ fn iBlez(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
         info("   [EE Core   ] BLEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Less than or Equal Zero Likely
+fn iBlezl(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) <= 0, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -2055,6 +2094,36 @@ fn iPlzcw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
         info("   [EE Core   ] PLZCW ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRd, res});
+    }
+}
+
+/// Parallel Move From HI
+fn iPmfhi(instr: u32) void {
+    const rd = getRd(instr);
+
+    var data = regFile.hi.get(u128);
+
+    regFile.set(u128, rd, data);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] PMFHI ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
+    }
+}
+
+/// Parallel Move From LO
+fn iPmflo(instr: u32) void {
+    const rd = getRd(instr);
+
+    var data = regFile.lo.get(u128);
+
+    regFile.set(u128, rd, data);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] PMFLO ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
     }
 }
 
