@@ -178,6 +178,7 @@ const ControlOpcode = enum(u6) {
 /// MMI instructions
 const MmiOpcode = enum(u6) {
     Plzcw = 0x04,
+    Mmi0  = 0x08,
     Mmi2  = 0x09,
     Mfhi1 = 0x10,
     Mthi1 = 0x11,
@@ -189,6 +190,11 @@ const MmiOpcode = enum(u6) {
     Mmi3  = 0x29,
 };
 
+/// MMI0 instructions
+const Mmi0Opcode = enum(u5) {
+    Pextlw = 0x12,
+};
+
 /// MMI1 instructions
 const Mmi1Opcode = enum(u5) {
     Padduw = 0x10,
@@ -196,13 +202,17 @@ const Mmi1Opcode = enum(u5) {
 
 /// MMI2 instructions
 const Mmi2Opcode = enum(u5) {
-    Pmfhi = 0x08,
-    Pmflo = 0x09,
+    Pmfhi  = 0x08,
+    Pmflo  = 0x09,
+    Pcpyld = 0x0E,
 };
 
 /// MMI3 instructions
 const Mmi3Opcode = enum(u5) {
-    Por = 0x12,
+    Pmthi  = 0x08,
+    Pmtlo  = 0x09,
+    Pcpyud = 0x0E,
+    Por    = 0x12,
 };
 
 /// EE Core General-purpose register
@@ -644,12 +654,25 @@ fn decodeInstr(instr: u32) void {
 
             switch (funct) {
                 @enumToInt(MmiOpcode.Plzcw) => iPlzcw(instr),
-                @enumToInt(MmiOpcode.Mmi2 ) => {
+                @enumToInt(MmiOpcode.Mmi0 ) => {
                     const sa = getSa(instr);
 
                     switch (sa) {
-                        @enumToInt(Mmi2Opcode.Pmfhi) => iPmfhi(instr),
-                        @enumToInt(Mmi2Opcode.Pmflo) => iPmflo(instr),
+                        @enumToInt(Mmi0Opcode.Pextlw) => iPextlw(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled MMI0 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
+                @enumToInt(MmiOpcode.Mmi2) => {
+                    const sa = getSa(instr);
+
+                    switch (sa) {
+                        @enumToInt(Mmi2Opcode.Pmfhi ) => iPmfhi(instr),
+                        @enumToInt(Mmi2Opcode.Pmflo ) => iPmflo(instr),
+                        @enumToInt(Mmi2Opcode.Pcpyld) => iPcpyld(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI2 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -679,7 +702,10 @@ fn decodeInstr(instr: u32) void {
                     const sa = getSa(instr);
 
                     switch (sa) {
-                        @enumToInt(Mmi3Opcode.Por) => iPor(instr),
+                        @enumToInt(Mmi3Opcode.Pmthi ) => iPmthi(instr),
+                        @enumToInt(Mmi3Opcode.Pmtlo ) => iPmtlo(instr),
+                        @enumToInt(Mmi3Opcode.Pcpyud) => iPcpyud(instr),
+                        @enumToInt(Mmi3Opcode.Por   ) => iPor(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI3 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -2065,6 +2091,71 @@ fn iPadduw(instr: u32) void {
     }
 }
 
+/// Parallel CoPY Low Doubleword
+fn iPcpyld(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = (@as(u128, regFile.get(u64, rs)) << 64) | @as(u128, regFile.get(u64, rt));
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PCPYLD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel CoPY Upper Doubleword
+fn iPcpyud(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const rsHi = regFile.get(u128, rs) >> 64;
+    const rtHi = regFile.get(u128, rt) >> 64;
+
+    const res = (rtHi << 64) | rsHi;
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PCPYUD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel EXTend Lower from Word
+fn iPextlw(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const rsLo0 = regFile.get(u32, rs);
+    const rsLo1 = regFile.get(u64, rs) >> 32;
+    const rtLo0 = regFile.get(u32, rt);
+    const rtLo1 = regFile.get(u64, rt) >> 32;
+
+    const res = (@as(u128, rsLo1) << 96) | (@as(u128, rtLo1) << 64) | (@as(u128, rsLo0) << 32) | @as(u128, rtLo0);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PEXTLW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// Parallel Leading Zero or one Count Word
 fn iPlzcw(instr: u32) void {
     const rd = getRd(instr);
@@ -2124,6 +2215,36 @@ fn iPmflo(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
         info("   [EE Core   ] PMFLO ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
+    }
+}
+
+/// Parallel Move To HI
+fn iPmthi(instr: u32) void {
+    const rs = getRs(instr);
+
+    var data = regFile.get(u128, rs);
+
+    regFile.hi.set(u128, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] PMFHI ${s}; HI = 0x{X:0>32}", .{tagRs, data});
+    }
+}
+
+/// Parallel Move To LO
+fn iPmtlo(instr: u32) void {
+    const rs = getRs(instr);
+
+    var data = regFile.get(u128, rs);
+
+    regFile.lo.set(u128, data);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] PMFLO ${s}; HI = 0x{X:0>32}", .{tagRs, data});
     }
 }
 
