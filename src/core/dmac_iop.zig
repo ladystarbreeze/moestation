@@ -15,6 +15,8 @@ const warn = std.log.warn;
 
 const bus = @import("bus.zig");
 
+const cdvd = @import("cdvd.zig");
+
 const Direction = @import("dmac.zig").Direction;
 
 const intc = @import("intc.zig");
@@ -69,6 +71,7 @@ const Mode = enum(u2) {
 const BlockCount = struct {
      size: u16 = undefined,
     count: u16 = undefined,
+      len: u32 = 0,
 
     /// Returns BCR
     pub fn get(self: BlockCount) u32 {
@@ -512,6 +515,7 @@ pub fn checkRunning() void {
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
+                Channel.Cdvd => doCdvd(),
                 Channel.Sif0 => doSif0(),
                 Channel.Sif1 => doSif1(),
                 else => {
@@ -522,6 +526,38 @@ pub fn checkRunning() void {
             }
 
             return;
+        }
+    }
+}
+
+/// Performs CDVD DMA
+fn doCdvd() void {
+    const chnId = @enumToInt(Channel.Cdvd);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
+    assert(!channels[chnId].chcr.inc);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Cdvd)});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    } else {
+        channels[chnId].bcr.len -= 1;
+        
+        const data = cdvd.readDmac();
+
+        bus.writeIopDmac(channels[chnId].madr, data);
+
+        channels[chnId].madr +%= 4;
+
+        if (channels[chnId].bcr.len == 0) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+
+            cdvd.sendInterrupt();
         }
     }
 }
