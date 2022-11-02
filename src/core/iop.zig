@@ -59,6 +59,7 @@ const Opcode = enum(u6) {
     Sltiu   = 0x0B,
     Andi    = 0x0C,
     Ori     = 0x0D,
+    Xori    = 0x0E,
     Lui     = 0x0F,
     Cop0    = 0x10,
     Lb      = 0x20,
@@ -320,6 +321,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Sltiu) => iSltiu(instr),
         @enumToInt(Opcode.Andi ) => iAndi(instr),
         @enumToInt(Opcode.Ori  ) => iOri(instr),
+        @enumToInt(Opcode.Xori ) => iXori(instr),
         @enumToInt(Opcode.Lui  ) => iLui(instr),
         @enumToInt(Opcode.Cop0 ) => {
             const rs = getRs(instr);
@@ -1503,6 +1505,23 @@ fn iXor(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [IOP       ] XOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// XOR Immediate
+fn iXori(instr: u32) void {
+    const imm16 = getImm16(instr);
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(rt, regFile.get(rs) ^ @as(u32, imm16));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [IOP       ] XORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>8}", .{tagRt, tagRs, imm16, tagRt, regFile.get(rt)});
     }
 }
 
