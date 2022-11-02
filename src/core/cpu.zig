@@ -1338,6 +1338,10 @@ fn iEret() void {
 
         cop0.setExl(false);
     }
+
+    if (regFile.pc == 0x82000) {
+        bus.fastBoot();
+    }
 }
 
 /// Jump

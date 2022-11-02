@@ -33,6 +33,7 @@ const vu0      = @import("vu0.zig");
 /// Memory base addresses
 const MemBase = enum(u32) {
     Ram     = 0x0000_0000,
+    EeLoad  = 0x0008_2000,
     Timer   = 0x1000_0000,
     Ipu     = 0x1000_2000,
     Gif     = 0x1000_3000,
@@ -62,17 +63,18 @@ const MemBaseIop = enum(u32) {
 
 /// Memory sizes
 const MemSize = enum(u32) {
-    Ram   = 0x200_0000,
-    Timer = 0x000_1840,
-    Ipu   = 0x000_0040,
-    Gif   = 0x000_0100,
-    Vu0   = 0x000_1000,
-    Vu1   = 0x000_4000,
-    Vif   = 0x000_0180,
-    Dmac  = 0x000_7000,
-    Sif   = 0x000_0070,
-    Gs    = 0x000_2000,
-    Bios  = 0x040_0000,
+    Ram    = 0x200_0000,
+    EeLoad = 0x002_0000,
+    Timer  = 0x000_1840,
+    Ipu    = 0x000_0040,
+    Gif    = 0x000_0100,
+    Vu0    = 0x000_1000,
+    Vu1    = 0x000_4000,
+    Vif    = 0x000_0180,
+    Dmac   = 0x000_7000,
+    Sif    = 0x000_0070,
+    Gs     = 0x000_2000,
+    Bios   = 0x040_0000,
 };
 
 /// Memory region sizes (IOP)
@@ -122,6 +124,27 @@ pub fn deinit(allocator: Allocator) void {
     allocator.free(rdram);
     allocator.free(vu0.vuCode);
     allocator.free(vu0.vuMem);
+}
+
+// Taken from DobieStation. Replace "rom0:OSDSYS" with "cdrom0:[game executable]"
+pub fn fastBoot() void {
+    const osdsysPath = "rom0:OSDSYS";
+    const dvdPath    = "cdrom0:SLUS_211.13"; // Atelier Iris
+
+    var i = @enumToInt(MemBase.EeLoad);
+    while (i < (@enumToInt(MemBase.EeLoad) + @enumToInt(MemSize.EeLoad))) : (i += 1) {
+        const str = rdram[i..i + osdsysPath.len];
+
+        if (std.mem.eql(u8, osdsysPath, str)) {
+            info("   [moestation] OSDSYS path found @ 0x{X:0>8}.", .{i});
+
+            return @memcpy(@ptrCast([*]u8, &rdram[i]), dvdPath, @sizeOf(u8) * dvdPath.len);
+        }
+    }
+
+    err("  [moestation] Unable to find OSDSYS path.", .{});
+
+    assert(false);
 }
 
 /// Reads data from the system bus
