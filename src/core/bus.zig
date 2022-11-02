@@ -57,6 +57,7 @@ const MemBaseIop = enum(u32) {
     Timer1 = 0x1F80_1480,
     Dma1   = 0x1F80_1500,
     Sio2   = 0x1F80_8200,
+    Spu2   = 0x1F90_0000,
 };
 
 /// Memory sizes
@@ -81,6 +82,7 @@ const MemSizeIop = enum(u32) {
     Dma   = 0x80,
     Timer = 0x30,
     Sio2  = 0x78,
+    Spu2  = 0x2800,
 };
 
 // Memory arrays
@@ -303,6 +305,10 @@ pub fn readIop(comptime T: type, addr: u32) T {
         }
 
         data = dmacIop.read(addr);
+    } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
+        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (SPU2).", .{@typeName(T), addr});
+
+        data = 0;
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -588,6 +594,8 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
         dmacIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SIO2) = 0x{X}.", .{@typeName(T), addr, data});
+    } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
+        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SPU2) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
         switch (addr) {
             0x1F80_1070 ... 0x1F80_1073 => {
