@@ -12,6 +12,7 @@ const info = std.log.info;
 
 // Submodules
 const bus      = @import("core/bus.zig");
+const cdvd     = @import("core/cdvd.zig");
 const cpu      = @import("core/cpu.zig");
 const dmac     = @import("core/dmac.zig");
 const dmacIop  = @import("core/dmac_iop.zig");
@@ -37,6 +38,7 @@ pub fn main() void {
     defer bus.deinit(allocator);
 
     cpu.init();
+    cdvd.init();
     dmac.init();
     dmacIop.init();
     iop.init();
