@@ -192,6 +192,7 @@ const MmiOpcode = enum(u6) {
 
 /// MMI0 instructions
 const Mmi0Opcode = enum(u5) {
+    Psubb  = 0x09,
     Pextlw = 0x12,
 };
 
@@ -213,6 +214,7 @@ const Mmi3Opcode = enum(u5) {
     Pmtlo  = 0x09,
     Pcpyud = 0x0E,
     Por    = 0x12,
+    Pnor   = 0x13,
 };
 
 /// EE Core General-purpose register
@@ -658,6 +660,7 @@ fn decodeInstr(instr: u32) void {
                     const sa = getSa(instr);
 
                     switch (sa) {
+                        @enumToInt(Mmi0Opcode.Psubb ) => iPsubb(instr),
                         @enumToInt(Mmi0Opcode.Pextlw) => iPextlw(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI0 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
@@ -706,6 +709,7 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Mmi3Opcode.Pmtlo ) => iPmtlo(instr),
                         @enumToInt(Mmi3Opcode.Pcpyud) => iPcpyud(instr),
                         @enumToInt(Mmi3Opcode.Por   ) => iPor(instr),
+                        @enumToInt(Mmi3Opcode.Pnor  ) => iPnor(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI3 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -2248,6 +2252,25 @@ fn iPmtlo(instr: u32) void {
     }
 }
 
+/// Parallel NOR
+fn iPnor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = ~(regFile.get(u128, rs) | regFile.get(u128, rt));
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PNOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// Parallel OR
 fn iPor(instr: u32) void {
     const rd = getRd(instr);
@@ -2264,6 +2287,33 @@ fn iPor(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] POR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel SUBtract Byte
+fn iPsubb(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const a = regFile.get(u128, rs);
+    const b = regFile.get(u128, rt);
+
+    var res: u128 = 0;
+
+    var i: u7 = 0;
+    while (i < 16) : (i += 1) {
+        res |= @as(u128, @truncate(u8, a >> (8 * i)) -% @truncate(u8, b >> (8 * i))) << (8 * i);
+    }
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PSUBB ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
