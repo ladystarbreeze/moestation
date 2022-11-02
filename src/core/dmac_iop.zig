@@ -131,10 +131,11 @@ const ChannelControl = struct {
 
 /// DMA channel
 const DmaChannel = struct {
-    madr: u24            = undefined, // Memory ADdress Register
-     bcr: BlockCount     = undefined, // Block Count Register
-    chcr: ChannelControl = undefined,
-    tadr: u24            = undefined, // Tag ADdress Register
+      madr: u24            = undefined, // Memory ADdress Register
+       bcr: BlockCount     = undefined, // Block Count Register
+      chcr: ChannelControl = undefined,
+      tadr: u24            = undefined, // Tag ADdress Register
+    tagEnd: bool           = false,
 };
 
 /// DMA Interrupt Control Register
@@ -357,8 +358,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 info("   [DMAC (IOP)] Write ({s}) @ 0x{X:0>8} (D{}_CHCR) = 0x{X:0>8}.", .{@typeName(T), addr, chn, data});
 
                 channels[chn].chcr.set(data);
-
-                checkRunning();
             },
             @enumToInt(ChannelReg.DTadr) => {
                 if (T != u32) {
@@ -385,8 +384,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 info("   [DMAC (IOP)] Write ({s}) @ 0x{X:0>8} (DPCR) = 0x{X:0>8}.", .{@typeName(T), addr, data});
 
                 dpcr = data;
-
-                checkRunning();
             },
             @enumToInt(ControlReg.Dicr) => {
                 if (T != u32) {
@@ -407,8 +404,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 info("   [DMAC (IOP)] Write ({s}) @ 0x{X:0>8} (DPCR2) = 0x{X:0>8}.", .{@typeName(T), addr, data});
 
                 dpcr2 = data;
-
-                checkRunning();
             },
             @enumToInt(ControlReg.Dicr2) => {
                 if (T != u32) {
@@ -429,8 +424,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 info("   [DMAC (IOP)] Write ({s}) @ 0x{X:0>8} (DMACEN) = 0x{X:0>8}.", .{@typeName(T), addr, data});
 
                 dmacEn = (data & 1) != 0;
-
-                checkRunning();
             },
             @enumToInt(ControlReg.DmacIntEn) => {
                 if (T != u32) {
@@ -518,8 +511,6 @@ pub fn checkRunning() void {
         if (cen and channels[chnId].chcr.str and channels[chnId].chcr.req) {
             const chn = @intToEnum(Channel, chnId);
 
-            info("   [DMAC (IOP)] Channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
-
             switch (chn) {
                 Channel.Sif0 => doSif0(),
                 Channel.Sif1 => doSif1(),
@@ -529,6 +520,8 @@ pub fn checkRunning() void {
                     assert(false);
                 }
             }
+
+            return;
         }
     }
 }
@@ -541,14 +534,15 @@ fn doSif0() void {
     assert(!channels[chnId].chcr.inc);
     assert(channels[chnId].chcr.tte);
 
-    info("   [DMAC (IOP)] Chain mode.", .{});
+    if (channels[chnId].bcr.count == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Chain mode.", .{chnId, @tagName(Channel.Sif0)});
 
-    while (true) {
+        // Read new tag
         const tag = @as(u64, bus.readDmacIop(channels[chnId].tadr)) | (@as(u64, bus.readDmacIop(channels[chnId].tadr + 4)) << 32);
 
-        const tagEnd = (tag & (1 << 31)) != 0 or (tag & (1 << 30)) != 0;
+        channels[chnId].tagEnd = (tag & (1 << 31)) != 0 or (tag & (1 << 30)) != 0;
 
-        info("   [DMAC (IOP)] Tag = 0x{X:0>16} (Tag end = {})", .{tag, tagEnd});
+        info("   [DMAC (IOP)] Tag = 0x{X:0>16} (Tag end = {})", .{tag, channels[chnId].tagEnd});
 
         channels[chnId].tadr += 8;
 
@@ -567,26 +561,19 @@ fn doSif0() void {
         if ((channels[chnId].bcr.count & 3) != 0) {
             channels[chnId].bcr.count = (channels[chnId].bcr.count | 3) + 1;
         }
+    } else {
+        channels[chnId].bcr.count -= 1;
+        
+        const data = bus.readDmacIop(channels[chnId].madr);
 
-        const offset = 4;
+        sif.writeSif0(data);
 
-        while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
-            const data = bus.readDmacIop(channels[chnId].madr);
+        channels[chnId].madr +%= 4;
 
-            sif.writeSif0(data);
-
-            channels[chnId].madr +%= offset;
-        }
-
-        //if ((tag & (1 << 30)) != 0) {
-        //    setTagInterrupt(chnId);
-        //}
-
-        if (tagEnd) {
+        if (channels[chnId].bcr.count == 0 and channels[chnId].tagEnd) {
             channels[chnId].chcr.str = false;
 
             transferEnd(chnId);
-            break;
         }
     }
 }
@@ -600,41 +587,35 @@ fn doSif1() void {
 
     assert(channels[chnId].chcr.tte);
 
-    info("   [DMAC (IOP)] Destination Chain mode.", .{});
+    if (channels[chnId].bcr.count == 0) {
+        // Read new tag
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Chain mode.", .{chnId, @tagName(Channel.Sif1)});
 
-    while (true) {
         const tag = @as(u128, sif.readSif1()) | (@as(u128, sif.readSif1()) << 32) | (@as(u128, sif.readSif1()) << 64) | (@as(u128, sif.readSif1()) << 96);
 
-        const tagEnd = (tag & (1 << 31)) != 0 or (tag & (1 << 30)) != 0;
+        channels[chnId].tagEnd = (tag & (1 << 31)) != 0 or (tag & (1 << 30)) != 0;
 
-        info("   [DMAC (IOP)] Tag = 0x{X:0>32} (Tag end = {})", .{tag, tagEnd});
+        info("   [DMAC (IOP)] Tag = 0x{X:0>32} (Tag end = {})", .{tag, channels[chnId].tagEnd});
 
         channels[chnId].madr = @truncate(u24, tag);
         channels[chnId].bcr.count = @truncate(u16, (tag >> 32) & ~@as(u32, 3));
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
+    } else {
+        channels[chnId].bcr.count -= 1;
 
-        const offset = 4;
+        const data = sif.readSif1();
 
-        while (channels[chnId].bcr.count > 0) : (channels[chnId].bcr.count -= 1) {
-            const data = sif.readSif1();
+        info("   [DMAC (IOP)] [0x{X:0>6}] = 0x{X:0>8}", .{channels[chnId].madr, data});
 
-            info("   [DMAC (IOP)] [0x{X:0>6}] = 0x{X:0>8}", .{channels[chnId].madr, data});
+        bus.writeIopDmac(channels[chnId].madr, data);
 
-            bus.writeIopDmac(channels[chnId].madr, data);
+        channels[chnId].madr +%= 4;
 
-            channels[chnId].madr +%= offset;
-        }
-
-        //if ((tag & (1 << 30)) != 0) {
-        //    setTagInterrupt(chnId);
-        //}
-
-        if (tagEnd) {
+        if (channels[chnId].bcr.count == 0 and channels[chnId].tagEnd) {
             channels[chnId].chcr.str = false;
 
             transferEnd(chnId);
-            break;
         }
     }
 }
