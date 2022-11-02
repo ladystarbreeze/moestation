@@ -322,7 +322,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     if (addr < @enumToInt(ControlReg.Dpcr) or (addr > @enumToInt(ControlReg.Dicr) and addr < @enumToInt(ControlReg.Dpcr2))) {
         const chn = @enumToInt(getChannel(@truncate(u8, addr >> 4)));
 
-        switch (addr & ~@as(u32, 0xFF0)) {
+        switch (addr & ~@as(u32, 0xFF3)) {
             @enumToInt(ChannelReg.DMadr) => {
                 if (T != u32) {
                     @panic("Unhandled write @ D_MADR");
