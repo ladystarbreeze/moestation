@@ -348,7 +348,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
             },
             0x1E00_0000 ... 0x1E00_8000,
             0x1F80_100C,
-            0x1F80_1400,
+            0x1F80_1400, 0x1F80_1414,
             0x1F80_1578 => {
                 warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
