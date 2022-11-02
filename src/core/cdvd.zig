@@ -47,10 +47,17 @@ const NCommand = enum(u8) {
 
 /// S commands
 const SCommand = enum(u8) {
+    Subcommand        = 0x03,
     UpdateStickyFlags = 0x05,
+    ReadRtc           = 0x08,
     OpenConfig        = 0x40,
     ReadConfig        = 0x41,
     CloseConfig       = 0x43,
+};
+
+/// S subcommands
+const SSubcommand = enum(u8) {
+    MechaconVersion = 0x00,
 };
 
 /// Disc types
@@ -179,6 +186,8 @@ var sDriveStat: u8 = undefined;
 var      iStat: u8 = 0;
 
 var  sectorNum: u32 = 0;
+
+var sCmdParam: u8 = undefined;
 
 /// CDVD read buffer
 var readBuf: ReadBuffer = ReadBuffer{};
@@ -319,6 +328,8 @@ pub fn write(addr: u32, data: u8) void {
         },
         @enumToInt(CdvdReg.SCmdStat) => {
             info("   [CDVD      ] Write @ 0x{X:0>8} (S Command Parameter) = 0x{X:0>2}.", .{addr, data});
+
+            sCmdParam = data;
         },
         else => {
             err("  [CDVD      ] Unhandled write @ 0x{X:0>8} = 0x{X:0>2}.", .{addr, data});
@@ -349,7 +360,18 @@ fn runSCmd(cmd: u8) void {
     sCmd = cmd;
 
     switch (cmd) {
+        @enumToInt(SCommand.Subcommand) => {
+            switch (sCmdParam) {
+                @enumToInt(SSubcommand.MechaconVersion) => cmdMechaconVersion(),
+                else => {
+                    err("  [CDVD      ] Unhandled S subcommand 0x{X:0>2}.", .{sCmdParam});
+
+                    assert(false);
+                }
+            }
+        },
         @enumToInt(SCommand.UpdateStickyFlags) => cmdUpdateStickyFlags(),
+        @enumToInt(SCommand.ReadRtc          ) => cmdReadRtc(),
         @enumToInt(SCommand.OpenConfig       ) => cmdOpenConfig(),
         @enumToInt(SCommand.ReadConfig       ) => cmdReadConfig(),
         @enumToInt(SCommand.CloseConfig      ) => cmdCloseConfig(),
@@ -411,6 +433,15 @@ fn cmdCloseConfig() void {
     info("   [CDVD      ] CloseConfig", .{});
 }
 
+/// MechaconVersion
+fn cmdMechaconVersion() void {
+    info("   [CDVD      ] MechaconVersion", .{});
+
+    sCmdStat.noData = false;
+
+    sCmdLen = 4;
+}
+
 /// OpenConfig
 fn cmdOpenConfig() void {
     info("   [CDVD      ] OpenConfig", .{});
@@ -447,6 +478,15 @@ fn cmdReadConfig() void {
     sCmdStat.noData = false;
 
     sCmdLen = 4 * 4;
+}
+
+/// ReadRtc
+fn cmdReadRtc() void {
+    info("   [CDVD      ] ReadRtc", .{});
+
+    sCmdStat.noData = false;
+
+    sCmdLen = 8;
 }
 
 /// Update Sticky Flags
