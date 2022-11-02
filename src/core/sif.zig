@@ -228,7 +228,7 @@ pub fn writeIop(addr: u32, data: u32) void {
 
 /// Writes data to SIF0 FIFO
 pub fn writeSif0(data: u32) void {
-    info("   [SIF (DMAC)] Write @ SIF0 FIFO = 0x{X:0>8}.", .{data});
+    // info("   [SIF (DMAC)] Write @ SIF0 FIFO = 0x{X:0>8}.", .{data});
 
     sif0Fifo.writeItem(data) catch {
         err("  [SIF (DMAC)] Unable to write to SIF0 FIFO.", .{});
@@ -247,7 +247,7 @@ pub fn writeSif0(data: u32) void {
 
 /// Writes data to SIF1 FIFO
 pub fn writeSif1(data: u128) void {
-    info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
+    // info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
 
     var i: u7 = 0;
     while (i < 4) : (i += 1) {

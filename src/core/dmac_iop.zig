@@ -606,7 +606,7 @@ fn doSif1() void {
 
         const data = sif.readSif1();
 
-        info("   [DMAC (IOP)] [0x{X:0>6}] = 0x{X:0>8}", .{channels[chnId].madr, data});
+        // info("   [DMAC (IOP)] [0x{X:0>6}] = 0x{X:0>8}", .{channels[chnId].madr, data});
 
         bus.writeIopDmac(channels[chnId].madr, data);
 
