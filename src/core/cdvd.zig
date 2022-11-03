@@ -32,7 +32,7 @@ const CdvdReg = enum(u32) {
     NCmdStat   = 0x1F40_2005,
     CdvdError  = 0x1F40_2006,
     IStat      = 0x1F40_2008,
-    //DriveStat  = 0x1F40_200A,
+    DriveStat  = 0x1F40_200A,
     SDriveStat = 0x1F40_200B,
     DiscType   = 0x1F40_200F,
     SCmd       = 0x1F40_2016,
@@ -42,7 +42,8 @@ const CdvdReg = enum(u32) {
 
 /// N commands
 const NCommand = enum(u8) {
-    ReadCd = 0x06,
+    ReadCd  = 0x06,
+    ReadDvd = 0x08,
 };
 
 /// S commands
@@ -118,12 +119,49 @@ const NCmdStat = struct {
 
     /// Returns N command status register
     pub fn get(self: NCmdStat) u8 {
-        var data: u8 = 0xE;
+        var data: u8 = 8;
 
         data |= @as(u8, @bitCast(u1, self.rdy)) << 6;
         data |= @as(u8, @bitCast(u1, self.bsy)) << 7;
 
         return data;
+    }
+};
+
+/// S command data
+const SCmdData = struct {
+    buf: [16]u8 = undefined,
+    idx: u5     = 0,
+
+    /// Writes an S command data byte
+    pub fn write(self: *SCmdData, data: u8) void {
+        if (self.idx < 16) {
+            self.buf[self.idx] = data;
+
+            self.idx += 1;
+        } else {
+            warn("[CDVD      ] S command data buffer is full.", .{});
+        }
+    }
+
+    /// Returns a data byte
+    pub fn read(self: *SCmdData) u8 {
+        var data: u8 = undefined;
+
+        if (self.idx < 16) {
+            data = self.buf[self.idx];
+
+            self.idx += 1;
+        } else {
+            warn("[CDVD      ] S command data buffer is empty.", .{});
+        }
+
+        return data;
+    }
+
+    /// "Clears" the data buffer
+    pub fn clear(self: *SCmdData) void {
+        self.idx = 0;
     }
 };
 
@@ -177,12 +215,15 @@ var sCmdLen: u8 = undefined;
 
 var seekParam: SeekParam = SeekParam{};
 
-var driveStat: DriveStat = DriveStat{};
-var  nCmdStat: NCmdStat  = NCmdStat{};
+//var driveStat: DriveStat = DriveStat{};
+//var  nCmdStat: NCmdStat  = NCmdStat{};
 var nCmdParam: NCmdParam = NCmdParam{};
 var  sCmdStat: SCmdStat  = SCmdStat{};
+var  sCmdData: SCmdData  = SCmdData{};
 
-var sDriveStat: u8 = undefined;
+var  driveStat: u8 = 0;
+var sDriveStat: u8 = 0;
+var   nCmdStat: u8 = 0x40;
 var      iStat: u8 = 0;
 
 var  sectorNum: u32 = 0;
@@ -197,7 +238,7 @@ var cdvdFile: File = undefined;
 
 /// Initializes the CDVD module
 pub fn init(cdvdPath: []const u8) !void {
-    sDriveStat = driveStat.get();
+    //sDriveStat = driveStat.get();
 
     info("   [CDVD      ] Loading ISO {s}...", .{cdvdPath});
 
@@ -223,7 +264,7 @@ pub fn read(addr: u32) u8 {
         @enumToInt(CdvdReg.NCmdStat) => {
             info("   [CDVD      ] Read @ 0x{X:0>8} (N Command Status).", .{addr});
 
-            data = nCmdStat.get();
+            data = nCmdStat;
         },
         @enumToInt(CdvdReg.CdvdError) => {
             info("   [CDVD      ] Read @ 0x{X:0>8} (CDVD Error).", .{addr});
@@ -235,6 +276,11 @@ pub fn read(addr: u32) u8 {
 
             data = iStat;
         },
+        @enumToInt(CdvdReg.DriveStat) => {
+            info("   [CDVD      ] Read @ 0x{X:0>8} (Drive Status).", .{addr});
+
+            data = driveStat;
+        },
         @enumToInt(CdvdReg.SDriveStat) => {
             info("   [CDVD      ] Read @ 0x{X:0>8} (Sticky Drive Status).", .{addr});
 
@@ -244,6 +290,12 @@ pub fn read(addr: u32) u8 {
             info("   [CDVD      ] Read @ 0x{X:0>8} (Disc Type).", .{addr});
 
             data = @enumToInt(DiscType.Ps2Dvd);
+        },
+        0x1F40_2013 => {
+            // Not sure what this is, DobieStation returns 4 on reads from this register.
+            info("   [CDVD      ] Read @ 0x{X:0>8} (Unknown).", .{addr});
+
+            data = 4;
         },
         @enumToInt(CdvdReg.SCmd) => {
             info("   [CDVD      ] Read @ 0x{X:0>8} (S Command).", .{addr});
@@ -258,12 +310,16 @@ pub fn read(addr: u32) u8 {
         @enumToInt(CdvdReg.SCmdData) => {
             info("   [CDVD      ] Read @ 0x{X:0>8} (S Command Data).", .{addr});
 
-            data = 0;
+            if (sCmdData.idx < sCmdLen) {
+                data = sCmdData.read();
 
-            sCmdLen -= 1;
-
-            if (sCmdLen == 0) {
-                sCmdStat.noData = true;
+                if (sCmdData.idx == sCmdLen) {
+                    sCmdStat.noData = true;
+                    
+                    sCmdData.clear();
+                }
+            } else {
+                data = 0;
             }
         },
         else => {
@@ -280,17 +336,24 @@ pub fn read(addr: u32) u8 {
 pub fn readDmac() u32 {
     var data: u32 = undefined;
 
-    if (readBuf.idx < 4 * 512) {
+    const readSize: u32 = if (nCmd == @enumToInt(NCommand.ReadCd)) seekParam.size else 2064;
+
+    if (readBuf.idx < readSize) {
         data = @as(u32, readBuf.get()) | (@as(u32, readBuf.get()) << 8) | (@as(u32, readBuf.get()) << 16) | (@as(u32, readBuf.get()) << 24);
 
-        if (readBuf.idx == 4 * 512) {
+        if (readBuf.idx == readSize) {
             if (sectorNum == seekParam.num) {
                 dmac.setRequest(Channel.Cdvd, false);
 
                 sectorNum = 0;
             } else {
                 doSeek();
-                doReadCd();
+
+                if (nCmd == @enumToInt(NCommand.ReadCd)) {
+                    doReadCd();
+                } else {
+                    doReadDvd();
+                }
             }
             
             readBuf.clear();
@@ -343,8 +406,11 @@ pub fn write(addr: u32, data: u8) void {
 fn runNCmd(cmd: u8) void {
     nCmd = cmd;
 
+    nCmdStat = 0x80;
+
     switch (cmd) {
-        @enumToInt(NCommand.ReadCd) => cmdReadCd(),
+        @enumToInt(NCommand.ReadCd ) => cmdReadCd(),
+        @enumToInt(NCommand.ReadDvd) => cmdReadDvd(),
         else => {
             err("  [CDVD      ] Unhandled N command 0x{X:0>2}.", .{cmd});
 
@@ -381,23 +447,30 @@ fn runSCmd(cmd: u8) void {
             assert(false);
         }
     }
+
+    sCmdData.clear();
 }
 
 /// Sends a CDVD interrupt
 pub fn sendInterrupt() void {
-    //driveStat.readStat = false;
-    driveStat.paused   = true;
+    driveStat   = 0x0A;
+    sDriveStat |= driveStat;
 
-    iStat |= 3;
+    nCmdStat = 0x40;
+
+    iStat |= 2;
 
     intc.sendInterruptIop(IntSource.Cdvd);
 }
 
 /// Seeks to a CD/DVD sector
 fn doSeek() void {
-    info("   [CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}", .{seekParam.pos, seekParam.num, seekParam.size});
+    info("   [CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}", .{seekParam.pos + sectorNum, seekParam.num, seekParam.size});
 
-    driveStat.spinning = true;
+    driveStat   = 0x12;
+    sDriveStat |= driveStat;
+
+    //nCmdStat = 0x40;
 
     cdvdFile.seekTo(seekParam.pos * seekParam.size + seekParam.size * sectorNum) catch {
         err("   [CDVD      ] Unable to seek to sector.", .{});
@@ -412,8 +485,9 @@ fn doSeek() void {
 fn doReadCd() void {
     info("   [CDVD      ] Reading sector {}...", .{seekParam.pos});
 
-    //driveStat.seekStat = false;
-    driveStat.readStat = true;
+    driveStat = 0x06;
+
+    sDriveStat |= driveStat;
 
     if (cdvdFile.reader().read(readBuf.buf[0..seekParam.size])) |bytesRead| {
         assert(bytesRead == seekParam.size);
@@ -428,9 +502,52 @@ fn doReadCd() void {
     dmac.setRequest(Channel.Cdvd, true);
 }
 
+/// Reads a DVD sector
+fn doReadDvd() void {
+    info("   [CDVD      ] Reading sector {}...", .{seekParam.pos});
+
+    driveStat = 0x06;
+
+    sDriveStat |= driveStat;
+
+    if (cdvdFile.reader().read(readBuf.buf[12..2060])) |bytesRead| {
+        assert(bytesRead == seekParam.size);
+    } else |e| switch (e) {
+        else => {
+            err("  [moestation] Unhandled error {}.", .{e});
+
+            assert(false);
+        }
+    }
+
+    const layerSectorNum = seekParam.pos + sectorNum + 0x30000;
+
+    readBuf.buf[0x0] = 0x20;
+    readBuf.buf[0x1] = @truncate(u8, layerSectorNum >> 16);
+    readBuf.buf[0x2] = @truncate(u8, layerSectorNum >> 8);
+    readBuf.buf[0x3] = @truncate(u8, layerSectorNum);
+    readBuf.buf[0x4] = 0;
+    readBuf.buf[0x5] = 0;
+    readBuf.buf[0x6] = 0;
+    readBuf.buf[0x7] = 0;
+    readBuf.buf[0x8] = 0;
+    readBuf.buf[0x9] = 0;
+    readBuf.buf[0xA] = 0;
+    readBuf.buf[0xB] = 0;
+
+    readBuf.buf[2060] = 0;
+    readBuf.buf[2061] = 0;
+    readBuf.buf[2062] = 0;
+    readBuf.buf[2063] = 0;
+
+    dmac.setRequest(Channel.Cdvd, true);
+}
+
 /// OpenConfig
 fn cmdCloseConfig() void {
     info("   [CDVD      ] CloseConfig", .{});
+
+    sCmdLen = 0;
 }
 
 /// MechaconVersion
@@ -439,12 +556,19 @@ fn cmdMechaconVersion() void {
 
     sCmdStat.noData = false;
 
+    sCmdData.write(0x03);
+    sCmdData.write(0x06);
+    sCmdData.write(0x02);
+    sCmdData.write(0x00);
+
     sCmdLen = 4;
 }
 
 /// OpenConfig
 fn cmdOpenConfig() void {
     info("   [CDVD      ] OpenConfig", .{});
+
+    sCmdLen = 0;
 }
 
 /// ReadCd
@@ -465,8 +589,6 @@ fn cmdReadCd() void {
         },
     }
 
-    driveStat.paused = false;
-
     doSeek();
     doReadCd();
 }
@@ -476,8 +598,40 @@ fn cmdReadConfig() void {
     info("   [CDVD      ] ReadConfig", .{});
 
     sCmdStat.noData = false;
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
 
     sCmdLen = 4 * 4;
+}
+
+/// ReadDvd
+fn cmdReadDvd() void {
+    info("   [CDVD      ] ReadDvd", .{});
+
+    seekParam.pos  = @as(u32, nCmdParam.buf[0]) | (@as(u32, nCmdParam.buf[1]) << 8) | (@as(u32, nCmdParam.buf[2]) << 16) | (@as(u32, nCmdParam.buf[3]) << 24);
+    seekParam.num  = @as(u32, nCmdParam.buf[4]) | (@as(u32, nCmdParam.buf[5]) << 8) | (@as(u32, nCmdParam.buf[6]) << 16) | (@as(u32, nCmdParam.buf[7]) << 24);
+    seekParam.size = 2048;
+
+    doSeek();
+    doReadDvd();
 }
 
 /// ReadRtc
@@ -485,6 +639,16 @@ fn cmdReadRtc() void {
     info("   [CDVD      ] ReadRtc", .{});
 
     sCmdStat.noData = false;
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
 
     sCmdLen = 8;
 }
@@ -493,5 +657,9 @@ fn cmdReadRtc() void {
 fn cmdUpdateStickyFlags() void {
     info("   [CDVD      ] UpdateStickyFlags", .{});
 
-    sDriveStat = driveStat.get();
+    sDriveStat = driveStat;
+
+    sCmdData.write(0);
+
+    sCmdLen = 1;
 }
