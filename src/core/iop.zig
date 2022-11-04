@@ -1536,7 +1536,11 @@ pub fn step() void {
         const stdOut = std.io.getStdOut().writer();
 
         while (len != 0) : (len -= 1) {
-            stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
+            const c = read(u8, ptr, true);
+
+            if (std.ascii.isPrint(c) or c == 0xA) {
+                stdOut.print("{c}", .{c}) catch unreachable;
+            }
 
             ptr += 1;
         }
