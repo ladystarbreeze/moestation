@@ -61,6 +61,7 @@ pub fn main() void {
 
         iop.step();
         timerIop.step();
+        cdvd.step();
 
         dmacIop.checkRunning();
     }
