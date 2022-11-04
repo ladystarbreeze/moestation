@@ -2894,7 +2894,7 @@ fn iSwr(instr: u32) void {
 
 /// SYStem CALL
 fn iSyscall() void {
-    if (true) {
+    if (doDisasm) {
         info("   [EE Core   ] SYSCALL 0x{X}", .{regFile.get(u64, @enumToInt(CpuReg.V1))});
     }
 
