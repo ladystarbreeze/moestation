@@ -100,6 +100,7 @@ const ChannelControl = struct {
     cpc: u3   = undefined, // ChoPping CPU window size
     str: bool = undefined, // STaRt
     fst: bool = undefined, // Forced STart
+    spf: bool = undefined, // IOP cache SPooFing
 
     req: bool = undefined, // REQuest
 
@@ -115,6 +116,7 @@ const ChannelControl = struct {
         data |= @as(u32, self.cpc) << 20;
         data |= @as(u32, @bitCast(u1, self.str)) << 24;
         data |= @as(u32, @bitCast(u1, self.fst)) << 28;
+        data |= @as(u32, @bitCast(u1, self.spf)) << 30;
 
         return data;
     }
@@ -129,6 +131,7 @@ const ChannelControl = struct {
         self.cpc = @truncate(u3, data >> 20);
         self.str = (data & (1 << 24)) != 0;
         self.fst = (data & (1 << 28)) != 0;
+        self.spf = (data & (1 << 30)) != 0;
     }
 };
 
@@ -484,15 +487,15 @@ fn setTagInterrupt(chnId: u4) void {
 fn checkInterrupt() void {
     // NOTE: DobieStation ignores DMACEN and DMACINTEN, so we will do the same.
 
-    //const oldMif = dicr.mif;
+    const oldMif = dicr.mif;
 
     //dicr.mif = dicr.be or (dmacIntEn.cie and dicr.mie and (dicr.ip | dicr2.ip) != 0);
-    dicr.mif = dicr.be or (dicr.mie and (dicr.ip | dicr2.ip) != 0) or dicr2.tie != 0;
+    dicr.mif = dicr.be or ((dicr.ip & dicr.im) != 0) or ((dicr2.ip & dicr2.im) != 0);
 
     //info("   [DMAC (IOP)] Master Interrupt Flag = {}, Channel Interrupt Enable = {}", .{dicr.mif, dmacIntEn.cie});
     info("   [DMAC (IOP)] Master Interrupt Flag = {}", .{dicr.mif});
 
-    if (dicr.mif and !dmacIntEn.mid) {
+    if (!oldMif and dicr.mif) {
         intc.sendInterruptIop(intc.IntSourceIop.Dma);
     }
 }
@@ -555,9 +558,9 @@ fn doCdvd() void {
         if (channels[chnId].bcr.len == 0) {
             channels[chnId].chcr.str = false;
 
-            transferEnd(chnId);
+            channels[chnId].bcr.set(0);
 
-            cdvd.sendInterrupt();
+            transferEnd(chnId);
         }
     }
 }
