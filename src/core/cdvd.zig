@@ -230,6 +230,9 @@ var  sectorNum: u32 = 0;
 
 var sCmdParam: u8 = undefined;
 
+var cyclesToRead: i32 = 0;
+var cyclesToSeek: i32 = 0;
+
 /// CDVD read buffer
 var readBuf: ReadBuffer = ReadBuffer{};
 
@@ -342,18 +345,16 @@ pub fn readDmac() u32 {
         data = @as(u32, readBuf.get()) | (@as(u32, readBuf.get()) << 8) | (@as(u32, readBuf.get()) << 16) | (@as(u32, readBuf.get()) << 24);
 
         if (readBuf.idx == readSize) {
+            dmac.setRequest(Channel.Cdvd, false);
+
+            sectorNum += 1;
+
             if (sectorNum == seekParam.num) {
-                dmac.setRequest(Channel.Cdvd, false);
-
                 sectorNum = 0;
-            } else {
-                doSeek();
 
-                if (nCmd == @enumToInt(NCommand.ReadCd)) {
-                    doReadCd();
-                } else {
-                    doReadDvd();
-                }
+                sendInterrupt();
+            } else {
+                cyclesToSeek = 1;
             }
             
             readBuf.clear();
@@ -458,7 +459,7 @@ pub fn sendInterrupt() void {
 
     nCmdStat = 0x40;
 
-    iStat |= 2;
+    iStat |= 3;
 
     intc.sendInterruptIop(IntSource.Cdvd);
 }
@@ -467,27 +468,32 @@ pub fn sendInterrupt() void {
 fn doSeek() void {
     info("   [CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}", .{seekParam.pos + sectorNum, seekParam.num, seekParam.size});
 
-    driveStat   = 0x12;
-    sDriveStat |= driveStat;
+    nCmdStat = 0x40;
 
-    //nCmdStat = 0x40;
-
-    cdvdFile.seekTo(seekParam.pos * seekParam.size + seekParam.size * sectorNum) catch {
+    cdvdFile.seekTo(seekParam.pos * seekParam.size) catch {
         err("   [CDVD      ] Unable to seek to sector.", .{});
 
         assert(false);
     };
 
-    sectorNum += 1;
+    cyclesToSeek = if (nCmd == 6) 1000 else 90_000;
+
+    driveStat   = 0x12;
+    sDriveStat |= driveStat;
 }
 
 /// Reads a CD sector
 fn doReadCd() void {
-    info("   [CDVD      ] Reading sector {}...", .{seekParam.pos});
+    info("   [CDVD      ] Reading CD sector {}...", .{seekParam.pos + sectorNum});
 
-    driveStat = 0x06;
-
+    driveStat   = 0x06;
     sDriveStat |= driveStat;
+
+    cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
+        err("   [CDVD      ] Unable to seek to sector.", .{});
+
+        assert(false);
+    };
 
     if (cdvdFile.reader().read(readBuf.buf[0..seekParam.size])) |bytesRead| {
         assert(bytesRead == seekParam.size);
@@ -498,17 +504,20 @@ fn doReadCd() void {
             assert(false);
         }
     }
-
-    dmac.setRequest(Channel.Cdvd, true);
 }
 
 /// Reads a DVD sector
 fn doReadDvd() void {
-    info("   [CDVD      ] Reading sector {}...", .{seekParam.pos});
+    err("  [CDVD      ] Reading DVD sector {}...", .{seekParam.pos + sectorNum});
 
-    driveStat = 0x06;
-
+    driveStat   = 0x06;
     sDriveStat |= driveStat;
+
+    cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
+        err("   [CDVD      ] Unable to seek to sector.", .{});
+
+        assert(false);
+    };
 
     if (cdvdFile.reader().read(readBuf.buf[12..2060])) |bytesRead| {
         assert(bytesRead == seekParam.size);
@@ -539,8 +548,6 @@ fn doReadDvd() void {
     readBuf.buf[2061] = 0;
     readBuf.buf[2062] = 0;
     readBuf.buf[2063] = 0;
-
-    dmac.setRequest(Channel.Cdvd, true);
 }
 
 /// OpenConfig
@@ -590,7 +597,6 @@ fn cmdReadCd() void {
     }
 
     doSeek();
-    doReadCd();
 }
 
 /// ReadConfig
@@ -631,7 +637,6 @@ fn cmdReadDvd() void {
     seekParam.size = 2048;
 
     doSeek();
-    doReadDvd();
 }
 
 /// ReadRtc
@@ -662,4 +667,30 @@ fn cmdUpdateStickyFlags() void {
     sCmdData.write(0);
 
     sCmdLen = 1;
+}
+
+pub fn step() void {
+    if (cyclesToRead > 0) {
+        cyclesToRead -= 1;
+
+        if (cyclesToRead == 0) {
+            dmac.setRequest(Channel.Cdvd, true);
+        }
+    }
+
+    if (cyclesToSeek > 0) {
+        cyclesToSeek -= 1;
+
+        if (cyclesToSeek == 0) {
+            if (nCmd == 6) {
+                doReadCd();
+                
+                cyclesToRead = 15_000;
+            } else {
+                doReadDvd();
+                
+                cyclesToRead = 30_720;
+            }
+        }
+    }
 }
