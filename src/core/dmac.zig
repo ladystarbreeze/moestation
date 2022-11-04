@@ -382,7 +382,7 @@ pub fn setEnable(data: u32) void {
 /// Sets request flag
 pub fn setRequest(chn: Channel, req: bool) void {
     if (!channels[@enumToInt(chn)].chcr.req and req) {
-        info("   [DMAC      ] {s} DMA requested.", .{@tagName(chn)});
+        // info("   [DMAC      ] {s} DMA requested.", .{@tagName(chn)});
     }
 
     channels[@enumToInt(chn)].chcr.req = req;
