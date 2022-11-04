@@ -155,8 +155,8 @@ const DmaStatus = struct {
     }
 };
 
-/// DMAtags
-const Tag = enum(u3) {
+/// Source Chain tags
+const SourceTag = enum(u3) {
     Refe,
     Cnt,
     Next,
@@ -165,6 +165,13 @@ const Tag = enum(u3) {
     Call,
     Ret,
     End,
+};
+
+/// Destination Chain tags
+const DestTag = enum(u3) {
+    Cnts,
+    Cnt,
+    End = 7,
 };
 
 var channels: [10]DmaChannel = undefined;
@@ -428,25 +435,25 @@ pub fn checkRunning() void {
     }
 }
 
-/// Decodes a DMAtag
-fn decodeTag(chnId: u4, dmaTag: u128) void {
-    info("   [DMAC      ] Tag = 0x{X:0>32}", .{dmaTag});
+/// Decodes a Source Chain DMAtag
+fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
+    info("   [DMAC      ] Source Chain tag = 0x{X:0>32}", .{dmaTag});
 
     channels[chnId].chcr.tag = @truncate(u16, dmaTag >> 16);
     channels[chnId].qwc = @truncate(u16, dmaTag);
 
-    const tag = @intToEnum(Tag, @truncate(u3, dmaTag >> 28));
+    const tag = @intToEnum(SourceTag, @truncate(u3, dmaTag >> 28));
 
     switch (tag) {
-        Tag.Cnt => {
-            channels[chnId].madr = @truncate(u32, dmaTag >> 32);
+        SourceTag.Cnt => {
+            channels[chnId].madr = channels[chnId].tadr + 8;
             channels[chnId].tadr = channels[chnId].madr + 8 * channels[chnId].qwc;
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
-        Tag.Next => {
+        SourceTag.Next => {
             channels[chnId].madr = channels[chnId].tadr + 8;
             channels[chnId].tadr = @truncate(u32, dmaTag >> 32);
 
@@ -454,7 +461,7 @@ fn decodeTag(chnId: u4, dmaTag: u128) void {
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
-        Tag.Ref => {
+        SourceTag.Ref => {
             channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
             channels[chnId].tadr += @sizeOf(u128);
 
@@ -462,7 +469,7 @@ fn decodeTag(chnId: u4, dmaTag: u128) void {
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
-        Tag.Refe => {
+        SourceTag.Refe => {
             channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
             channels[chnId].tadr += @sizeOf(u128);
 
@@ -471,7 +478,32 @@ fn decodeTag(chnId: u4, dmaTag: u128) void {
             channels[chnId].tagEnd = true;
         },
         else => {
-            err("  [DMAC      ] Unhandled tag {s}.", .{@tagName(tag)});
+            err("  [DMAC      ] Unhandled Source Chain tag {s}.", .{@tagName(tag)});
+
+            assert(false);
+        }
+    }
+}
+
+/// Decodes a Destination Chain tag
+fn decodeDestTag(chnId: u4, dmaTag: u128) void {
+    info("   [DMAC      ] Destination Chain tag = 0x{X:0>32}", .{dmaTag});
+
+    channels[chnId].chcr.tag = @truncate(u16, dmaTag >> 16);
+    channels[chnId].qwc = @truncate(u16, dmaTag);
+
+    const tag = @truncate(u3, dmaTag >> 28);
+
+    switch (tag) {
+        @enumToInt(DestTag.Cnt) => {
+            channels[chnId].madr = @truncate(u32, dmaTag >> 32);
+
+            info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        else => {
+            err("  [DMAC      ] Unhandled Destination Chain tag {}.", .{tag});
 
             assert(false);
         }
@@ -488,7 +520,7 @@ fn doSif0() void {
         // Read new tag
         const dmaTag = @as(u128, sif.readSif0(u64));
 
-        decodeTag(chnId, dmaTag);
+        decodeDestTag(chnId, dmaTag);
 
         if (channels[chnId].chcr.tte) {
             info("  [DMAC      ] Unhandled tag transfer.", .{});
@@ -520,7 +552,7 @@ fn doSif1() void {
         // Read new tag
         const dmaTag = bus.readDmac(channels[chnId].tadr);
 
-        decodeTag(chnId, dmaTag);
+        decodeSourceTag(chnId, dmaTag);
 
         if (channels[chnId].chcr.tte) {
             info("  [DMAC      ] Unhandled tag transfer.", .{});
