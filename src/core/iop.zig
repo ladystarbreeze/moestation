@@ -382,7 +382,7 @@ pub fn checkIntPending() void {
 
 /// Raises a generic CPU exception
 fn raiseException(excode: ExCode) void {
-    info("   [IOP       ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
+    //info("   [IOP       ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
 
     cop0.setExCode(excode);
     cop0.enterException();
@@ -1529,22 +1529,22 @@ fn iXori(instr: u32) void {
 pub fn step() void {
     regFile.cpc = regFile.pc;
 
-    if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
-        var ptr = regFile.get(@enumToInt(CpuReg.A1));
-        var len = regFile.get(@enumToInt(CpuReg.A2));
-
-        const stdOut = std.io.getStdOut().writer();
-
-        while (len != 0) : (len -= 1) {
-            const c = read(u8, ptr, true);
-
-            if (std.ascii.isPrint(c) or c == 0xA) {
-                stdOut.print("{c}", .{c}) catch unreachable;
-            }
-
-            ptr += 1;
-        }
-    }
+    //if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
+    //    var ptr = regFile.get(@enumToInt(CpuReg.A1));
+    //    var len = regFile.get(@enumToInt(CpuReg.A2));
+    //
+    //    const stdOut = std.io.getStdOut().writer();
+    //
+    //    while (len != 0) : (len -= 1) {
+    //        const c = read(u8, ptr, true);
+    //
+    //        if (std.ascii.isPrint(c) or c == 0xA) {
+    //            stdOut.print("{c}", .{c}) catch unreachable;
+    //        }
+    //
+    //        ptr += 1;
+    //    }
+    //}
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
