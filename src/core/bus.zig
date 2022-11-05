@@ -173,6 +173,22 @@ pub fn read(comptime T: type, addr: u32) T {
         }
 
         data = gif.read(addr);
+    } else if (addr >= @enumToInt(MemBase.Vif0) and addr < (@enumToInt(MemBase.Vif0) + @enumToInt(MemSize.Vif))) {
+        if (T != u32) {
+            @panic("Unhandled read @ VIF0 I/O");
+        }
+        
+        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (VIF0).", .{@typeName(T), addr});
+
+        data = 0;
+    } else if (addr >= @enumToInt(MemBase.Vif1) and addr < (@enumToInt(MemBase.Vif1) + @enumToInt(MemSize.Vif))) {
+        if (T != u32) {
+            @panic("Unhandled read @ VIF1 I/O");
+        }
+        
+        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (VIF1).", .{@typeName(T), addr});
+
+        data = 0;
     } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
         if (T != u32) {
             @panic("Unhandled read @ DMAC I/O");
@@ -185,6 +201,18 @@ pub fn read(comptime T: type, addr: u32) T {
         }
 
         data = sif.read(addr);
+    } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
+        if (T != u64) {
+            @panic("Unhandled read @ GS I/O");
+        }
+
+        err("  [Bus       ] Read ({s}) @ 0x{X:0>8} (GS).", .{@typeName(T), addr});
+
+        if (addr == 0x1200_1000) {
+            data = ~@as(u64, 0);
+        } else {
+            data = 0;
+        }
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
@@ -198,7 +226,7 @@ pub fn read(comptime T: type, addr: u32) T {
                     @panic("Unhandled read @ INTC_STAT");
                 }
 
-                info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (INTC_STAT).", .{@typeName(T), addr});
+                //info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (INTC_STAT).", .{@typeName(T), addr});
 
                 data = intc.getStat();
             },
@@ -333,9 +361,13 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
         data = dmacIop.read(addr);
     } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
-        warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (SPU2).", .{@typeName(T), addr});
+        //warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (SPU2).", .{@typeName(T), addr});
 
-        data = 0;
+        if (addr == 0x1F90_0344) {
+            data = 1 << 7;
+        } else {
+            data = 0;
+        }
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -375,6 +407,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
             },
             0x1E00_0000 ... 0x1E00_8000,
             0x1F80_100C,
+            0x1F80_1014,
             0x1F80_1400, 0x1F80_1414,
             0x1F80_1578 => {
                 warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
@@ -584,7 +617,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
 /// Reads data from the system bus (for DMAC)
 pub fn writeDmac(addr: u32, data: u128) void {
-    info("   [Bus (DMAC)] [0x{X:0>8}] = 0x{X:0>32}", .{addr, data});
+    //info("   [Bus (DMAC)] [0x{X:0>8}] = 0x{X:0>32}", .{addr, data});
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(u128));
@@ -671,6 +704,8 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
 
 /// Writes data to the IOP bus (from IOP DMA)
 pub fn writeIopDmac(addr: u24, data: u32) void {
+    //info("   [Bus (DMAC)] [0x{X:0>6}] = 0x{X:0>8}", .{addr, data});
+
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(u32));
     } else {
