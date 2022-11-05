@@ -12,6 +12,10 @@ const assert = std.debug.assert;
 const err  = std.log.err;
 const info = std.log.info;
 
+const intc = @import("intc.zig");
+
+const IntSource = intc.IntSource;
+
 /// GS privileged registers
 const PrivReg = enum(u32) {
     Pmode    = 0x1200_0000,
@@ -34,6 +38,13 @@ const PrivReg = enum(u32) {
     Busdir   = 0x1200_1040,
     Siglblid = 0x1200_1080,
 };
+
+const cyclesFrame: i64 = 147_000_000 / 60;
+const  cyclesLine: i64 = cyclesFrame / 544;
+const  cyclesInit: i64 = cyclesLine * 480;
+
+/// Simple VBLANK cycle counter
+var cyclesToVblank = cyclesInit;
 
 /// Writes data to privileged register
 pub fn writePriv(addr: u32, data: u64) void {
@@ -65,8 +76,17 @@ pub fn writePriv(addr: u32, data: u64) void {
         },
         else => {
             err("  [GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
-
-            assert(false);
         }
+    }
+}
+
+/// Steps the GS module
+pub fn step(cyclesElapsed: i64) void {
+    cyclesToVblank -= cyclesElapsed;
+
+    if (cyclesToVblank <= 0) {
+        cyclesToVblank = cyclesFrame;
+
+        intc.sendInterrupt(IntSource.VblankStart);
     }
 }
