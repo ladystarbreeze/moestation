@@ -265,7 +265,7 @@ pub fn read(addr: u32) u8 {
             data = nCmd;
         },
         @enumToInt(CdvdReg.NCmdStat) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (N Command Status).", .{addr});
+            //info("   [CDVD      ] Read @ 0x{X:0>8} (N Command Status).", .{addr});
 
             data = nCmdStat;
         },
@@ -508,7 +508,7 @@ fn doReadCd() void {
 
 /// Reads a DVD sector
 fn doReadDvd() void {
-    err("  [CDVD      ] Reading DVD sector {}...", .{seekParam.pos + sectorNum});
+    info("   [CDVD      ] Reading DVD sector {}...", .{seekParam.pos + sectorNum});
 
     driveStat   = 0x06;
     sDriveStat |= driveStat;
@@ -685,11 +685,12 @@ pub fn step() void {
             if (nCmd == 6) {
                 doReadCd();
                 
-                cyclesToRead = 15_000;
+                // NOTE: This speeds up the boot process
+                cyclesToRead = 150;
             } else {
                 doReadDvd();
                 
-                cyclesToRead = 30_720;
+                cyclesToRead = 15_000;
             }
         }
     }
