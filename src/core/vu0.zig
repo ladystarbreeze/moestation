@@ -15,13 +15,14 @@ const warn = std.log.warn;
 
 /// Macro mode control registers
 const ControlReg = enum(u5) {
-    Sf     = 16,
-    Cf     = 18,
-    R      = 20,
-    I      = 21,
-    Q      = 22,
-    Cmsar0 = 27,
-    Fbrst  = 28,
+    Sf      = 16,
+    Cf      = 18,
+    R       = 20,
+    I       = 21,
+    Q       = 22,
+    Cmsar0  = 27,
+    Fbrst   = 28,
+    VpuStat = 29,
 };
 
 /// Vector elements
@@ -154,6 +155,11 @@ pub fn getControl(comptime T: type, idx: u5) T {
         },
         @enumToInt(ControlReg.Fbrst) => {
             info("   [VU0 (COP2)] Control register read ({s}) @ $FBRST.", .{@typeName(T)});
+
+            data = 0;
+        },
+        @enumToInt(ControlReg.VpuStat) => {
+            info("   [VU0 (COP2)] Control register read ({s}) @ $VPU_STAT.", .{@typeName(T)});
 
             data = 0;
         },
