@@ -239,6 +239,7 @@ var dmacIntEn: DmacIntEn = DmacIntEn{};
 /// Initializes DMA module
 pub fn init() void {
     // Set SIF0 request bit for first transfer
+    channels[@enumToInt(Channel.Spu1)].chcr.req = true;
     channels[@enumToInt(Channel.Sif0)].chcr.req = true;
 }
 
@@ -464,6 +465,8 @@ fn transferEnd(chnId: u4) void {
 
     //info("   [DMAC (IOP)] DICR = 0b{b:0>6}{b:0>7}", .{dicr2.im, dicr.im});
 
+    channels[chnId].tagEnd = false;
+
     if (chnId < 7) {
         if ((dicr.im & (@as(u7, 1) << @truncate(u3, chnId))) != 0) {
             dicr.ip |= @as(u7, 1) << @truncate(u3, chnId);
@@ -519,6 +522,7 @@ pub fn checkRunning() void {
 
             switch (chn) {
                 Channel.Cdvd => doCdvd(),
+                Channel.Spu1 => doSpu1(),
                 Channel.Sif0 => doSif0(),
                 Channel.Sif1 => doSif1(),
                 else => {
@@ -653,6 +657,38 @@ fn doSif1() void {
 
         if (channels[chnId].bcr.count == 0 and channels[chnId].tagEnd) {
             channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
+    }
+}
+
+/// Performs SPU1 DMA
+fn doSpu1() void {
+    const chnId = @enumToInt(Channel.Spu1);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
+    assert(!channels[chnId].chcr.inc);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Spu1)});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    } else {
+        channels[chnId].bcr.len -= 1;
+        
+        const data = bus.readDmacIop(channels[chnId].madr);
+
+        info("   [DMAC (IOP)] SPU1 = 0x{X:0>8}", .{data});
+
+        channels[chnId].madr +%= 4;
+
+        if (channels[chnId].bcr.len == 0) {
+            channels[chnId].chcr.str = false;
+
+            channels[chnId].bcr.set(0);
 
             transferEnd(chnId);
         }
