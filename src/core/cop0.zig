@@ -459,7 +459,7 @@ pub fn set(comptime T: type, idx: u5, data: T) void {
         }
     }
 
-    info("   [COP0 (EE) ] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
+    // info("   [COP0 (EE) ] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 }
 
 /// Sets BD bit
