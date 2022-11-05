@@ -183,7 +183,7 @@ pub fn get(idx: u5) u32 {
         }
     }
 
-    info("   [COP0 (IOP)] Register read @ {s}.", .{@tagName(@intToEnum(Cop0Reg, idx))});
+    //info("   [COP0 (IOP)] Register read @ {s}.", .{@tagName(@intToEnum(Cop0Reg, idx))});
 
     return data;
 }
@@ -229,7 +229,7 @@ pub fn set(idx: u5, data: u32) void {
         }
     }
 
-    info("   [COP0 (IOP)] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
+    //info("   [COP0 (IOP)] Register write @ {s} = 0x{X:0>8}.", .{@tagName(@intToEnum(Cop0Reg, idx)), data});
 }
 
 /// Sets BD bit
