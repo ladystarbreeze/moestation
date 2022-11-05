@@ -16,6 +16,7 @@ const cdvd     = @import("core/cdvd.zig");
 const cpu      = @import("core/cpu.zig");
 const dmac     = @import("core/dmac.zig");
 const dmacIop  = @import("core/dmac_iop.zig");
+const gs       = @import("core/gs.zig");
 const iop      = @import("core/iop.zig");
 const timerIop = @import("core/timer_iop.zig");
 
@@ -58,6 +59,8 @@ pub fn main() void {
 
             dmac.checkRunning();
         }
+
+        gs.step(4);
 
         iop.step();
         timerIop.step();
