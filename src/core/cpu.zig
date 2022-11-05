@@ -117,12 +117,14 @@ const Special = enum(u6) {
     Dsllv   = 0x14,
     Dsrav   = 0x17,
     Mult    = 0x18,
+    Multu   = 0x19,
     Div     = 0x1A,
     Divu    = 0x1B,
     Addu    = 0x21,
     Subu    = 0x23,
     And     = 0x24,
     Or      = 0x25,
+    Xor     = 0x26,
     Nor     = 0x27,
     Mfsa    = 0x28,
     Mtsa    = 0x29,
@@ -132,6 +134,7 @@ const Special = enum(u6) {
     Dsubu   = 0x2F,
     Dsll    = 0x38,
     Dsrl    = 0x3A,
+    Dsra    = 0x3B,
     Dsll32  = 0x3C,
     Dsrl32  = 0x3E,
     Dsra32  = 0x3F,
@@ -211,6 +214,7 @@ const Mmi2Opcode = enum(u5) {
     Pmflo  = 0x09,
     Pcpyld = 0x0E,
     Pand   = 0x12,
+    Pxor   = 0x13,
 };
 
 /// MMI3 instructions
@@ -220,6 +224,7 @@ const Mmi3Opcode = enum(u5) {
     Pcpyud = 0x0E,
     Por    = 0x12,
     Pnor   = 0x13,
+    Pcpyh  = 0x1B,
 };
 
 /// EE Core General-purpose register
@@ -481,12 +486,14 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Dsllv  ) => iDsllv(instr),
                 @enumToInt(Special.Dsrav  ) => iDsrav(instr),
                 @enumToInt(Special.Mult   ) => iMult(instr, 0),
+                @enumToInt(Special.Multu  ) => iMultu(instr, 0),
                 @enumToInt(Special.Div    ) => iDiv(instr),
                 @enumToInt(Special.Divu   ) => iDivu(instr, 0),
                 @enumToInt(Special.Addu   ) => iAddu(instr),
                 @enumToInt(Special.Subu   ) => iSubu(instr),
                 @enumToInt(Special.And    ) => iAnd(instr),
                 @enumToInt(Special.Or     ) => iOr(instr),
+                @enumToInt(Special.Xor    ) => iXor(instr),
                 @enumToInt(Special.Nor    ) => iNor(instr),
                 @enumToInt(Special.Mfsa   ) => iMfsa(instr),
                 @enumToInt(Special.Mtsa   ) => iMtsa(instr),
@@ -496,6 +503,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Dsubu  ) => iDsubu(instr),
                 @enumToInt(Special.Dsll   ) => iDsll(instr),
                 @enumToInt(Special.Dsrl   ) => iDsrl(instr),
+                @enumToInt(Special.Dsra   ) => iDsra(instr),
                 @enumToInt(Special.Dsll32 ) => iDsll32(instr),
                 @enumToInt(Special.Dsrl32 ) => iDsrl32(instr),
                 @enumToInt(Special.Dsra32 ) => iDsra32(instr),
@@ -682,6 +690,7 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Mmi2Opcode.Pmflo ) => iPmflo(instr),
                         @enumToInt(Mmi2Opcode.Pcpyld) => iPcpyld(instr),
                         @enumToInt(Mmi2Opcode.Pand  ) => iPand(instr),
+                        @enumToInt(Mmi2Opcode.Pxor  ) => iPxor(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI2 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -716,6 +725,7 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Mmi3Opcode.Pcpyud) => iPcpyud(instr),
                         @enumToInt(Mmi3Opcode.Por   ) => iPor(instr),
                         @enumToInt(Mmi3Opcode.Pnor  ) => iPnor(instr),
+                        @enumToInt(Mmi3Opcode.Pcpyh ) => iPcpyh(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI3 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -772,7 +782,7 @@ pub fn checkIntPending() void {
 
 /// Raises a generic Level 1 CPU exception
 fn raiseExceptionL1(excode: ExCode) void {
-    info("   [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
+    //info("   [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
 
     cop0.setExCode(excode);
 
@@ -1304,6 +1314,23 @@ fn iDsllv(instr: u32) void {
     }
 }
 
+/// Doubleword Shift Right Arithmetic
+fn iDsra(instr: u32) void {
+    const sa = getSa(instr);
+
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, @bitCast(u64, @bitCast(i64, regFile.get(u64, rt)) >> @as(u6, sa)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
 /// Doubleword Shift Right Arithmetic Variable
 fn iDsrav(instr: u32) void {
     const rd = getRd(instr);
@@ -1663,7 +1690,7 @@ fn iLq(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LD ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        info("   [EE Core   ] LQ ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u128, rt, data);
@@ -2073,6 +2100,39 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
     }
 }
 
+/// MULTiply Unsigned
+fn iMultu(instr: u32, comptime pipeline: u1) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = @as(u64, regFile.get(u32, rs)) *% @as(u64, regFile.get(u32, rt));
+
+    if (pipeline == 1) {
+        regFile.lo.setHi(u32, @truncate(u32, res));
+        regFile.hi.setHi(u32, @truncate(u32, res >> 32));
+    } else {
+        regFile.lo.set(u32, @truncate(u32, res));
+        regFile.hi.set(u32, @truncate(u32, res >> 32));
+    }
+
+    regFile.set(u32, rd, @truncate(u32, res));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        const isPipe1 = if (pipeline == 1) "1" else "";
+
+        if (rd == 0) {
+            info("   [EE Core   ] MULTU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        } else {
+            info("   [EE Core   ] MULTU{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+        }
+    }
+}
+
 /// NOR
 fn iNor(instr: u32) void {
     const rd = getRd(instr);
@@ -2171,6 +2231,26 @@ fn iPand(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PAND ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel CoPY Low Halfword
+fn iPcpyh(instr: u32) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    const rtLo = regFile.get(u128, rt) & 0xFF;
+    const rtHi = regFile.get(u128, rt) & (0xFF << 64);
+
+    const res = rtLo | (rtLo << 16) | (rtLo << 32) | (rtLo << 48) | rtHi | (rtHi << 16) | (rtHi << 32) | (rtHi << 48);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PCPYH ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
     }
 }
 
@@ -2393,6 +2473,25 @@ fn iPsubb(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PSUBB ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel XOR
+fn iPxor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u128, rs) ^ regFile.get(u128, rt);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PXOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2919,6 +3018,25 @@ fn iTlbwi() void {
     }
 
     cop0.setEntryIndexed();
+}
+
+/// XOR
+fn iXor(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const res = regFile.get(u64, rs) ^ regFile.get(u64, rt);
+
+    regFile.set(u64, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] XOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
 }
 
 /// XOR Immediate
