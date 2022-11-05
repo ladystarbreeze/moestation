@@ -15,7 +15,7 @@ const info = std.log.info;
 const iop = @import("iop.zig");
 
 /// Interrupt sources
-const IntSource = enum(u4) {
+pub const IntSource = enum(u4) {
     Gs,
     Sbus,
     VblankStart,
@@ -170,6 +170,16 @@ pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
     }
 
     checkInterruptIop();
+}
+
+/// Sends an EE interrupt request
+pub fn sendInterrupt(src: IntSource) void {
+    info("   [INTC      ] {s} interrupt request.", .{@tagName(src)});
+    info("   [INTC      ] INTC_MASK = 0b{b:0>15}", .{intcMask});
+
+    intcStat |= @as(u15, 1) << @enumToInt(src);
+
+    checkInterrupt();
 }
 
 /// Sends an IOP interrupt request
