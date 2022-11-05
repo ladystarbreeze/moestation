@@ -48,12 +48,13 @@ const ChannelReg = enum(u32) {
 
 /// DMA control registers
 const ControlReg = enum(u32) {
-    DCtrl = 0x1000_E000,
-    DStat = 0x1000_E010,
-    DPcr  = 0x1000_E020,
-    DSqwc = 0x1000_E030,
-    DRbsr = 0x1000_E040,
-    DRbor = 0x1000_E050,
+    DCtrl  = 0x1000_E000,
+    DStat  = 0x1000_E010,
+    DPcr   = 0x1000_E020,
+    DSqwc  = 0x1000_E030,
+    DRbsr  = 0x1000_E040,
+    DRbor  = 0x1000_E050,
+    DStadr = 0x1000_E060,
 };
 
 /// DMA direction
@@ -116,6 +117,7 @@ const DmaChannel = struct {
       asr1: u32            = undefined, // Address Stack Register 1
       sadr: u32            = undefined, // Scratchpad ADdress Register
     tagEnd: bool           = undefined,
+    hasTag: bool           = false,
 };
 
 /// D_STAT register
@@ -184,8 +186,14 @@ var   dctrl: u32 = undefined;
 
 /// Initializes the DMAC module
 pub fn init() void {
-    // Set SIF1 request bit for first transfer
+    channels[@enumToInt(Channel.Vif0)].chcr.req = true;
+    channels[@enumToInt(Channel.Vif1)].chcr.req = true;
+    channels[@enumToInt(Channel.Path3)].chcr.req = true;
+
     channels[@enumToInt(Channel.Sif1)].chcr.req = true;
+
+    channels[@enumToInt(Channel.SprFrom)].chcr.req = true;
+    channels[@enumToInt(Channel.SprTo)].chcr.req = true;
 }
 
 /// Returns the DMA channel number
@@ -278,6 +286,26 @@ pub fn read(addr: u32) u32 {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_PCR).", .{addr});
 
                 data = dpcr;
+            },
+            @enumToInt(ControlReg.DSqwc) => {
+                warn("[DMAC      ] Read @ 0x{X:0>8} (D_SQWC).", .{addr});
+
+                data = 0;
+            },
+            @enumToInt(ControlReg.DRbsr) => {
+                warn("[DMAC      ] Read @ 0x{X:0>8} (D_RBSR).", .{addr});
+
+                data = 0;
+            },
+            @enumToInt(ControlReg.DRbor) => {
+                warn("[DMAC      ] Read @ 0x{X:0>8} (D_RBOR).", .{addr});
+
+                data = 0;
+            },
+            @enumToInt(ControlReg.DStadr) => {
+                warn("[DMAC      ] Read @ 0x{X:0>8} (D_STADR).", .{addr});
+
+                data = 0;
             },
             else => {
                 err("  [DMAC      ] Unhandled read @ 0x{X:0>8}.", .{addr});
@@ -399,6 +427,9 @@ pub fn setRequest(chn: Channel, req: bool) void {
 fn transferEnd(chnId: u4) void {
     info("   [DMAC      ] Channel {} transfer end.", .{chnId});
 
+    channels[chnId].tagEnd = false;
+    channels[chnId].hasTag = false;
+
     dStat.ip |= @as(u10, 1) << chnId;
 
     checkInterrupt();
@@ -421,8 +452,9 @@ pub fn checkRunning() void {
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
-                Channel.Sif0 => doSif0(),
-                Channel.Sif1 => doSif1(),
+                Channel.Path3 => doPath3(),
+                Channel.Sif0  => doSif0(),
+                Channel.Sif1  => doSif1(),
                 else => {
                     err("  [DMAC      ] Unhandled channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
 
@@ -498,7 +530,7 @@ fn decodeDestTag(chnId: u4, dmaTag: u128) void {
         @enumToInt(DestTag.Cnt) => {
             channels[chnId].madr = @truncate(u32, dmaTag >> 32);
 
-            info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+            info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
@@ -506,6 +538,44 @@ fn decodeDestTag(chnId: u4, dmaTag: u128) void {
             err("  [DMAC      ] Unhandled Destination Chain tag {}.", .{tag});
 
             assert(false);
+        }
+    }
+}
+
+/// Performs a PATH3 transfer
+fn doPath3() void {
+    const chnId = @enumToInt(Channel.Path3);
+
+    if (channels[chnId].qwc == 0) {
+        info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Path3)});
+
+        // Read new tag
+        const dmaTag = bus.readDmac(channels[chnId].tadr);
+
+        decodeSourceTag(chnId, dmaTag);
+
+        channels[chnId].hasTag = true;
+
+        if (channels[chnId].chcr.tte) {
+            info("  [DMAC      ] Unhandled tag transfer.", .{});
+            
+            assert(false);
+        }
+    } else {
+        if (!channels[chnId].hasTag) {
+            info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
+        }
+
+        channels[chnId].qwc -= 1;
+
+        warn("[DMAC      ] Write @ GIF = 0x{X:0>32}.", .{channels[chnId].madr});
+
+        channels[chnId].madr += @sizeOf(u128);
+        
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
         }
     }
 }
@@ -554,12 +624,18 @@ fn doSif1() void {
 
         decodeSourceTag(chnId, dmaTag);
 
+        channels[chnId].hasTag = true;
+
         if (channels[chnId].chcr.tte) {
             info("  [DMAC      ] Unhandled tag transfer.", .{});
             
             assert(false);
         }
     } else {
+        if (!channels[chnId].hasTag) {
+            assert(false);
+        }
+
         channels[chnId].qwc -= 1;
 
         sif.writeSif1(bus.readDmac(channels[chnId].madr));
