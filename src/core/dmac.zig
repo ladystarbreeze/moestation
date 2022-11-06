@@ -477,6 +477,14 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
     const tag = @intToEnum(SourceTag, @truncate(u3, dmaTag >> 28));
 
     switch (tag) {
+        SourceTag.Refe => {
+            channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
+            channels[chnId].tadr += @sizeOf(u128);
+
+            info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = true;
+        },
         SourceTag.Cnt => {
             channels[chnId].madr = channels[chnId].tadr + 8;
             channels[chnId].tadr = channels[chnId].madr + 8 * channels[chnId].qwc;
@@ -501,11 +509,20 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
-        SourceTag.Refe => {
+        SourceTag.Refs => {
+            // TODO: stalls
             channels[chnId].madr  = @truncate(u32, dmaTag >> 32);
             channels[chnId].tadr += @sizeOf(u128);
 
-            info("   [DMAC      ] New tag: refe. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+            info("   [DMAC      ] New tag: refs. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        SourceTag.End => {
+            channels[chnId].madr = channels[chnId].tadr + 8;
+            channels[chnId].tadr += @sizeOf(u128);
+
+            info("   [DMAC      ] New tag: end. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = true;
         },
