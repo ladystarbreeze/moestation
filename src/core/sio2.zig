@@ -56,10 +56,13 @@ const DeviceStatus = enum(u32) {
 
 /// SIO2 Pad commands
 const PadCommand = enum(u8) {
-    ReadData   = 0x42,
-    ConfigMode = 0x43,
-    QueryModel = 0x45,
-    QueryAct   = 0x46,
+    ReadData        = 0x42,
+    ConfigMode      = 0x43,
+    QueryModel      = 0x45,
+    QueryAct        = 0x46,
+    QueryComb       = 0x47,
+    QueryMode       = 0x4C,
+    VibrationToggle = 0x4D,
 };
 
 /// Pad state
@@ -94,6 +97,9 @@ var activeDev: Device = undefined;
 
 /// Pad state
 var padState = PadState.Digital;
+
+/// Rumble values (stub)
+var rumble = [_]u8 {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /// Reads data from SIO2
 pub fn read(comptime T: type, addr: u32) T {
@@ -335,10 +341,13 @@ fn doPadCmd() void {
     const cmd = sio2FifoIn.readItem().?;
 
     switch (cmd) {
-        @enumToInt(PadCommand.ReadData  ) => cmdPadReadData(),
-        @enumToInt(PadCommand.ConfigMode) => cmdPadConfigMode(),
-        @enumToInt(PadCommand.QueryModel) => cmdPadQueryModel(),
-        @enumToInt(PadCommand.QueryAct  ) => cmdPadQueryAct(),
+        @enumToInt(PadCommand.ReadData       ) => cmdPadReadData(),
+        @enumToInt(PadCommand.ConfigMode     ) => cmdPadConfigMode(),
+        @enumToInt(PadCommand.QueryModel     ) => cmdPadQueryModel(),
+        @enumToInt(PadCommand.QueryAct       ) => cmdPadQueryAct(),
+        @enumToInt(PadCommand.QueryComb      ) => cmdPadQueryComb(),
+        @enumToInt(PadCommand.QueryMode      ) => cmdPadQueryMode(),
+        @enumToInt(PadCommand.VibrationToggle) => cmdPadVibrationToggle(),
         else => {
             err("  [SIO2      ] Unhandled pad command 0x{X:0>2}.", .{cmd});
 
@@ -391,7 +400,7 @@ fn cmdPadConfigMode() void {
 
 /// Pad Query Act
 fn cmdPadQueryAct() void {
-    info("   [SIO2 (Pad)] Query Model", .{});
+    info("   [SIO2 (Pad)] Query Act", .{});
 
     // Remove header
     sio2FifoIn.discard(1);
@@ -421,6 +430,57 @@ fn cmdPadQueryAct() void {
         writeFifoOut(0x00);
         writeFifoOut(0x0A);
     }
+}
+
+/// Pad Query Comb
+fn cmdPadQueryComb() void {
+    info("   [SIO2 (Pad)] Query Comb", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x02);
+    writeFifoOut(0x00);
+    writeFifoOut(0x01);
+    writeFifoOut(0x00);
+}
+
+/// Pad Query Mode
+fn cmdPadQueryMode() void {
+    info("   [SIO2 (Pad)] Query Mode", .{});
+
+    // Remove header
+    sio2FifoIn.discard(1);
+
+    const index = sio2FifoIn.readItem().? == 1;
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 4);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+
+    if (index) {
+        writeFifoOut(0x07);
+    } else {
+        writeFifoOut(0x04);
+    }
+
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
 }
 
 /// Pad Query Model
@@ -458,4 +518,33 @@ fn cmdPadReadData() void {
     // Send button state
     writeFifoOut(0xFF);
     writeFifoOut(0xFF);
+}
+
+/// Pad Vibration Toggle
+fn cmdPadVibrationToggle() void {
+    info("   [SIO2 (Pad)] Vibration Toggle", .{});
+
+    // Remove header
+    sio2FifoIn.discard(1);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    // Send old rumble values
+    writeFifoOut(rumble[0]);
+    writeFifoOut(rumble[1]);
+    writeFifoOut(rumble[2]);
+    writeFifoOut(rumble[3]);
+    writeFifoOut(rumble[4]);
+    writeFifoOut(rumble[5]);
+
+    // Get new rumble values
+    rumble[0] = sio2FifoIn.readItem().?;
+    rumble[1] = sio2FifoIn.readItem().?;
+    rumble[2] = sio2FifoIn.readItem().?;
+    rumble[3] = sio2FifoIn.readItem().?;
+    rumble[4] = sio2FifoIn.readItem().?;
+    rumble[5] = sio2FifoIn.readItem().?;
 }
