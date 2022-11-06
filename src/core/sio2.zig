@@ -58,6 +58,8 @@ const DeviceStatus = enum(u32) {
 const PadCommand = enum(u8) {
     ReadData   = 0x42,
     ConfigMode = 0x43,
+    QueryModel = 0x45,
+    QueryAct   = 0x46,
 };
 
 /// Pad state
@@ -335,6 +337,8 @@ fn doPadCmd() void {
     switch (cmd) {
         @enumToInt(PadCommand.ReadData  ) => cmdPadReadData(),
         @enumToInt(PadCommand.ConfigMode) => cmdPadConfigMode(),
+        @enumToInt(PadCommand.QueryModel) => cmdPadQueryModel(),
+        @enumToInt(PadCommand.QueryAct  ) => cmdPadQueryAct(),
         else => {
             err("  [SIO2      ] Unhandled pad command 0x{X:0>2}.", .{cmd});
 
@@ -383,6 +387,60 @@ fn cmdPadConfigMode() void {
         writeFifoOut(0);
         writeFifoOut(0);
     }
+}
+
+/// Pad Query Act
+fn cmdPadQueryAct() void {
+    info("   [SIO2 (Pad)] Query Model", .{});
+
+    // Remove header
+    sio2FifoIn.discard(1);
+
+    const index = sio2FifoIn.readItem().? == 1;
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 4);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    if (index) {
+        writeFifoOut(0x00);
+        writeFifoOut(0x00);
+        writeFifoOut(0x01);
+        writeFifoOut(0x01);
+        writeFifoOut(0x01);
+        writeFifoOut(0x14);
+    } else {
+        writeFifoOut(0x00);
+        writeFifoOut(0x00);
+        writeFifoOut(0x01);
+        writeFifoOut(0x02);
+        writeFifoOut(0x00);
+        writeFifoOut(0x0A);
+    }
+}
+
+/// Pad Query Model
+fn cmdPadQueryModel() void {
+    info("   [SIO2 (Pad)] Query Model", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    writeFifoOut(0x03); // Send model (DualShock 2)
+    writeFifoOut(0x02);
+    writeFifoOut(0x00); // Send mode (digital)
+    writeFifoOut(0x02);
+    writeFifoOut(0x01);
+    writeFifoOut(0x00);
 }
 
 /// Pad Read Data
