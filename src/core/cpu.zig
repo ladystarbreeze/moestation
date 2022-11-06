@@ -115,6 +115,7 @@ const Special = enum(u6) {
     Mflo    = 0x12,
     Mtlo    = 0x13,
     Dsllv   = 0x14,
+    Dsrlv   = 0x16,
     Dsrav   = 0x17,
     Mult    = 0x18,
     Multu   = 0x19,
@@ -199,6 +200,7 @@ const MmiOpcode = enum(u6) {
 
 /// MMI0 instructions
 const Mmi0Opcode = enum(u5) {
+    Psubw  = 0x01,
     Psubb  = 0x09,
     Pextlw = 0x12,
 };
@@ -484,6 +486,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Mflo   ) => iMflo(instr, false),
                 @enumToInt(Special.Mtlo   ) => iMtlo(instr, false),
                 @enumToInt(Special.Dsllv  ) => iDsllv(instr),
+                @enumToInt(Special.Dsrlv  ) => iDsrlv(instr),
                 @enumToInt(Special.Dsrav  ) => iDsrav(instr),
                 @enumToInt(Special.Mult   ) => iMult(instr, 0),
                 @enumToInt(Special.Multu  ) => iMultu(instr, 0),
@@ -673,6 +676,7 @@ fn decodeInstr(instr: u32) void {
                     const sa = getSa(instr);
 
                     switch (sa) {
+                        @enumToInt(Mmi0Opcode.Psubw ) => iPsubw(instr),
                         @enumToInt(Mmi0Opcode.Psubb ) => iPsubb(instr),
                         @enumToInt(Mmi0Opcode.Pextlw) => iPextlw(instr),
                         else => {
@@ -1379,6 +1383,23 @@ fn iDsrl(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] DSRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// Doubleword Shift Right Logical Variable
+fn iDsrlv(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    regFile.set(u64, rd, regFile.get(u64, rt) >> @truncate(u6, regFile.get(u64, rs)));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] DSRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -2473,6 +2494,33 @@ fn iPsubb(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PSUBB ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel SUBtract Word
+fn iPsubw(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const a = regFile.get(u128, rs);
+    const b = regFile.get(u128, rt);
+
+    var res: u128 = 0;
+
+    var i: u7 = 0;
+    while (i < 4) : (i += 1) {
+        res |= @as(u128, @truncate(u32, a >> (32 * i)) -% @truncate(u32, b >> (32 * i))) << (32 * i);
+    }
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PSUBW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
