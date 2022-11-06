@@ -56,6 +56,7 @@ const DeviceStatus = enum(u32) {
 
 /// SIO2 Pad commands
 const PadCommand = enum(u8) {
+    QueryMaskedMode = 0x41,
     ReadData        = 0x42,
     ConfigMode      = 0x43,
     QueryModel      = 0x45,
@@ -341,6 +342,7 @@ fn doPadCmd() void {
     const cmd = sio2FifoIn.readItem().?;
 
     switch (cmd) {
+        @enumToInt(PadCommand.QueryMaskedMode) => cmdPadQueryMaskedMode(),
         @enumToInt(PadCommand.ReadData       ) => cmdPadReadData(),
         @enumToInt(PadCommand.ConfigMode     ) => cmdPadConfigMode(),
         @enumToInt(PadCommand.QueryModel     ) => cmdPadQueryModel(),
@@ -449,6 +451,27 @@ fn cmdPadQueryComb() void {
     writeFifoOut(0x02);
     writeFifoOut(0x00);
     writeFifoOut(0x01);
+    writeFifoOut(0x00);
+}
+
+/// Pad Query Masked Mode
+fn cmdPadQueryMaskedMode() void {
+    info("   [SIO2 (Pad)] Query Masked Mode", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    // Send 0 bytes (digital)
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
     writeFifoOut(0x00);
 }
 
