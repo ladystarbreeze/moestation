@@ -26,6 +26,7 @@ const gif      = @import("gif.zig");
 const gs       = @import("gs.zig");
 const intc     = @import("intc.zig");
 const sif      = @import("sif.zig");
+const sio2     = @import("sio2.zig");
 const timer    = @import("timer.zig");
 const timerIop = @import("timer_iop.zig");
 const vu0      = @import("vu0.zig");
@@ -360,6 +361,8 @@ pub fn readIop(comptime T: type, addr: u32) T {
         }
 
         data = dmacIop.read(addr);
+    } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
+        data = sio2.read(T, addr);
     } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
         //warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (SPU2).", .{@typeName(T), addr});
 
@@ -653,7 +656,7 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
         dmacIop.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SIO2) = 0x{X}.", .{@typeName(T), addr, data});
+        sio2.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
         warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SPU2) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
