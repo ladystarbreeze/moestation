@@ -91,5 +91,8 @@ pub fn step(cyclesElapsed: i64) void {
 
         intc.sendInterrupt(IntSource.VblankStart);
         intc.sendInterruptIop(IntSourceIop.VblankStart);
+    } else if (cyclesToVblank == cyclesInit) {
+        intc.sendInterrupt(IntSource.VblankEnd);
+        intc.sendInterruptIop(IntSourceIop.VblankEnd);
     }
 }
