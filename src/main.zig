@@ -16,6 +16,7 @@ const cdvd     = @import("core/cdvd.zig");
 const cpu      = @import("core/cpu.zig");
 const dmac     = @import("core/dmac.zig");
 const dmacIop  = @import("core/dmac_iop.zig");
+const gif      = @import("core/gif.zig");
 const gs       = @import("core/gs.zig");
 const iop      = @import("core/iop.zig");
 const timerIop = @import("core/timer_iop.zig");
@@ -54,10 +55,13 @@ pub fn main() void {
     while (true) {
         var i: i32 = 0;
 
-        while (i < 8) : (i += 1) {
+        while (i < 4) : (i += 1) {
+            cpu.step();
             cpu.step();
 
             dmac.checkRunning();
+
+            gif.step();
         }
 
         gs.step(4);
