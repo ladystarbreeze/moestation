@@ -11,10 +11,12 @@ const assert = std.debug.assert;
 
 const err  = std.log.err;
 const info = std.log.info;
+const warn = std.log.warn;
 
 const intc = @import("intc.zig");
 
 const IntSource = intc.IntSource;
+const IntSourceIop = intc.IntSourceIop;
 
 /// GS privileged registers
 const PrivReg = enum(u32) {
@@ -71,11 +73,11 @@ pub fn writePriv(addr: u32, data: u64) void {
             info("   [GS        ] Write @ 0x{X:0>8} (GS_CSR) = 0x{X:0>16}.", .{addr, data});
 
             if ((data & (1 << 9)) != 0) {
-                info("   [GS        ] Resetting GS.", .{});
+                info("   [GS        ] GS reset.", .{});
             }
         },
         else => {
-            err("  [GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
+            warn("[GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
         }
     }
 }
@@ -88,5 +90,6 @@ pub fn step(cyclesElapsed: i64) void {
         cyclesToVblank = cyclesFrame;
 
         intc.sendInterrupt(IntSource.VblankStart);
+        intc.sendInterruptIop(IntSourceIop.VblankStart);
     }
 }
