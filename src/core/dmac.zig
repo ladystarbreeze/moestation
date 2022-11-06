@@ -13,13 +13,11 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
-const bus = @import("bus.zig");
-
-const cop0 = @import("cop0.zig");
-
+const bus     = @import("bus.zig");
+const cop0    = @import("cop0.zig");
 const dmacIop = @import("dmac_iop.zig");
-
-const sif = @import("sif.zig");
+const gif     = @import("gif.zig");
+const sif     = @import("sif.zig");
 
 /// DMA channels
 pub const Channel = enum(u4) {
@@ -186,10 +184,6 @@ var   dctrl: u32 = undefined;
 
 /// Initializes the DMAC module
 pub fn init() void {
-    channels[@enumToInt(Channel.Vif0)].chcr.req = true;
-    channels[@enumToInt(Channel.Vif1)].chcr.req = true;
-    channels[@enumToInt(Channel.Path3)].chcr.req = true;
-
     channels[@enumToInt(Channel.Sif1)].chcr.req = true;
 
     channels[@enumToInt(Channel.SprFrom)].chcr.req = true;
@@ -563,7 +557,21 @@ fn decodeDestTag(chnId: u4, dmaTag: u128) void {
 fn doPath3() void {
     const chnId = @enumToInt(Channel.Path3);
 
+    if (channels[chnId].chcr.dir != @enumToInt(Direction.From)) {
+        err("  [DMAC      ] Unhandled PATH3 direction.", .{});
+
+        assert(false);
+    }
+
     if (channels[chnId].qwc == 0) {
+        assert(channels[chnId].chcr.mod < 2);
+
+        if (channels[chnId].chcr.mod == @enumToInt(Mode.Normal)) {
+            channels[chnId].chcr.str = false;
+
+            return transferEnd(chnId);
+        }
+
         info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Path3)});
 
         // Read new tag
@@ -580,12 +588,12 @@ fn doPath3() void {
         }
     } else {
         if (!channels[chnId].hasTag) {
-            info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
+            // info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
         }
 
         channels[chnId].qwc -= 1;
 
-        warn("[DMAC      ] Write @ GIF = 0x{X:0>32}.", .{channels[chnId].madr});
+        gif.writePath3(bus.readDmac(channels[chnId].madr));
 
         channels[chnId].madr += @sizeOf(u128);
         
