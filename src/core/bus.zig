@@ -84,7 +84,7 @@ const MemSizeIop = enum(u32) {
     Cdvd  = 0x15,
     Dma   = 0x80,
     Timer = 0x30,
-    Sio2  = 0x78,
+    Sio2  = 0x84,
     Spu2  = 0x2800,
 };
 
