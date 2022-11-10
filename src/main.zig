@@ -20,6 +20,7 @@ const gif      = @import("core/gif.zig");
 const gs       = @import("core/gs.zig");
 const iop      = @import("core/iop.zig");
 const timerIop = @import("core/timer_iop.zig");
+const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
@@ -62,6 +63,7 @@ pub fn main() void {
             dmac.checkRunning();
 
             gif.step();
+            vif1.step();
         }
 
         gs.step(4);
