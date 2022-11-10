@@ -25,10 +25,13 @@ const dmacIop  = @import("dmac_iop.zig");
 const gif      = @import("gif.zig");
 const gs       = @import("gs.zig");
 const intc     = @import("intc.zig");
+const iop      = @import("iop.zig");
 const sif      = @import("sif.zig");
 const sio2     = @import("sio2.zig");
+const spu2     = @import("spu2.zig");
 const timer    = @import("timer.zig");
 const timerIop = @import("timer_iop.zig");
+const vif1     = @import("vif1.zig");
 const vu0      = @import("vu0.zig");
 
 /// Memory base addresses
@@ -187,9 +190,7 @@ pub fn read(comptime T: type, addr: u32) T {
             @panic("Unhandled read @ VIF1 I/O");
         }
         
-        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (VIF1).", .{@typeName(T), addr});
-
-        data = 0;
+        data = vif1.read(addr);
     } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
         if (T != u32) {
             @panic("Unhandled read @ DMAC I/O");
@@ -207,7 +208,7 @@ pub fn read(comptime T: type, addr: u32) T {
             @panic("Unhandled read @ GS I/O");
         }
 
-        err("  [Bus       ] Read ({s}) @ 0x{X:0>8} (GS).", .{@typeName(T), addr});
+        info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (GS).", .{@typeName(T), addr});
 
         if (addr == 0x1200_1000) {
             data = ~@as(u64, 0);
@@ -364,13 +365,11 @@ pub fn readIop(comptime T: type, addr: u32) T {
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
         data = sio2.read(T, addr);
     } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
-        //warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (SPU2).", .{@typeName(T), addr});
-
-        if (addr == 0x1F90_0344) {
-            data = 1 << 7;
-        } else {
-            data = 0;
+        if (T != u16) {
+            @panic("Unhandled read @ SPU2 I/O");
         }
+
+        data = spu2.read(addr);
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -472,7 +471,11 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBase.Vif0) and addr < (@enumToInt(MemBase.Vif0) + @enumToInt(MemSize.Vif))) {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF0) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Vif1) and addr < (@enumToInt(MemBase.Vif1) + @enumToInt(MemSize.Vif))) {
-        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF1) = 0x{X}.", .{@typeName(T), addr, data});
+        if (T != u32) {
+            @panic("Unhandled write @ VIF1 I/O");
+        }
+
+        vif1.write(addr, data);
     } else if (addr >= @enumToInt(MemBase.Dmac) and addr < (@enumToInt(MemBase.Dmac) + @enumToInt(MemSize.Dmac))) {
         if (T != u32) {
             @panic("Unhandled write @ DMAC I/O");
@@ -519,7 +522,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                     @panic("Unhandled write @ VIF1 FIFO");
                 }
 
-                warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VIF1 FIFO) = 0x{X}.", .{@typeName(T), addr, data});
+                vif1.writeFifo(data);
             },
             0x1000_6000 => {
                 if (T != u128) {
@@ -633,6 +636,12 @@ pub fn writeDmac(addr: u32, data: u128) void {
 
 /// Writes data to the IOP bus
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
+    if ((addr >= 0x01B354 and addr < 0x01B35C) or (addr >= 0x01B154 and addr < 0x01B15C) or (addr >= 0x01B364 and addr < 0x01B36C) or (addr >= 0x05A3D0 and addr < 0x05A400)) {
+    //if (addr == 0x05B1FC) {
+        info("   [Bus       ] Write @ 0x{X:0>8} = 0x{X}.", .{addr, data});
+        info("   [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
+    }
+
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBaseIop.Sif) and addr < (@enumToInt(MemBaseIop.Sif) + @enumToInt(MemSize.Sif))) {
@@ -658,7 +667,11 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBaseIop.Sio2) and addr < (@enumToInt(MemBaseIop.Sio2) + @enumToInt(MemSizeIop.Sio2))) {
         sio2.write(T, addr, data);
     } else if (addr >= @enumToInt(MemBaseIop.Spu2) and addr < (@enumToInt(MemBaseIop.Spu2) + @enumToInt(MemSizeIop.Spu2))) {
-        warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (SPU2) = 0x{X}.", .{@typeName(T), addr, data});
+        if (T != u16) {
+            @panic("Unhandled write @ SPU2 I/O");
+        }
+
+        spu2.write(addr, data);
     } else {
         switch (addr) {
             0x1F80_1070 ... 0x1F80_1073 => {
@@ -709,6 +722,11 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
 pub fn writeIopDmac(addr: u24, data: u32) void {
     //info("   [Bus (DMAC)] [0x{X:0>6}] = 0x{X:0>8}", .{addr, data});
 
+    if (addr == 0x05B1FC) {
+        info("   [Bus (DMAC)] Write @ 0x{X:0>8} = 0x{X}", .{addr, data});
+        //err("  [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
+    }
+
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(u32));
     } else {
@@ -718,20 +736,31 @@ pub fn writeIopDmac(addr: u24, data: u32) void {
     }
 }
 
-/// Dumps RDRAM image
+/// Dumps RDRAM and IOP RAM images
 fn dumpRam() void {
     info("   [Bus       ] Dumping RAM...", .{});
 
-    // Load BIOS file
+    // Open RAM file
     const ramFile = openFile("moeFiles/ram.bin", .{.mode = OpenMode.write_only}) catch {
         err("  [moestation] Unable to open file.", .{});
 
         return;
     };
 
-    defer ramFile.close();
+    // Open IOP RAM file
+    const ramIopFile = openFile("moeFiles/ram_iop.bin", .{.mode = OpenMode.write_only}) catch {
+        err("  [moestation] Unable to open file.", .{});
+
+        return;
+    };
+
+    defer ramIopFile.close();
 
     ramFile.writer().writeAll(rdram) catch {
+        err("  [moestation] Unable to write to file.", .{});
+    };
+
+    ramIopFile.writer().writeAll(iopRam) catch {
         err("  [moestation] Unable to write to file.", .{});
     };
 }
