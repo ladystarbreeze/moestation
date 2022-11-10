@@ -239,9 +239,9 @@ var dmacIntEn: DmacIntEn = DmacIntEn{};
 /// Initializes DMA module
 pub fn init() void {
     // Set SIF0 request bit for first transfer
-    channels[@enumToInt(Channel.Spu1)].chcr.req = true;
-    channels[@enumToInt(Channel.Sif0)].chcr.req = true;
-    channels[@enumToInt(Channel.Sio2In)].chcr.req = true;
+    //channels[@enumToInt(Channel.Spu1)].chcr.req = true;
+    channels[@enumToInt(Channel.Sif0)   ].chcr.req = true;
+    channels[@enumToInt(Channel.Sio2In) ].chcr.req = true;
     channels[@enumToInt(Channel.Sio2Out)].chcr.req = true;
 }
 
