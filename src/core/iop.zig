@@ -213,6 +213,10 @@ fn write(comptime T: type, addr: u32, data: T) void {
     bus.writeIop(T, translateAddr(addr), data);
 }
 
+pub fn getPc() u32 {
+    return regFile.cpc;
+}
+
 /// Get Opcode field
 fn getOpcode(instr: u32) u6 {
     return @truncate(u6, instr >> 26);
@@ -1528,23 +1532,6 @@ fn iXori(instr: u32) void {
 /// Steps the IOP interpreter
 pub fn step() void {
     regFile.cpc = regFile.pc;
-
-    //if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
-    //    var ptr = regFile.get(@enumToInt(CpuReg.A1));
-    //    var len = regFile.get(@enumToInt(CpuReg.A2));
-    //
-    //    const stdOut = std.io.getStdOut().writer();
-    //
-    //    while (len != 0) : (len -= 1) {
-    //        const c = read(u8, ptr, true);
-    //
-    //        if (std.ascii.isPrint(c) or c == 0xA) {
-    //            stdOut.print("{c}", .{c}) catch unreachable;
-    //        }
-    //
-    //        ptr += 1;
-    //    }
-    //}
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
