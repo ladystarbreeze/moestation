@@ -16,6 +16,10 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const dmac = @import("dmac_iop.zig");
+
+const Channel = dmac.Channel;
+
 const intc = @import("intc.zig");
 
 const IntSource = intc.IntSourceIop;
@@ -49,9 +53,8 @@ const Device = enum(u8) {
 
 /// Device status
 const DeviceStatus = enum(u32) {
-    PadConnected = 0,
-    McConnected  = 0x1000,
-    NoDevice     = 0x1D100,
+    Connected = 0x1100,
+    NoDevice  = 0x1D100,
 };
 
 /// SIO2 Pad commands
@@ -226,6 +229,8 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
             info("   [SIO2      ] Write @ 0x{X:0>8} (SIO2_CTRL) = 0x{X:0>8}.", .{addr, data});
 
+            sio2Ctrl = data;
+
             if ((data & 0xC) == 0xC) {
                 info("   [SIO2      ] SIO2 reset.", .{});
 
@@ -233,11 +238,15 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 sio2FifoOut = Sio2Fifo.init();
 
                 sio2Send3 = Sio2Send3.init();
-            } else if ((data & 1) != 0) {
-                doCmdChain();
-            }
 
-            sio2Ctrl = data & ~@as(u32, 0xD);
+                sio2Ctrl &= ~@as(u32, 0xC);
+            }
+            
+            if ((data & 1) != 0) {
+                doCmdChain();
+
+                sio2Ctrl &= ~@as(u32, 1);
+            }
         },
         @enumToInt(Sio2Reg.Sio2IStat) => {
             if (T != u32) {
@@ -295,8 +304,7 @@ fn updateDevStatus() void {
     // sio2Recv1 = @enumToInt(DeviceStatus.NoDevice);
 
     sio2Recv1 = switch (activeDev) {
-        Device.Controller => @enumToInt(DeviceStatus.PadConnected),
-        Device.MemoryCard => @enumToInt(DeviceStatus.McConnected),
+        //Device.Controller, Device.MemoryCard => @enumToInt(DeviceStatus.Connected),
         else => @enumToInt(DeviceStatus.NoDevice),
     };
 }
@@ -335,6 +343,7 @@ fn doCmdChain() void {
     updateDevStatus();
 
     intc.sendInterruptIop(IntSource.Sio2);
+    dmac.setRequest(Channel.Sio2Out, true);
 }
 
 /// Executes a pad command
@@ -387,8 +396,8 @@ fn cmdPadConfigMode() void {
 
     if (isEnter) {
         // Send button state
-        writeFifoOut(0xFF);
-        writeFifoOut(0xFF);
+        writeFifoOut(0);
+        writeFifoOut(0);
     } else {
         // Send six 0 bytes
         writeFifoOut(0);
