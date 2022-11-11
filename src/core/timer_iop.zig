@@ -153,13 +153,17 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
     switch (addr & ~@as(u32, 0xFF0) | 0x100) {
         @enumToInt(TimerReg.TCount) => {
-            if (T != u32) {
+            if (!(T == u16 or T == u32)) {
+                @panic("Unhandled write @ Timer I/O");
+            }
+
+            if ((addr & 2) != 0) {
                 @panic("Unhandled write @ Timer I/O");
             }
 
             info("   [Timer     ] Write @ 0x{X:0>8} (T{}_COUNT) = 0x{X:0>4}.", .{addr, tmId, data});
 
-            timers[tmId].count = data;
+            timers[tmId].count = @as(u32, data);
         },
         @enumToInt(TimerReg.TMode) => {
             if (T != u16) {
@@ -173,13 +177,17 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             timers[tmId].count = 0;
         },
         @enumToInt(TimerReg.TComp) => {
-            if (T != u32) {
+            if (!(T == u16 or T == u32)) {
+                @panic("Unhandled write @ Timer I/O");
+            }
+
+            if ((addr & 2) != 0) {
                 @panic("Unhandled write @ Timer I/O");
             }
 
             info("   [Timer     ] Write @ 0x{X:0>8} (T{}_COMP) = 0x{X:0>4}.", .{addr, tmId, data});
 
-            timers[tmId].comp = data;
+            timers[tmId].comp = @as(u32, data);
         },
         else => {
             err("  [Timer     ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X:0>8}.", .{@typeName(T), addr, data});
@@ -200,9 +208,10 @@ pub fn step() void {
         }
 
         if (timers[i].mode.clks) {
-            err("  [Timer     ] Unhandled external clock.", .{});
+            //warn("[Timer     ] Unhandled external clock.", .{});
             
-            assert(false);
+            //assert(false);
+            break;
         }
 
         if (i == 2 and timers[i].mode.pre2) {
