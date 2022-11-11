@@ -51,6 +51,7 @@ const SCommand = enum(u8) {
     Subcommand        = 0x03,
     UpdateStickyFlags = 0x05,
     ReadRtc           = 0x08,
+    ForbidDvd         = 0x15,
     OpenConfig        = 0x40,
     ReadConfig        = 0x41,
     CloseConfig       = 0x43,
@@ -439,6 +440,7 @@ fn runSCmd(cmd: u8) void {
         },
         @enumToInt(SCommand.UpdateStickyFlags) => cmdUpdateStickyFlags(),
         @enumToInt(SCommand.ReadRtc          ) => cmdReadRtc(),
+        @enumToInt(SCommand.ForbidDvd        ) => cmdForbidDvd(),
         @enumToInt(SCommand.OpenConfig       ) => cmdOpenConfig(),
         @enumToInt(SCommand.ReadConfig       ) => cmdReadConfig(),
         @enumToInt(SCommand.CloseConfig      ) => cmdCloseConfig(),
@@ -555,6 +557,15 @@ fn cmdCloseConfig() void {
     info("   [CDVD      ] CloseConfig", .{});
 
     sCmdLen = 0;
+}
+
+/// Forbid DVD
+fn cmdForbidDvd() void {
+    info("   [CDVD      ] ForbidDvd", .{});
+
+    sCmdData.write(5);
+
+    sCmdLen = 1;
 }
 
 /// MechaconVersion
