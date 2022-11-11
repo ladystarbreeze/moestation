@@ -118,6 +118,10 @@ pub fn read(comptime T: type, addr: u32) T {
             info("   [SIO2      ] Read @ 0x{X:0>8} (SIO2_FIFOOUT).", .{addr});
 
             data = sio2FifoOut.readItem().?;
+
+            if (sio2FifoOut.readableLength() < 4) {
+                dmac.setRequest(Channel.Sio2Out, false);
+            }
         },
         @enumToInt(Sio2Reg.Sio2Ctrl) => {
             if (T != u32) {
@@ -177,6 +181,19 @@ pub fn read(comptime T: type, addr: u32) T {
     return data;
 }
 
+/// Reads data from FIFOOUT
+pub fn readDmac() u32 {
+    info("   [SIO2      ] Read @ (SIO2_FIFOOUT).", .{});
+
+    const data = @as(u32, sio2FifoOut.readItem().?) | (@as(u32, sio2FifoOut.readItem().?) << 8) | (@as(u32, sio2FifoOut.readItem().?) << 16) | (@as(u32, sio2FifoOut.readItem().?) << 24);
+
+    if (sio2FifoOut.readableLength() < 4) {
+        dmac.setRequest(Channel.Sio2Out, false);
+    }
+
+    return data;
+}
+
 /// Writes data to SIO2
 pub fn write(comptime T: type, addr: u32, data: T) void {
     switch (addr) {
@@ -214,13 +231,17 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 @panic("Unhandled write @ SIO2_FIFOIN");
             }
 
-            info("   [SIO2      ] Write @ 0x{X:0>2} (SIO2_FIFOIN) = 0x{X:0>2}.", .{addr, data});
+            info("   [SIO2      ] Write @ 0x{X:0>8} (SIO2_FIFOIN) = 0x{X:0>2}.", .{addr, data});
 
             sio2FifoIn.writeItem(data) catch {
                 err("  [SIO2      ] SIO2_FIFOIN is full.", .{});
         
                 assert(false);
             };
+
+            if (sio2FifoOut.readableLength() >= 252) {
+                dmac.setRequest(Channel.Sio2In, false);
+            }
         },
         @enumToInt(Sio2Reg.Sio2Ctrl) => {
             if (T != u32) {
@@ -253,13 +274,31 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 @panic("Unhandled write @ SIO2_ISTAT");
             }
 
-            info("   [SIO2      ] Write @ 0x{X:0>2} (SIO2_ISTAT) = 0x{X:0>8}.", .{addr, data});
+            info("   [SIO2      ] Write @ 0x{X:0>8} (SIO2_ISTAT) = 0x{X:0>8}.", .{addr, data});
         },
         else => {
             err("  [SIO2      ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X:0>8}.", .{@typeName(T), addr, data});
 
             assert(false);
         }
+    }
+}
+
+/// Writes a word to SIO2_FIFOIN
+pub fn writeDmac(data: u32) void {
+    info("   [SIO2      ] Write @ SIO2_FIFOIN = 0x{X:0>8}.", .{data});
+
+    var i: u5 = 0;
+    while (i < 4) : (i += 1) {
+        sio2FifoIn.writeItem(@truncate(u8, data >> (8 * i))) catch {
+            err("  [SIO2      ] Unable to write to SIO2_FIFOIN.", .{});
+            
+            assert(false);
+        };
+    }
+
+    if (sio2FifoOut.readableLength() >= 252) {
+        dmac.setRequest(Channel.Sio2In, false);
     }
 }
 
@@ -319,6 +358,8 @@ fn doCmdChain() void {
         assert(false);
     }
 
+    const isChainValid = sio2Send3.readableLength() > 0;
+
     while (sio2Send3.readableLength() > 0) {
         const data = sio2Send3.readItem().?;
 
@@ -342,8 +383,10 @@ fn doCmdChain() void {
 
     updateDevStatus();
 
-    intc.sendInterruptIop(IntSource.Sio2);
-    dmac.setRequest(Channel.Sio2Out, true);
+    if (isChainValid) {
+        intc.sendInterruptIop(IntSource.Sio2);
+        dmac.setRequest(Channel.Sio2Out, true);
+    }
 }
 
 /// Executes a pad command
