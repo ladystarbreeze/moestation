@@ -20,8 +20,9 @@ const cdvd = @import("cdvd.zig");
 const Direction = @import("dmac.zig").Direction;
 
 const intc = @import("intc.zig");
-
-const sif = @import("sif.zig");
+const sif  = @import("sif.zig");
+const sio2 = @import("sio2.zig");
+const spu2 = @import("spu2.zig");
 
 /// DMA channels
 pub const Channel = enum(u4) {
@@ -239,10 +240,8 @@ var dmacIntEn: DmacIntEn = DmacIntEn{};
 /// Initializes DMA module
 pub fn init() void {
     // Set SIF0 request bit for first transfer
-    //channels[@enumToInt(Channel.Spu1)].chcr.req = true;
     channels[@enumToInt(Channel.Sif0)   ].chcr.req = true;
     channels[@enumToInt(Channel.Sio2In) ].chcr.req = true;
-    channels[@enumToInt(Channel.Sio2Out)].chcr.req = true;
 }
 
 /// Returns the DMA channel number
@@ -277,6 +276,11 @@ pub fn read(addr: u32) u32 {
         const chn = @enumToInt(getChannel(@truncate(u8, addr >> 4)));
 
         switch (addr & ~@as(u32, 0xFF0)) {
+            @enumToInt(ChannelReg.DMadr) => {
+                info("   [DMAC (IOP)] Read @ 0x{X:0>8} (D{}_MADR).", .{addr, chn});
+
+                data = channels[chn].madr;
+            },
             @enumToInt(ChannelReg.DChcr) => {
                 info("   [DMAC (IOP)] Read @ 0x{X:0>8} (D{}_CHCR).", .{addr, chn});
 
@@ -347,7 +351,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 switch (T) {
                      u8 => @panic("Unhandled write @ D_BCR"),
                     u16 => {
-                        if ((offset & 1) == 0) {
+                        if ((offset & 2) == 0) {
                             channels[chn].bcr.size = @truncate(u16, data);
                         } else {
                             channels[chn].bcr.count = @truncate(u16, data);
@@ -523,10 +527,13 @@ pub fn checkRunning() void {
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
-                Channel.Cdvd => doCdvd(),
-                Channel.Spu1 => doSpu1(),
-                Channel.Sif0 => doSif0(),
-                Channel.Sif1 => doSif1(),
+                Channel.Cdvd    => doCdvd(),
+                Channel.Spu1    => doSpu1(),
+                Channel.Spu2    => doSpu2(),
+                Channel.Sif0    => doSif0(),
+                Channel.Sif1    => doSif1(),
+                Channel.Sio2In  => doSio2In(),
+                Channel.Sio2Out => doSio2Out(),
                 else => {
                     err("  [DMAC (IOP)] Unhandled channel {} ({s}) transfer.", .{chnId, @tagName(chn)});
 
@@ -665,6 +672,70 @@ fn doSif1() void {
     }
 }
 
+/// Performs SIO2In DMA
+fn doSio2In() void {
+    const chnId = @enumToInt(Channel.Sio2In);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
+    assert(!channels[chnId].chcr.inc);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Sio2In)});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    } else {
+        channels[chnId].bcr.len -= 1;
+        
+        const data = bus.readDmacIop(channels[chnId].madr);
+
+        sio2.writeDmac(data);
+
+        channels[chnId].madr +%= 4;
+
+        if (channels[chnId].bcr.len == 0) {
+            channels[chnId].chcr.str = false;
+
+            channels[chnId].bcr.set(0);
+
+            transferEnd(chnId);
+        }
+    }
+}
+
+/// Performs SIO2Out DMA
+fn doSio2Out() void {
+    const chnId = @enumToInt(Channel.Sio2Out);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
+    assert(!channels[chnId].chcr.inc);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Sio2Out)});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    } else {
+        channels[chnId].bcr.len -= 1;
+        
+        const data = sio2.readDmac();
+
+        bus.writeIopDmac(channels[chnId].madr, data);
+
+        channels[chnId].madr +%= 4;
+
+        if (channels[chnId].bcr.len == 0) {
+            channels[chnId].chcr.str = false;
+
+            channels[chnId].bcr.set(0);
+
+            transferEnd(chnId);
+        }
+    }
+}
+
 /// Performs SPU1 DMA
 fn doSpu1() void {
     const chnId = @enumToInt(Channel.Spu1);
@@ -675,7 +746,7 @@ fn doSpu1() void {
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Spu1)});
 
-        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.size);
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
     } else {
@@ -683,7 +754,7 @@ fn doSpu1() void {
         
         const data = bus.readDmacIop(channels[chnId].madr);
 
-        info("   [DMAC (IOP)] SPU1 = 0x{X:0>8}", .{data});
+        spu2.writeDmac(0, data);
 
         channels[chnId].madr +%= 4;
 
@@ -691,6 +762,42 @@ fn doSpu1() void {
             channels[chnId].chcr.str = false;
 
             channels[chnId].bcr.set(0);
+
+            spu2.dmaEnd(0);
+
+            transferEnd(chnId);
+        }
+    }
+}
+
+/// Performs SPU2 DMA
+fn doSpu2() void {
+    const chnId = @enumToInt(Channel.Spu2);
+
+    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
+    assert(!channels[chnId].chcr.inc);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Spu2)});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    } else {
+        channels[chnId].bcr.len -= 1;
+        
+        const data = bus.readDmacIop(channels[chnId].madr);
+
+        spu2.writeDmac(1, data);
+
+        channels[chnId].madr +%= 4;
+
+        if (channels[chnId].bcr.len == 0) {
+            channels[chnId].chcr.str = false;
+
+            channels[chnId].bcr.set(0);
+
+            spu2.dmaEnd(1);
 
             transferEnd(chnId);
         }
