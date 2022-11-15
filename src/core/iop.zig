@@ -1022,27 +1022,27 @@ fn iMtc(instr: u32, comptime n: u2) void {
 
 /// Move To HI
 fn iMthi(instr: u32) void {
-    const rd = getRd(instr);
+    const rs = getRs(instr);
 
-    regFile.hi = regFile.get(rd);
+    regFile.hi = regFile.get(rs);
 
     if (doDisasm) {
-        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [IOP       ] MTHI ${s}; HI = 0x{X:0>8}", .{tagRd, regFile.get(rd)});
+        info("   [IOP       ] MTHI ${s}; HI = 0x{X:0>8}", .{tagRs, regFile.get(rs)});
     }
 }
 
 /// Move To LO
 fn iMtlo(instr: u32) void {
-    const rd = getRd(instr);
+    const rs = getRs(instr);
 
-    regFile.lo = regFile.get(rd);
+    regFile.lo = regFile.get(rs);
 
     if (doDisasm) {
-        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [IOP       ] MTLO ${s}; LO = 0x{X:0>8}", .{tagRd, regFile.get(rd)});
+        info("   [IOP       ] MTLO ${s}; LO = 0x{X:0>8}", .{tagRs, regFile.get(rs)});
     }
 }
 
@@ -1535,6 +1535,19 @@ pub fn step() void {
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
+
+    if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
+        var ptr = regFile.get(@enumToInt(CpuReg.A1));
+        var len = regFile.get(@enumToInt(CpuReg.A2));
+
+        const stdOut = std.io.getStdOut().writer();
+
+        while (len != 0) : (len -= 1) {
+            stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
+
+            ptr += 1;
+        }
+    }
 
     if (intPending) {
         intPending = false;
