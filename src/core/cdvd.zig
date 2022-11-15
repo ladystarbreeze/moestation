@@ -502,7 +502,7 @@ fn doReadCd() void {
     };
 
     if (cdvdFile.reader().read(readBuf.buf[0..seekParam.size])) |bytesRead| {
-        if (bytesRead == seekParam.size) {
+        if (bytesRead != seekParam.size) {
             err("  [CDVD      ] Read size mismatch.", .{});
 
             assert(false);
