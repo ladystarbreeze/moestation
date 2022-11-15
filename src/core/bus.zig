@@ -91,10 +91,34 @@ const MemSizeIop = enum(u32) {
     Spu2  = 0x2800,
 };
 
+/// ELF header
+const ElfHeader = struct {
+    e_ident: [4]u8 = [4]u8 {0, 0, 0, 0},
+     e_type: u16 = 0,
+    e_entry: u32 = 0,
+    e_phoff: u32 = 0,
+    e_phnum: u16 = 0,
+};
+
+/// Program header
+const PHeader = struct {
+      p_type: u32 = 0,
+    p_offset: u32 = 0,
+     p_vaddr: u32 = 0,
+     p_paddr: u32 = 0,
+    p_filesz: u32 = 0,
+     p_memsz: u32 = 0,
+     p_flags: u32 = 0,
+     p_align: u32 = 0,
+};
+
 // Memory arrays
 var   bios: []u8 = undefined; // BIOS ROM
 var iopRam: []u8 = undefined; // IOP RAM
 var  rdram: []u8 = undefined; // RDRAM
+
+// For debug purposes
+var elf: []u8 = undefined;
 
 // RDRAM registers
 var  mchDrd: u32 = undefined;
@@ -103,7 +127,7 @@ var mchRicm: u32 = undefined;
 var rdramSdevId: u32 = 0;
 
 /// Initializes the bus module
-pub fn init(allocator: Allocator, biosPath: []const u8) !void {
+pub fn init(allocator: Allocator, biosPath: []const u8, elfPath: []const u8) !void {
     info("   [Bus       ] Loading BIOS image {s}...", .{biosPath});
 
     // Load BIOS file
@@ -111,6 +135,14 @@ pub fn init(allocator: Allocator, biosPath: []const u8) !void {
     defer biosFile.close();
 
     bios = try biosFile.reader().readAllAlloc(allocator, @enumToInt(MemSize.Bios));
+
+    info("   [Bus       ] Loading ELF {s}...", .{elfPath});
+
+    // Load ELF file
+    const elfFile = try openFile(elfPath, .{.mode = OpenMode.read_only});
+    defer elfFile.close();
+
+    elf = try elfFile.reader().readAllAlloc(allocator, 1 << 24);
 
     iopRam = try allocator.alloc(u8, @enumToInt(MemSizeIop.Ram));
     rdram  = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
@@ -126,6 +158,7 @@ pub fn deinit(allocator: Allocator) void {
     allocator.free(bios);
     allocator.free(iopRam);
     allocator.free(rdram);
+    allocator.free(elf);
     allocator.free(vu0.vuCode);
     allocator.free(vu0.vuMem);
 }
@@ -149,6 +182,37 @@ pub fn fastBoot() void {
     err("  [moestation] Unable to find OSDSYS path.", .{});
 
     assert(false);
+}
+
+/// Loads ELF into RDRAM, returns entry point
+pub fn loadElf() u32 {
+    var elfHeader = ElfHeader{};
+
+    // Get e_ident
+    @memcpy(@ptrCast([*]u8, &elfHeader.e_ident[0]), @ptrCast([*]u8, &elf[0]), 4);
+
+    if (!(elfHeader.e_ident[0] == 0x7F and elfHeader.e_ident[1] == 0x45 and elfHeader.e_ident[2] == 0x4C and elfHeader.e_ident[3] == 0x46)) {
+        @panic("Not an ELF file");
+    }
+
+    @memcpy(@ptrCast([*]u8, &elfHeader.e_type ), @ptrCast([*]u8, &elf[0x10]), 2);
+    @memcpy(@ptrCast([*]u8, &elfHeader.e_entry), @ptrCast([*]u8, &elf[0x18]), 4);
+    @memcpy(@ptrCast([*]u8, &elfHeader.e_phoff), @ptrCast([*]u8, &elf[0x1C]), 4);
+    @memcpy(@ptrCast([*]u8, &elfHeader.e_phnum), @ptrCast([*]u8, &elf[0x2C]), 2);
+
+    var i: u16 = 0;
+    while (i < elfHeader.e_phnum) : (i += 1) {
+        var pHeader = PHeader{};
+
+        @memcpy(@ptrCast([*]u8, &pHeader), @ptrCast([*]u8, &elf[elfHeader.e_phoff + 0x20 * i]), 0x20);
+
+        if (pHeader.p_memsz == 0) continue;
+
+        @memcpy(@ptrCast([*]u8, &rdram[pHeader.p_vaddr]), @ptrCast([*]u8, &elf[pHeader.p_offset]), pHeader.p_filesz);
+        @memset(@ptrCast([*]u8, &rdram[pHeader.p_vaddr + pHeader.p_filesz]), 0, pHeader.p_memsz - pHeader.p_filesz);
+    }
+
+    return elfHeader.e_entry;
 }
 
 /// Reads data from the system bus
@@ -204,17 +268,27 @@ pub fn read(comptime T: type, addr: u32) T {
 
         data = sif.read(addr);
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
-        if (T != u64) {
+        if (T != u32 and T != u64) {
             @panic("Unhandled read @ GS I/O");
         }
 
         info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (GS).", .{@typeName(T), addr});
 
-        if (addr == 0x1200_1000) {
-            data = ~@as(u64, 0);
+        if (T == u32) {
+            if (addr == 0x1200_1000) {
+                data = ~@as(u32, 0);
+            } else {
+                data = 0;
+            }
         } else {
-            data = 0;
+            if (addr == 0x1200_1000) {
+                data = ~@as(u64, 0);
+            } else {
+                data = 0;
+            }
         }
+
+        
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
@@ -451,11 +525,16 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Timer) and addr < (@enumToInt(MemBase.Timer) + @enumToInt(MemSize.Timer))) {
-        if (T != u32) {
+        if (T != u32 and T != u64) {
             @panic("Unhandled write @ Timer I/O");
         }
 
-        timer.write(addr, data);
+        if (T == u32) {
+            timer.write(addr, data);
+        } else {
+            timer.write(addr + 0, @truncate(u32, data));
+            timer.write(addr + 4, @truncate(u32, data >> 32));
+        }
     } else if (addr >= @enumToInt(MemBase.Ipu) and addr < (@enumToInt(MemBase.Ipu) + @enumToInt(MemSize.Ipu))) {
         if (T != u32) {
             @panic("Unhandled write @ IPU I/O");
@@ -501,11 +580,11 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBase.Vu1Data) and addr < (@enumToInt(MemBase.Vu1Data) + @enumToInt(MemSize.Vu1))) {
         //warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Data) = 0x{X}.", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
-        if (T != u64) {
+        if (T != u32 and T != u64) {
             @panic("Unhandled write @ GS I/O");
         }
 
-        gs.writePriv(addr, data);
+        gs.writePriv(addr, @as(u64, data));
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IOP) = 0x{X}.", .{@typeName(T), addr, data});
     } else {
@@ -638,8 +717,8 @@ pub fn writeDmac(addr: u32, data: u128) void {
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
     if ((addr >= 0x01B354 and addr < 0x01B35C) or (addr >= 0x01B154 and addr < 0x01B15C) or (addr >= 0x01B364 and addr < 0x01B36C) or (addr >= 0x05A3D0 and addr < 0x05A400)) {
     //if (addr == 0x05B1FC) {
-        info("   [Bus       ] Write @ 0x{X:0>8} = 0x{X}.", .{addr, data});
-        info("   [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
+        //info("   [Bus       ] Write @ 0x{X:0>8} = 0x{X}.", .{addr, data});
+        //info("   [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
     }
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
@@ -723,7 +802,7 @@ pub fn writeIopDmac(addr: u24, data: u32) void {
     //info("   [Bus (DMAC)] [0x{X:0>6}] = 0x{X:0>8}", .{addr, data});
 
     if (addr == 0x05B1FC) {
-        info("   [Bus (DMAC)] Write @ 0x{X:0>8} = 0x{X}", .{addr, data});
+        //info("   [Bus (DMAC)] Write @ 0x{X:0>8} = 0x{X}", .{addr, data});
         //err("  [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
     }
 
