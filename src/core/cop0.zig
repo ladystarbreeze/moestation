@@ -392,6 +392,8 @@ pub fn get(comptime T: type, idx: u5) T {
         @enumToInt(Cop0Reg.BadPAddr) => data = 0,
         @enumToInt(Cop0Reg.Debug   ) => data = 0,
         @enumToInt(Cop0Reg.Perf    ) => data = 0,
+        @enumToInt(Cop0Reg.TagLo   ) => data = 0,
+        @enumToInt(Cop0Reg.TagHi   ) => data = 0,
         @enumToInt(Cop0Reg.ErrorEPC) => data = errorepc,
         else => {
             err("  [COP0 (EE) ] Unhandled register read ({s}) @ {s}.", .{@typeName(T), @tagName(@intToEnum(Cop0Reg, idx))});
