@@ -11,6 +11,7 @@ const assert = std.debug.assert;
 
 const err  = std.log.err;
 const info = std.log.info;
+const warn = std.log.warn;
 
 const bus = @import("bus.zig");
 
@@ -68,6 +69,7 @@ const Opcode = enum(u6) {
     Beql    = 0x14,
     Bnel    = 0x15,
     Blezl   = 0x16,
+    Bgtzl   = 0x17,
     Daddiu  = 0x19,
     Ldl     = 0x1A,
     Ldr     = 0x1B,
@@ -143,10 +145,14 @@ const Special = enum(u6) {
 
 /// REGIMM instructions
 const Regimm = enum(u5) {
-    Bltz  = 0x00,
-    Bgez  = 0x01,
-    Bltzl = 0x02,
-    Bgezl = 0x03,
+    Bltz    = 0x00,
+    Bgez    = 0x01,
+    Bltzl   = 0x02,
+    Bgezl   = 0x03,
+    Bltzal  = 0x10,
+    Bgezal  = 0x11,
+    Bltzall = 0x12,
+    Bgezall = 0x13,
 };
 
 /// COP instructions
@@ -193,6 +199,7 @@ const MmiOpcode = enum(u6) {
     Mflo1 = 0x12,
     Mtlo1 = 0x13,
     Mult1 = 0x18,
+    Div1  = 0x1A,
     Divu1 = 0x1B,
     Mmi1  = 0x28,
     Mmi3  = 0x29,
@@ -490,7 +497,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Dsrav  ) => iDsrav(instr),
                 @enumToInt(Special.Mult   ) => iMult(instr, 0),
                 @enumToInt(Special.Multu  ) => iMultu(instr, 0),
-                @enumToInt(Special.Div    ) => iDiv(instr),
+                @enumToInt(Special.Div    ) => iDiv(instr, 0),
                 @enumToInt(Special.Divu   ) => iDivu(instr, 0),
                 @enumToInt(Special.Addu   ) => iAddu(instr),
                 @enumToInt(Special.Subu   ) => iSubu(instr),
@@ -521,10 +528,14 @@ fn decodeInstr(instr: u32) void {
             const rt = getRt(instr);
 
             switch (rt) {
-                @enumToInt(Regimm.Bltz ) => iBltz(instr),
-                @enumToInt(Regimm.Bgez ) => iBgez(instr),
-                @enumToInt(Regimm.Bltzl) => iBltzl(instr),
-                @enumToInt(Regimm.Bgezl) => iBgezl(instr),
+                @enumToInt(Regimm.Bltz   ) => iBltz(instr),
+                @enumToInt(Regimm.Bgez   ) => iBgez(instr),
+                @enumToInt(Regimm.Bltzl  ) => iBltzl(instr),
+                @enumToInt(Regimm.Bgezl  ) => iBgezl(instr),
+                @enumToInt(Regimm.Bltzal ) => iBltzal(instr),
+                @enumToInt(Regimm.Bgezal ) => iBgezal(instr),
+                @enumToInt(Regimm.Bltzall) => iBltzall(instr),
+                @enumToInt(Regimm.Bgezall) => iBgezall(instr),
                 else => {
                     err("  [EE Core   ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
@@ -664,6 +675,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Beql  ) => iBeql(instr),
         @enumToInt(Opcode.Bnel  ) => iBnel(instr),
         @enumToInt(Opcode.Blezl ) => iBlezl(instr),
+        @enumToInt(Opcode.Bgtzl ) => iBgtzl(instr),
         @enumToInt(Opcode.Daddiu) => iDaddiu(instr),
         @enumToInt(Opcode.Ldl   ) => iLdl(instr),
         @enumToInt(Opcode.Ldr   ) => iLdr(instr),
@@ -707,6 +719,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
                 @enumToInt(MmiOpcode.Mtlo1) => iMtlo(instr, true),
                 @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
+                @enumToInt(MmiOpcode.Div1 ) => iDiv(instr, 1),
                 @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
                 @enumToInt(MmiOpcode.Mmi1 ) => {
                     const sa = getSa(instr);
@@ -763,6 +776,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Swr  ) => iSwr(instr),
         @enumToInt(Opcode.Cache) => iCache(instr),
         @enumToInt(Opcode.Lwc1 ) => iLwc(instr, 1),
+        0x33 => {},
         @enumToInt(Opcode.Ld   ) => iLd(instr),
         @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
         @enumToInt(Opcode.Sd   ) => iSd(instr),
@@ -956,6 +970,40 @@ fn iBgez(instr: u32) void {
     }
 }
 
+/// Branch on Greater than or Equal Zero And Link
+fn iBgezal(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) >= 0, @enumToInt(CpuReg.RA), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGEZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Greater than or Equal Zero And Link Likely
+fn iBgezall(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) >= 0, @enumToInt(CpuReg.RA), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGEZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
 /// Branch on Greater than or Equal Zero Likely
 fn iBgezl(instr: u32) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -987,6 +1035,23 @@ fn iBgtz(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
         info("   [EE Core   ] BGTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Greater Than Zero Likely
+fn iBgtzl(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) > 0, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BGTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1038,6 +1103,40 @@ fn iBltz(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
         info("   [EE Core   ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Less Than Zero And Link
+fn iBltzal(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) < 0, @enumToInt(CpuReg.RA), false);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLTZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+    }
+}
+
+/// Branch on Less Than Zero And Link Likely
+fn iBltzall(instr: u32) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const rs = getRs(instr);
+
+    const target = regFile.pc +% offset;
+
+    doBranch(target, @bitCast(i64, regFile.get(u64, rs)) < 0, @enumToInt(CpuReg.RA), true);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        
+        info("   [EE Core   ] BLTZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1210,29 +1309,70 @@ fn iDi() void {
 }
 
 /// DIVide
-fn iDiv(instr: u32) void {
+fn iDiv(instr: u32, comptime pipeline: u1) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
     const n = @bitCast(i32, regFile.get(u32, rs));
     const d = @bitCast(i32, regFile.get(u32, rt));
 
-    assert(d != 0);
-    assert(!(n == -0x80000000 and d == -1));
+    if (d == 0) {
+        warn("[EE Core   ] DIV by 0.", .{});
 
-    regFile.lo.set(u32, @bitCast(u32, @divFloor(n, d)));
+        if (pipeline == 1) {
+            regFile.hi.setHi(u32, @bitCast(u32, n));
 
-    if (d < 0) {
-        regFile.hi.set(u32, @bitCast(u32, @rem(n, -d)));
+            if (n >= 0) {
+                regFile.lo.setHi(u32, 0xFFFF_FFFF);
+            } else {
+                regFile.lo.setHi(u32, 1);
+            }
+        } else {
+            regFile.hi.set(u32, @bitCast(u32, n));
+
+            if (n >= 0) {
+                regFile.lo.set(u32, 0xFFFF_FFFF);
+            } else {
+                regFile.lo.set(u32, 1);
+            }
+        }
+    } else if (n == -0x8000_0000 and d == -1) {
+        warn("[EE Core   ] DIV result too big.", .{});
+
+        if (pipeline == 1) {
+            regFile.lo.setHi(u32, 0x8000_0000);
+            regFile.hi.setHi(u32, 0);
+        } else {
+            regFile.lo.set(u32, 0x8000_0000);
+            regFile.hi.set(u32, 0);
+        }
     } else {
-        regFile.hi.set(u32, @bitCast(u32, n) % @bitCast(u32, d));
+        if (pipeline == 1) {
+            regFile.lo.setHi(u32, @bitCast(u32, @divFloor(n, d)));
+
+            if (d < 0) {
+                regFile.hi.setHi(u32, @bitCast(u32, @rem(n, -d)));
+            } else {
+                regFile.hi.setHi(u32, @bitCast(u32, n) % @bitCast(u32, d));
+            }
+        } else {
+            regFile.lo.set(u32, @bitCast(u32, @divFloor(n, d)));
+
+            if (d < 0) {
+                regFile.hi.set(u32, @bitCast(u32, @rem(n, -d)));
+            } else {
+                regFile.hi.set(u32, @bitCast(u32, n) % @bitCast(u32, d));
+            }
+        }
     }
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DIV ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        const isPipe1 = if (pipeline == 1) "1" else "";
+
+        info("   [EE Core   ] DIV{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -1244,17 +1384,27 @@ fn iDivu(instr: u32, comptime pipeline: u1) void {
     const n = regFile.get(u32, rs);
     const d = regFile.get(u32, rt);
 
-    assert(d != 0);
+    if (d == 0) {
+        warn("[EE Core   ] DIVU{} by 0.", .{pipeline});
 
-    const q = n / d;
-    const r = n % d;
-
-    if (pipeline == 1) {
-        regFile.lo.setHi(u32, q);
-        regFile.hi.setHi(u32, r);
+        if (pipeline == 1) {
+            regFile.lo.setHi(u32, 0xFFFF_FFFF);
+            regFile.hi.setHi(u32, n);
+        } else {
+            regFile.lo.set(u32, 0xFFFF_FFFF);
+            regFile.hi.set(u32, n);
+        }
     } else {
-        regFile.lo.set(u32, q);
-        regFile.hi.set(u32, r);
+        const q = n / d;
+        const r = n % d;
+
+        if (pipeline == 1) {
+            regFile.lo.setHi(u32, q);
+            regFile.hi.setHi(u32, r);
+        } else {
+            regFile.lo.set(u32, q);
+            regFile.hi.set(u32, r);
+        }
     }
 
     if (doDisasm) {
@@ -1467,7 +1617,8 @@ fn iEret() void {
     }
 
     if (regFile.pc == 0x82000) {
-        bus.fastBoot();
+        //bus.fastBoot();
+        regFile.setPc(bus.loadElf());
     }
 }
 
@@ -2035,7 +2186,7 @@ fn iMtc(instr: u32, comptime n: u2) void {
 
 /// Move To HI
 fn iMthi(instr: u32, isHi: bool) void {
-    const rs = getRd(instr);
+    const rs = getRs(instr);
 
     const data = regFile.get(u64, rs);
     
@@ -2056,7 +2207,7 @@ fn iMthi(instr: u32, isHi: bool) void {
 
 /// Move To LO
 fn iMtlo(instr: u32, isHi: bool) void {
-    const rs = getRd(instr);
+    const rs = getRs(instr);
 
     const data = regFile.get(u64, rs);
     
