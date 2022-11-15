@@ -328,7 +328,11 @@ const RegFile = struct {
 
     /// Sets program counter
     pub fn setPc(self: *RegFile, data: u32) void {
-        assert((data & 3) == 0);
+        if ((data & 3) != 0) {
+            err("  [EE Core   ] PC is not aligned. PC = 0x{X:0>8}", .{self.pc});
+
+            assert(false);
+        }
     
         self.pc  = data;
         self.npc = data +% 4;
@@ -1618,7 +1622,7 @@ fn iEret() void {
 
     if (regFile.pc == 0x82000) {
         //bus.fastBoot();
-        regFile.setPc(bus.loadElf());
+        //regFile.setPc(bus.loadElf());
     }
 }
 

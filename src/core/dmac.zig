@@ -677,4 +677,3 @@ fn doSif1() void {
         }
     }
 }
-

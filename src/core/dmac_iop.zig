@@ -583,8 +583,17 @@ pub fn doAdma(coreId: u1) u32 {
 fn doCdvd() void {
     const chnId = @enumToInt(Channel.Cdvd);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
-    assert(!channels[chnId].chcr.inc);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled CDVD transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled CDVD transfer direction.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Cdvd)});
@@ -615,9 +624,23 @@ fn doCdvd() void {
 fn doSif0() void {
     const chnId = @enumToInt(Channel.Sif0);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Chain));
-    assert(!channels[chnId].chcr.inc);
-    assert(channels[chnId].chcr.tte);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Chain)) {
+        err("  [DMAC (IOP)] Unhandled SIF0 transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled SIF0 transfer direction.", .{});
+
+        assert(false);
+    }
+
+    if (!channels[chnId].chcr.tte) {
+        err("  [DMAC (IOP)] Unhandled SIF0 non-TTE transfer.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.count == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Chain mode.", .{chnId, @tagName(Channel.Sif0)});
@@ -670,7 +693,11 @@ fn doSif1() void {
 
     const chnId = @enumToInt(Channel.Sif1);
 
-    assert(channels[chnId].chcr.tte);
+    if (!channels[chnId].chcr.tte) {
+        err("  [DMAC (IOP)] Unhandled SIF1 non-TTE transfer.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.count == 0) {
         // Read new tag
@@ -709,8 +736,17 @@ fn doSif1() void {
 fn doSio2In() void {
     const chnId = @enumToInt(Channel.Sio2In);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
-    assert(!channels[chnId].chcr.inc);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled SIO2In transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled SIO2In transfer direction.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Sio2In)});
@@ -741,8 +777,17 @@ fn doSio2In() void {
 fn doSio2Out() void {
     const chnId = @enumToInt(Channel.Sio2Out);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
-    assert(!channels[chnId].chcr.inc);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled SIO2Out transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled SIO2Out transfer direction.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Sio2Out)});
@@ -773,8 +818,17 @@ fn doSio2Out() void {
 fn doSpu1() void {
     const chnId = @enumToInt(Channel.Spu1);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
-    assert(!channels[chnId].chcr.inc);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled SPU1 transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled SPU1 transfer direction.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Spu1)});
@@ -807,8 +861,17 @@ fn doSpu1() void {
 fn doSpu2() void {
     const chnId = @enumToInt(Channel.Spu2);
 
-    assert(channels[chnId].chcr.mod == @enumToInt(Mode.Slice));
-    assert(!channels[chnId].chcr.inc);
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled SPU2 transfer mode.", .{});
+
+        assert(false);
+    }
+
+    if (channels[chnId].chcr.inc) {
+        err("  [DMAC (IOP)] Unhandled SPU2 transfer direction.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Slice mode.", .{chnId, @tagName(Channel.Spu2)});

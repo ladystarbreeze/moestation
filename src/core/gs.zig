@@ -18,6 +18,8 @@ const intc = @import("intc.zig");
 const IntSource = intc.IntSource;
 const IntSourceIop = intc.IntSourceIop;
 
+const timer = @import("timer_iop.zig");
+
 /// GS registers
 const GsReg = enum(u8) {
     Prim       = 0x00,
@@ -102,10 +104,10 @@ const PrivReg = enum(u32) {
 
 const cyclesFrame: i64 = 147_000_000 / 60;
 const  cyclesLine: i64 = cyclesFrame / 544;
-const  cyclesInit: i64 = cyclesLine * 480;
 
-/// Simple VBLANK cycle counter
-var cyclesToVblank = cyclesInit;
+/// Simple Line counter
+var cyclesToNextLine: i64 = 0;
+var lines: i64 = 0;
 
 // GS registers
 var gsRegs: [0x63]u64 = undefined;
@@ -182,15 +184,23 @@ pub fn writePriv(addr: u32, data: u64) void {
 
 /// Steps the GS module
 pub fn step(cyclesElapsed: i64) void {
-    cyclesToVblank -= cyclesElapsed;
+    cyclesToNextLine += cyclesElapsed;
 
-    if (cyclesToVblank <= 0) {
-        cyclesToVblank = cyclesFrame;
+    if (cyclesToNextLine >= cyclesLine) {
+        cyclesToNextLine = 0;
 
-        intc.sendInterrupt(IntSource.VblankStart);
-        intc.sendInterruptIop(IntSourceIop.VblankStart);
-    } else if (cyclesToVblank == cyclesInit) {
-        intc.sendInterrupt(IntSource.VblankEnd);
-        intc.sendInterruptIop(IntSourceIop.VblankEnd);
+        lines += 1;
+
+        timer.stepHblank();
+
+        if (lines == 480) {
+            intc.sendInterrupt(IntSource.VblankStart);
+            intc.sendInterruptIop(IntSourceIop.VblankStart);
+        } else if (lines == 544) {
+            lines = 0;
+
+            intc.sendInterrupt(IntSource.VblankEnd);
+            intc.sendInterruptIop(IntSourceIop.VblankEnd);
+        }
     }
 }

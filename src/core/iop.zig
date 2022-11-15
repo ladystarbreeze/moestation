@@ -152,7 +152,11 @@ const RegFile = struct {
 
     /// Sets program counter
     pub fn setPc(self: *RegFile, data: u32) void {
-        assert((data & 3) == 0);
+        if ((data & 3) != 0) {
+            err("  [IOP       ] PC is not aligned. PC = 0x{X:0>8}", .{self.pc});
+
+            assert(false);
+        }
     
         self.pc  = data;
         self.npc = data +% 4;
@@ -652,8 +656,17 @@ fn iDiv(instr: u32) void {
     const n = @bitCast(i32, regFile.get(rs));
     const d = @bitCast(i32, regFile.get(rt));
 
-    assert(d != 0);
-    assert(!(n == -0x80000000 and d == -1));
+    if (d == 0) {
+        err("  [IOP       ] DIV by 0.", .{});
+
+        assert(false);
+    }
+
+    if (n == -0x80000000 and d == -1) {
+        err("  [IOP       ] DIV result too big.", .{});
+
+        assert(false);
+    }
 
     regFile.lo = @bitCast(u32, @divFloor(n, d));
 
@@ -679,7 +692,11 @@ fn iDivu(instr: u32) void {
     const n = regFile.get(rs);
     const d = regFile.get(rt);
 
-    assert(d != 0);
+    if (d == 0) {
+        err("  [IOP       ] DIVU by 0.", .{});
+
+        assert(false);
+    }
 
     regFile.lo = n / d;
     regFile.hi = n % d;

@@ -175,7 +175,11 @@ pub fn getControl(comptime T: type, idx: u5) T {
 
 /// Writes VU data memory
 fn write(comptime T: type, addr: u12, data: T) void {
-    assert((addr + @sizeOf(T)) < 0x1000);
+    if ((addr + @sizeOf(T)) >= 0x1000) {
+        err("  [VU0       ] Write ({s}) @ 0x{X:0>4} out of bounds.", .{@typeName(T), addr});
+
+        assert(false);
+    }
 
     @memcpy(@ptrCast([*]u8, &vuMem[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
 }
@@ -291,7 +295,11 @@ pub fn iIadd(instr: u32) void {
     const it = getRt(instr);
     const is = getRs(instr);
 
-    assert(id < 16 and it < 16 and is < 16);
+    if (!(id < 16 and it < 16 and is < 16)) {
+        err("  [VU0       ] IADD index out of bounds.", .{});
+
+        assert(false);
+    }
 
     const res = regFile.getVi(@truncate(u4, is)) +% regFile.getVi(@truncate(u4, it));
 
@@ -309,7 +317,11 @@ pub fn iIswr(instr: u32) void {
     const it = getRt(instr);
     const is = getRs(instr);
 
-    assert(it < 16 and is < 16);
+    if (!(it < 16 and is < 16)) {
+        err("  [VU0       ] ISWR index out of bounds.", .{});
+
+        assert(false);
+    }
 
     const addr = @truncate(u12, regFile.getVi(@truncate(u4, is)) << 4);
     const data = regFile.getVi(@truncate(u4, it));
@@ -335,7 +347,11 @@ pub fn iSqi(instr: u32) void {
     const ft = getRt(instr);
     const is = getRs(instr);
     
-    assert(is < 16);
+    if (is >= 16) {
+        err("  [VU0       ] SQI index out of bounds.", .{});
+
+        assert(false);
+    }
 
     const addr = @truncate(u12, regFile.getVi(@truncate(u4, is)) << 4);
 

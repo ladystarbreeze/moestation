@@ -558,10 +558,16 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
                     pfn = tlbEntry[idx].pfn0;
                 }
 
-                assert(v);
+                if (!v) {
+                    err("  [COP0      ] TLB entry is not valid.", .{});
 
-                if (isWrite) {
-                    assert(d);
+                    assert(false);
+                }
+
+                if (isWrite and !d) {
+                    err("  [COP0      ] TLB entry is dirty.", .{});
+
+                    assert(false);
                 }
 
                 addr.* = (@as(u32, pfn) << 12) | (addr.* & mask);
@@ -573,18 +579,18 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
         }
     }
 
-    err("  [COP0 (EE) ] Unhandled TLB miss exception.", .{});
-
-    assert(false);
-
-    return false;
+    @panic("TLB miss exception");
 }
 
 /// Writes an indexed TLB entry
 pub fn setEntryIndexed() void {
     const idx = index.index;
 
-    assert(idx < 48);
+    if (idx >= 48) {
+        err("  [COP0      ] Invalid TLB index {}.", .{idx});
+
+        assert(false);
+    }
 
     tlbEntry[idx].v1   = entrylo1.v;
     tlbEntry[idx].d1   = entrylo1.d;

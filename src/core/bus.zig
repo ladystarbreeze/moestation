@@ -428,6 +428,8 @@ pub fn readIop(comptime T: type, addr: u32) T {
         }
 
         data = dmacIop.read(addr);
+    } else if (addr >= @enumToInt(MemBaseIop.Timer0) and addr < (@enumToInt(MemBaseIop.Timer0) + @enumToInt(MemSizeIop.Timer))) {
+        data = timerIop.read(T, addr);
     } else if (addr >= @enumToInt(MemBaseIop.Timer1) and addr < (@enumToInt(MemBaseIop.Timer1) + @enumToInt(MemSizeIop.Timer))) {
         data = timerIop.read(T, addr);
     } else if (addr >= @enumToInt(MemBaseIop.Dma1) and addr < (@enumToInt(MemBaseIop.Dma1) + @enumToInt(MemSizeIop.Dma))) {
@@ -654,8 +656,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 }
 
                 info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (MCH_RICM) = 0x{X}.", .{@typeName(T), addr, data});
-
-                assert(T == u32);
 
                 const  sa = @truncate(u8, data >> 16);
                 const sbc = @truncate(u4, data >>  6);

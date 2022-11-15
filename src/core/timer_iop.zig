@@ -120,13 +120,17 @@ pub fn read(comptime T: type, addr: u32) T {
 
     switch (addr & ~@as(u32, 0xFF0) | 0x100) {
         @enumToInt(TimerReg.TCount) => {
-            if (T != u32) {
+            if (T != u16 and T != u32) {
                 @panic("Unhandled read @ Timer I/O");
             }
 
-            info("   [Timer     ] Read @ 0x{X:0>8} (T{}_COUNT).", .{addr, tmId});
+            info("   [Timer     ] Read ({s}) @ 0x{X:0>8} (T{}_COUNT).", .{@typeName(T), addr, tmId});
 
-            data = timers[tmId].count;
+            if (T == u16) {
+                data = @truncate(u16, timers[tmId].count);
+            } else {
+                data = timers[tmId].count;
+            }
         },
         @enumToInt(TimerReg.TMode) => {
             if (T != u16) {
@@ -197,6 +201,52 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     }
 }
 
+/// Increments HBLANK timers
+pub fn stepHblank() void {
+    var i: u3 = 1;
+    while (i < 4) : (i += 2) {
+        if (!timers[i].mode.clks) continue;
+
+        const oldCount = timers[i].count;
+
+        timers[i].count +%= 1;
+
+        if (i == 1) {
+            timers[i].count &= 0xFFFF;
+        }
+
+        if (timers[i].count == timers[i].comp) {
+            if (timers[i].mode.cmpe) {
+                if (timers[i].mode.rept and timers[i].mode.levl) {
+                    timers[i].mode.intf = !timers[i].mode.intf;
+                } else {
+                    timers[i].mode.intf = false;
+                }
+
+                timers[i].mode.equf = true;
+
+                sendInterrupt(i);
+            }
+
+            if (timers[i].mode.zret) {
+                timers[i].count = 0;
+            }
+        } else if ((i < 3 and oldCount == 0xFFFF) or (oldCount == @bitCast(u32, @as(i32, -1)))) {
+            if (timers[i].mode.ovfe) {
+                if (timers[i].mode.rept and timers[i].mode.levl) {
+                    timers[i].mode.intf = !timers[i].mode.intf;
+                } else {
+                    timers[i].mode.intf = false;
+                }
+
+                timers[i].mode.ovff = true;
+                
+                sendInterrupt(i);
+            }
+        }
+    }
+}
+
 /// Increments IOP timers, checks for interrupts
 pub fn step() void {
     var i: u3 = 0;
@@ -207,11 +257,10 @@ pub fn step() void {
             assert(false);
         }
 
-        if (timers[i].mode.clks) {
-            //warn("[Timer     ] Unhandled external clock.", .{});
+        if (!(i == 1 or i == 3) and timers[i].mode.clks) {
+            err("  [Timer     ] Unhandled Timer {} external clock.", .{i});
             
-            //assert(false);
-            break;
+            assert(false);
         }
 
         if (i == 2 and timers[i].mode.pre2) {

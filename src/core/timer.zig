@@ -40,8 +40,6 @@ pub fn write(addr: u32, data: u32) void {
         },
         else => {
             err("  [Timer     ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
-
-            assert(false);
         }
     }
 }
