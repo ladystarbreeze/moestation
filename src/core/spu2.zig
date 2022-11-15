@@ -13,6 +13,9 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const openFile = std.fs.cwd().openFile;
+const OpenMode = std.fs.File.OpenMode;
+
 const dmac = @import("dmac_iop.zig");
 
 const Channel = dmac.Channel;
@@ -61,22 +64,33 @@ const Spu2Reg = enum(u32) {
     RevVrin    = 0x1F90_0786,
 };
 
+const cyclesSound: i64 = 147_000_000 / 44100;
+
+/// SPU2 sound counter
+var cyclesToStep: i64 = 0;
+
 /// TODO: properly implement all registers eventually.
 
 /// VMIXL/R
-var vmixl = [2]u16 {0, 0};
-var vmixr = [2]u16 {0, 0};
+var vmixl = [2]u24 {0, 0};
+var vmixr = [2]u24 {0, 0};
 
 /// VMIXEL/R
-var vmixel = [2]u16 {0, 0};
-var vmixer = [2]u16 {0, 0};
+var vmixel = [2]u24 {0, 0};
+var vmixer = [2]u24 {0, 0};
+
+/// KON/KOFF
+var kon  = [2]u24 {0, 0};
+var koff = [2]u24 {0, 0};
 
 /// SPU_ADDR
-var     spuAddr: u24 = 0;
-var currSpuAddr: u24 = 0;
+var     spuAddr = [2]u24 {0, 0};
+var currSpuAddr = [2]u24 {0, 0};
 
 /// ADMA_STAT
-var admaStat: u16 = 0;
+var admaStat = [2]u16 {0, 0};
+
+var admaCtr = [2]u24 {0, 0};
 
 /// CORE_ATTR
 var coreAttr = [2]u16 {0, 0};
@@ -85,7 +99,11 @@ var coreAttr = [2]u16 {0, 0};
 const coreStatDmaReady: u16 = 1 << 7;
 const  coreStatDmaBusy: u16 = 1 << 10;
 
-var coreStat: u16 = 0;
+var coreStat = [2]u16 {0, 0};
+
+/// Sound buffer
+var sndBuf: [0x100000]u8 = undefined;
+var sndPtr: usize = 0;
 
 /// Reads data from an SPU2 register
 pub fn read(addr: u32) u16 {
@@ -118,73 +136,73 @@ pub fn read(addr: u32) u16 {
         if ((addr_ >= 0x1F90_0180 and addr_ < 0x1F90_01C0) or addr_ >= 0x1F90_02E0) {
             switch (addr_) {
                 @enumToInt(Spu2Reg.Vmixl) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXL_H).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXL_H{}).", .{addr, coreId});
 
-                    data = vmixl[1];
+                    data = @truncate(u16, vmixl[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.Vmixl) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXL_L).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXL_L{}).", .{addr, coreId});
 
-                    data = vmixl[0];
+                    data = @truncate(u16, vmixl[coreId]);
                 },
                 @enumToInt(Spu2Reg.Vmixel) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXEL_H).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXEL_H{}).", .{addr, coreId});
 
-                    data = vmixel[1];
+                    data = @truncate(u16, vmixel[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.Vmixel) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXEL_L).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXEL_L{}).", .{addr, coreId});
 
-                    data = vmixel[0];
+                    data = @truncate(u16, vmixel[coreId]);
                 },
                 @enumToInt(Spu2Reg.Vmixr) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXR_H).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXR_H{}).", .{addr, coreId});
 
-                    data = vmixr[1];
+                    data = @truncate(u16, vmixr[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.Vmixr) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXR_L).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXR_L{}).", .{addr, coreId});
 
-                    data = vmixr[0];
+                    data = @truncate(u16, vmixr[coreId]);
                 },
                 @enumToInt(Spu2Reg.Vmixer) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXER_H).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXER_H{}).", .{addr, coreId});
 
-                    data = vmixer[1];
+                    data = @truncate(u16, vmixer[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.Vmixer) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXER_L).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (VMIXER_L{}).", .{addr, coreId});
 
-                    data = vmixer[0];
+                    data = @truncate(u16, vmixer[coreId]);
                 },
                 @enumToInt(Spu2Reg.KeyOn) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (KEY_ON_L{}).", .{addr, coreId});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (KON_L{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = @truncate(u16, kon[coreId]);
                 },
                 @enumToInt(Spu2Reg.KeyOn) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (KEY_ON_H{}).", .{addr, coreId});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (KON_H{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = @truncate(u16, kon[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.KeyOff) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (KEY_OFF_L{}).", .{addr, coreId});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (KOFF_L{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = @truncate(u16, koff[coreId]);
                 },
                 @enumToInt(Spu2Reg.KeyOff) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (KEY_OFF_H{}).", .{addr, coreId});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (KOFF_H{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = @truncate(u16, koff[coreId] >> 16);
                 },@enumToInt(Spu2Reg.SpuAddr) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (SPU_ADDR_H).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (SPU_ADDR_H{}).", .{addr, coreId});
 
-                    data = @truncate(u16, spuAddr >> 16);
+                    data = @truncate(u16, spuAddr[coreId] >> 16);
                 },
                 @enumToInt(Spu2Reg.SpuAddr) + 2 => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (SPU_ADDR_L).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (SPU_ADDR_L{}).", .{addr, coreId});
 
-                    data = @truncate(u16, spuAddr);
+                    data = @truncate(u16, spuAddr[coreId]);
                 },
                 @enumToInt(Spu2Reg.SpuData) => {
                     info("   [SPU2      ] Read @ 0x{X:0>8} (SPU_DATA).", .{addr});
@@ -192,9 +210,9 @@ pub fn read(addr: u32) u16 {
                     assert(false);
                 },
                 @enumToInt(Spu2Reg.AdmaStat) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (ADMA_STAT).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (ADMA_STAT{}).", .{addr, coreId});
 
-                    data = admaStat;
+                    data = admaStat[coreId];
                 },
                 @enumToInt(Spu2Reg.CoreAttr) => {
                     info("   [SPU2      ] Read @ 0x{X:0>8} (CORE_ATTR{}).", .{addr, coreId});
@@ -217,9 +235,9 @@ pub fn read(addr: u32) u16 {
                     data = 0;
                 },
                 @enumToInt(Spu2Reg.CoreStat) => {
-                    info("   [SPU2      ] Read @ 0x{X:0>8} (CORE_STAT).", .{addr});
+                    info("   [SPU2      ] Read @ 0x{X:0>8} (CORE_STAT{}).", .{addr, coreId});
 
-                    data = coreStat;
+                    data = coreStat[coreId];
                 },
                 else => {
                     warn("[SPU2      ] Unhandled read @ 0x{X:0>8} (Core {}).", .{addr, coreId});
@@ -390,32 +408,44 @@ pub fn write(addr: u32, data: u16) void {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (MMIX{}) = 0x{X:0>4}.", .{addr, coreId, data});
                 },
                 @enumToInt(Spu2Reg.KeyOn) => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (KEY_ON_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (KON_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
+
+                    kon[coreId] &= ~@as(u24, 0xFFFF);
+                    kon[coreId] |=  @as(u24, data);
                 },
                 @enumToInt(Spu2Reg.KeyOn) + 2 => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (KEY_ON_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (KON_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
+
+                    kon[coreId] &= 0xFFFF;
+                    kon[coreId] |= @as(u24, data) << 16;
                 },
                 @enumToInt(Spu2Reg.KeyOff) => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (KEY_OFF_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (KOFF_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
+
+                    koff[coreId] &= ~@as(u24, 0xFFFF);
+                    koff[coreId] |=  @as(u24, data);
                 },
                 @enumToInt(Spu2Reg.KeyOff) + 2 => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (KEY_OFF_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (KOFF_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
+
+                    koff[coreId] &= 0xFFFF;
+                    koff[coreId] |= @as(u24, data) << 16;
                 },
                 @enumToInt(Spu2Reg.SpuAddr) => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (SPU_ADDR_H) = 0x{X:0>4}.", .{addr, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (SPU_ADDR_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    spuAddr &= 0xFFFF;
-                    spuAddr |= @as(u24, data) << 16;
+                    spuAddr[coreId] &= 0xFFFF;
+                    spuAddr[coreId] |= @as(u24, data) << 16;
 
-                    currSpuAddr = spuAddr;
+                    currSpuAddr[coreId] = spuAddr[coreId];
                 },
                 @enumToInt(Spu2Reg.SpuAddr) + 2 => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (SPU_ADDR_L) = 0x{X:0>4}.", .{addr, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (SPU_ADDR_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    spuAddr &= ~@as(u24, 0xFFFF);
-                    spuAddr |= @as(u24, data);
+                    spuAddr[coreId] &= ~@as(u24, 0xFFFF);
+                    spuAddr[coreId] |=  @as(u24, data);
 
-                    currSpuAddr = spuAddr;
+                    currSpuAddr[coreId] = spuAddr[coreId];
                 },
                 @enumToInt(Spu2Reg.SpuData) => {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (SPU_DATA{}) = 0x{X:0>4}.", .{addr, coreId, data});
@@ -423,15 +453,15 @@ pub fn write(addr: u32, data: u16) void {
                 @enumToInt(Spu2Reg.CoreAttr) => {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (CORE_ATTR{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    if ((admaStat & 3) == 0) {
+                    if (!isAdmaRunning()) {
                         const req = (data & (3 << 4)) != 0;
 
                         setDmaRequest(coreId, req);
                     }
 
                     if ((data & (1 << 15)) != 0) {
-                        // Clear DMA Busy flag, set DMA Ready flag
-                        coreStat &= ~(coreStatDmaBusy | coreStatDmaReady);
+                        // Clear DMA Busy and DMA Ready flag
+                        coreStat[coreId] &= ~(coreStatDmaBusy | coreStatDmaReady);
                     }
 
                     coreAttr[coreId] = data & 0x7FFF;
@@ -447,21 +477,11 @@ pub fn write(addr: u32, data: u16) void {
                     assert(false);
                 },
                 @enumToInt(Spu2Reg.AdmaStat) => {
-                    info("   [SPU2      ] Write @ 0x{X:0>8} (ADMA_STAT) = 0x{X:0>4}.", .{addr, data});
+                    info("   [SPU2      ] Write @ 0x{X:0>8} (ADMA_STAT{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    admaStat = data;
+                    admaStat[coreId] = data;
 
-                    if ((data & 1) != 0) {
-                        setDmaRequest(0, true);
-                    } else {
-                        setDmaRequest(0, false);
-                    }
-
-                    if ((data & 2) != 0) {
-                        setDmaRequest(1, true);
-                    } else {
-                        setDmaRequest(1, false);
-                    }
+                    //checkAdmaRunning(coreId);
                 },
                 // Why is ESA backwards??
                 @enumToInt(Spu2Reg.Esa) => {
@@ -496,11 +516,48 @@ pub fn write(addr: u32, data: u16) void {
 
 /// SPU DMA writes
 pub fn writeDmac(coreId: u1, data: u32) void {
-    info("   [SPU2      ] Write @ 0x{X:0>8} (Core {}) = 0x{X:0>8}.", .{currSpuAddr, coreId, data});
+    info("   [SPU2      ] Write @ 0x{X:0>8} (Core {}) = 0x{X:0>8}.", .{currSpuAddr[coreId], coreId, data});
 
-    currSpuAddr += 4;
+    //if (coreId == 1) {
+    //    sndBuf[sndPtr + 0] = @truncate(u8, data);
+    //    sndBuf[sndPtr + 1] = @truncate(u8, data >> 8);
+    //    sndBuf[sndPtr + 2] = @truncate(u8, data >> 16);
+    //    sndBuf[sndPtr + 3] = @truncate(u8, data >> 24);
+    //
+    //    sndPtr += 4;
+    //}
 
-    coreStat |= coreStatDmaBusy;
+    currSpuAddr[coreId] += 4;
+
+    coreStat[coreId] |= coreStatDmaBusy;
+}
+
+/// Returns true if AutoDMA is running
+fn isAdmaRunning() bool {
+    return (admaStat[0] & (1 << 0)) != 0 or (admaStat[1] & (1 << 1)) != 0;
+}
+
+/// Performs AutoDMA
+fn doAdma() void {
+    var coreId: u2 = 0;
+    while (coreId < 2) : (coreId += 1) {
+        if ((admaStat[coreId] & (@as(u16, 1) << coreId)) == 0) continue;
+
+        coreStat[coreId] |= coreStatDmaBusy;
+        coreStat[coreId] &= ~(coreStatDmaReady);
+
+        const data = dmac.doAdma(@truncate(u1, coreId));
+
+        info("   [SPU2     ] Core {} AutoDMA = 0x{X:0>8}.", .{coreId, data});
+
+        admaCtr[coreId] += 2;
+
+        if (admaCtr[coreId] >= 256) {
+            admaCtr[coreId] = 0;
+
+            admaStat[coreId] &= ~(@as(u16, 1) << coreId);
+        }
+    }
 }
 
 /// Sets SPU DMA requests
@@ -514,10 +571,10 @@ fn setDmaRequest(coreId: u1, req: bool) void {
     }
 
     if (req) {
-        coreStat &= ~(coreStatDmaReady);
+        coreStat[coreId] &= ~(coreStatDmaReady);
     } else {
-        coreStat &= ~(coreStatDmaBusy);
-        coreStat |= coreStatDmaReady;
+        coreStat[coreId] &= ~(coreStatDmaBusy);
+        coreStat[coreId] |= coreStatDmaReady;
     }
 }
 
@@ -525,14 +582,48 @@ fn setDmaRequest(coreId: u1, req: bool) void {
 pub fn dmaEnd(coreId: u1) void {
     info("   [SPU2      ] Core {} DMA transfer end.", .{coreId});
 
-    coreStat &= ~(coreStatDmaBusy);
-    coreStat |= coreStatDmaReady;
+    coreStat[coreId] &= ~(coreStatDmaBusy);
+    coreStat[coreId] |= coreStatDmaReady;
+}
 
-    if (coreId == 0 and (admaStat & 1) != 0) {
-        setDmaRequest(0, true);
+/// Steps SPU2
+pub fn step(cyc: i64) void {
+    cyclesToStep += cyc;
+
+    if (cyclesToStep < cyclesSound) return;
+
+    cyclesToStep -= cyclesSound;
+
+    if (kon[0] != 0 or kon[1] != 0) {
+        warn("[SPU2      ] K-ON! KON{} = 0x{X:0>6}, KON{} = 0x{X:0>6}", .{0, kon[0], 1, kon[1]});
+
+        if (kon[0] != 0xFFFFFF or kon[1] != 0xFFFFFF) {
+            assert(false);
+        }
+
+        kon[0] = 0;
+        kon[1] = 0;
     }
 
-    if (coreId == 1 and (admaStat & 2) != 0) {
-        setDmaRequest(1, true);
+    if (isAdmaRunning()) {
+        return doAdma();
     }
+}
+
+/// Dumps sound to file
+pub fn dumpSound() void {
+    info("   [Bus       ] Dumping Sound...", .{});
+
+    // Open Sound file
+    const sndFile = openFile("moeFiles/snd.bin", .{.mode = OpenMode.write_only}) catch {
+        err("  [moestation] Unable to open file.", .{});
+
+        return;
+    };
+
+    defer sndFile.close();
+
+    sndFile.writer().writeAll(&sndBuf) catch {
+        err("  [moestation] Unable to write to file.", .{});
+    };
 }
