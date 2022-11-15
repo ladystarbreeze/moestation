@@ -19,12 +19,14 @@ const dmacIop  = @import("core/dmac_iop.zig");
 const gif      = @import("core/gif.zig");
 const gs       = @import("core/gs.zig");
 const iop      = @import("core/iop.zig");
+const spu2     = @import("core/spu2.zig");
 const timerIop = @import("core/timer_iop.zig");
 const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
 const cdvdPath = "moeFiles/atelier_iris.iso";
+const elfPath  = "moeFiles/3stars.elf";
 
 /// main()
 pub fn main() void {
@@ -34,8 +36,8 @@ pub fn main() void {
     var allocator = std.heap.page_allocator;
 
     // Initialize submodules
-    if (bus.init(allocator, biosPath)) |_| {} else |e| switch (e) {
-        error.FileNotFound => return err("  [moestation] Unable to find BIOS file.", .{}),
+    if (bus.init(allocator, biosPath, elfPath)) |_| {} else |e| switch (e) {
+        error.FileNotFound => return err("  [moestation] Unable to find file.", .{}),
         else => return err("  [moestation] Unhandled error {}.", .{e})
     }
 
@@ -58,7 +60,6 @@ pub fn main() void {
 
         while (i < 4) : (i += 1) {
             cpu.step();
-            cpu.step();
 
             dmac.checkRunning();
 
@@ -67,6 +68,7 @@ pub fn main() void {
         }
 
         gs.step(4);
+        spu2.step(4);
 
         iop.step();
         timerIop.step();
