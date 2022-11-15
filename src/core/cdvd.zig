@@ -404,6 +404,13 @@ pub fn write(addr: u32, data: u8) void {
     }
 }
 
+/// Sets DRIVE_STAT
+fn setDriveStat(data: u8) void {
+    driveStat = data;
+
+    sDriveStat |= driveStat;
+}
+
 /// Calls N command handler
 fn runNCmd(cmd: u8) void {
     nCmd = cmd;
@@ -456,8 +463,7 @@ fn runSCmd(cmd: u8) void {
 
 /// Sends a CDVD interrupt
 pub fn sendInterrupt() void {
-    driveStat   = 0x0A;
-    sDriveStat |= driveStat;
+    setDriveStat(0xA);
 
     nCmdStat = 0x40;
 
@@ -480,16 +486,14 @@ fn doSeek() void {
 
     cyclesToSeek = if (nCmd == 6) 1000 else 90_000;
 
-    driveStat   = 0x12;
-    sDriveStat |= driveStat;
+    setDriveStat(0x12);
 }
 
 /// Reads a CD sector
 fn doReadCd() void {
     info("   [CDVD      ] Reading CD sector {}...", .{seekParam.pos + sectorNum});
 
-    driveStat   = 0x06;
-    sDriveStat |= driveStat;
+    setDriveStat(0x06);
 
     cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
         err("   [CDVD      ] Unable to seek to sector.", .{});
@@ -512,8 +516,7 @@ fn doReadCd() void {
 fn doReadDvd() void {
     info("   [CDVD      ] Reading DVD sector {}...", .{seekParam.pos + sectorNum});
 
-    driveStat   = 0x06;
-    sDriveStat |= driveStat;
+    setDriveStat(0x06);
 
     cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
         err("   [CDVD      ] Unable to seek to sector.", .{});
