@@ -546,6 +546,39 @@ pub fn checkRunning() void {
     }
 }
 
+
+
+/// Performs AutoDMA
+pub fn doAdma(coreId: u1) u32 {
+    const chn = if (coreId == 0) Channel.Spu1 else Channel.Spu2;
+
+    const chnId = @enumToInt(chn);
+
+    if (channels[chnId].bcr.len == 0) {
+        info("   [DMAC (IOP)] Channel {} ({s}) transfer, AutoDMA.", .{chnId, chn});
+
+        channels[chnId].bcr.len = @as(u32, channels[chnId].bcr.count) * @as(u32, channels[chnId].bcr.size);
+
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
+    }
+
+    channels[chnId].bcr.len -= 1;
+
+    const data = bus.readDmacIop(channels[chnId].madr);
+
+    channels[chnId].madr +%= 4;
+
+    if (channels[chnId].bcr.len == 0) {
+        channels[chnId].chcr.str = false;
+
+        channels[chnId].bcr.set(0);
+
+        transferEnd(chnId);
+    }
+
+    return data;
+}
+
 /// Performs CDVD DMA
 fn doCdvd() void {
     const chnId = @enumToInt(Channel.Cdvd);
