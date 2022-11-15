@@ -69,6 +69,13 @@ const PadCommand = enum(u8) {
     VibrationToggle = 0x4D,
 };
 
+/// Memory Card command
+const McCommand = enum(u8) {
+    Probe       = 0x11,
+    ReadDataPsx = 0x52,
+    AuthF3      = 0xF3,
+};
+
 /// Pad state
 const PadState = enum(u8) {
     Digital = 0x41,
@@ -105,6 +112,9 @@ var padState = PadState.Digital;
 /// Rumble values (stub)
 var rumble = [_]u8 {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
+/// Terminator byte
+var terminator: u8 = 0x55;
+
 /// Reads data from SIO2
 pub fn read(comptime T: type, addr: u32) T {
     var data: T = undefined;
@@ -120,7 +130,7 @@ pub fn read(comptime T: type, addr: u32) T {
             data = sio2FifoOut.readItem().?;
 
             if (sio2FifoOut.readableLength() < 4) {
-                dmac.setRequest(Channel.Sio2Out, false);
+                //dmac.setRequest(Channel.Sio2Out, false);
             }
         },
         @enumToInt(Sio2Reg.Sio2Ctrl) => {
@@ -188,7 +198,7 @@ pub fn readDmac() u32 {
     const data = @as(u32, sio2FifoOut.readItem().?) | (@as(u32, sio2FifoOut.readItem().?) << 8) | (@as(u32, sio2FifoOut.readItem().?) << 16) | (@as(u32, sio2FifoOut.readItem().?) << 24);
 
     if (sio2FifoOut.readableLength() < 4) {
-        dmac.setRequest(Channel.Sio2Out, false);
+        //dmac.setRequest(Channel.Sio2Out, false);
     }
 
     return data;
@@ -260,6 +270,9 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
                 sio2Send3 = Sio2Send3.init();
 
+                dmac.setRequest(Channel.Sio2In, true);
+                //dmac.setRequest(Channel.Sio2Out, false);
+
                 sio2Ctrl &= ~@as(u32, 0xC);
             }
             
@@ -309,6 +322,10 @@ fn writeFifoOut(data: u8) void {
         
         assert(false);
     };
+
+    if (sio2FifoOut.readableLength() >= 4) {
+        //dmac.setRequest(Channel.Sio2Out, true);
+    }
 }
 
 /// Returns an SIO2 device
@@ -373,6 +390,7 @@ fn doCmdChain() void {
 
         switch (activeDev) {
             Device.Controller => doPadCmd(),
+            Device.MemoryCard => doMcCmd(),
             else => {
                 err("  [SIO2      ] Unhandled {s} command.", .{@tagName(activeDev)});
 
@@ -385,7 +403,6 @@ fn doCmdChain() void {
 
     if (isChainValid) {
         intc.sendInterruptIop(IntSource.Sio2);
-        dmac.setRequest(Channel.Sio2Out, true);
     }
 }
 
@@ -408,6 +425,60 @@ fn doPadCmd() void {
             assert(false);
         }
     }
+}
+
+/// Executes a Memory Card command
+fn doMcCmd() void {
+    const cmd = sio2FifoIn.readItem().?;
+
+    switch (cmd) {
+        @enumToInt(McCommand.Probe      ) => cmdMcProbe(),
+        @enumToInt(McCommand.ReadDataPsx) => cmdMcReadDataPsx(),
+        @enumToInt(McCommand.AuthF3     ) => cmdMcAuthF3(),
+        else => {
+            err("  [SIO2      ] Unhandled Memory Card command 0x{X:0>2}.", .{cmd});
+
+            assert(false);
+        }
+    }
+}
+
+/// Memory Card AuthF3
+fn cmdMcAuthF3() void {
+    info("   [SIO2 (MC) ] AuthF3", .{});
+
+    // Get XX byte
+    const xx = sio2FifoIn.readItem().? | sio2FifoIn.readItem().?;
+
+    // Send reply
+    writeFifoOut(xx);
+    writeFifoOut(0x2B);
+    writeFifoOut(terminator);
+}
+
+/// Memory Card Probe
+fn cmdMcProbe() void {
+    info("   [SIO2 (MC) ] Probe", .{});
+
+    // Remove excessive command bytes
+    sio2FifoIn.discard(1);
+
+    // Send reply
+    writeFifoOut(0x2B);
+    writeFifoOut(terminator);
+}
+
+/// Memory Card Read Data (PSX style)
+fn cmdMcReadDataPsx() void {
+    info("   [SIO2 (MC) ] Read Data (PSX)", .{});
+
+    // Remove excessive command bytes
+    sio2FifoIn.discard(1);
+
+    // Send reply
+    writeFifoOut(0x08);
+    writeFifoOut(0x2B);
+    writeFifoOut(terminator);
 }
 
 /// Pad Enter/Exit Config Mode
