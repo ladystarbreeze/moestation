@@ -26,6 +26,11 @@ const intc = @import("intc.zig");
 
 const IntSource = intc.IntSourceIop;
 
+const iopClock: i64 = 36_864_000;
+
+const  readSpeedCd: i64 = 24 * 153_600;
+const readSpeedDvd: i64 =  4 * 1_382_400;
+
 /// CDVD registers
 const CdvdReg = enum(u32) {
     NCmd       = 0x1F40_2004,
@@ -210,9 +215,9 @@ const ReadBuffer = struct {
 };
 
 /// CDVD registers
-var nCmd: u8 = undefined;
-var sCmd: u8 = undefined;
-var sCmdLen: u8 = undefined;
+var nCmd: u8 = 0;
+var sCmd: u8 = 0;
+var sCmdLen: u8 = 0;
 
 var seekParam: SeekParam = SeekParam{};
 
@@ -227,12 +232,13 @@ var sDriveStat: u8 = 0;
 var   nCmdStat: u8 = 0x40;
 var      iStat: u8 = 0;
 
-var  sectorNum: u32 = 0;
+var    sectorNum: u32 = 0;
+var oldSectorNum: u32 = 0;
 
 var sCmdParam: u8 = undefined;
 
-var cyclesToRead: i32 = 0;
-var cyclesToSeek: i32 = 0;
+var cyclesToRead: i64 = 0;
+var cyclesToSeek: i64 = 0;
 
 /// CDVD read buffer
 var readBuf: ReadBuffer = ReadBuffer{};
@@ -248,6 +254,9 @@ pub fn init(cdvdPath: []const u8) !void {
 
     // Open CDVD ISO
     cdvdFile = try openFile(cdvdPath, .{.mode = OpenMode.read_only});
+
+    // Paused
+    setDriveStat(8);
 }
 
 /// Deinitializes the CDVD module
@@ -348,6 +357,8 @@ pub fn readDmac() u32 {
         if (readBuf.idx == readSize) {
             dmac.setRequest(Channel.Cdvd, false);
 
+            oldSectorNum = seekParam.pos + sectorNum;
+
             sectorNum += 1;
 
             if (sectorNum == seekParam.num) {
@@ -355,7 +366,7 @@ pub fn readDmac() u32 {
 
                 sendInterrupt();
             } else {
-                cyclesToSeek = 1;
+                cyclesToSeek = 0;
             }
             
             readBuf.clear();
@@ -402,6 +413,11 @@ pub fn write(addr: u32, data: u8) void {
             assert(false);
         }
     }
+}
+
+/// Get block timing
+fn getBlockTiming(isDvd: bool) i64 {
+    return @divTrunc(iopClock * seekParam.size, if (isDvd) readSpeedDvd else readSpeedCd);
 }
 
 /// Sets DRIVE_STAT
@@ -476,17 +492,34 @@ pub fn sendInterrupt() void {
 fn doSeek() void {
     info("   [CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}", .{seekParam.pos + sectorNum, seekParam.num, seekParam.size});
 
-    nCmdStat = 0x40;
-
     cdvdFile.seekTo(seekParam.pos * seekParam.size) catch {
         err("   [CDVD      ] Unable to seek to sector.", .{});
 
         assert(false);
     };
 
-    cyclesToSeek = if (nCmd == 6) 1000 else 90_000;
+    const isDvd = nCmd == @enumToInt(NCommand.ReadDvd);
 
-    setDriveStat(0x12);
+    var delta: i64 = @bitCast(i32, seekParam.pos) - @bitCast(i32, oldSectorNum);
+
+    if (delta < 0) delta = -delta;
+
+    if ((isDvd and delta < 16) or (!isDvd and delta < 8)) {
+        // Contiguous read
+        cyclesToSeek = getBlockTiming(isDvd) * delta;
+    } else if ((isDvd and delta < 14764) or (!isDvd and delta < 4371)) {
+        // Fast seek
+        cyclesToSeek = iopClock / 33;
+    } else {
+        // Full seek
+        cyclesToSeek = iopClock / 10;
+    }
+
+    if (delta != 0) {
+        setDriveStat(0x12);
+    } else {
+        setDriveStat(6);
+    }
 }
 
 /// Reads a CD sector
@@ -522,14 +555,12 @@ fn doReadDvd() void {
 
     setDriveStat(0x06);
 
-    cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
-        err("   [CDVD      ] Unable to seek to sector.", .{});
-
-        assert(false);
-    };
-
     if (cdvdFile.reader().read(readBuf.buf[12..2060])) |bytesRead| {
-        assert(bytesRead == seekParam.size);
+        if (bytesRead != seekParam.size) {
+            err("  [CDVD      ] Read size mismatch.", .{});
+
+            assert(false);
+        }
     } else |e| switch (e) {
         else => {
             err("  [moestation] Unhandled error {}.", .{e});
@@ -603,6 +634,18 @@ fn cmdReadCd() void {
     seekParam.pos = @as(u32, nCmdParam.buf[0]) | (@as(u32, nCmdParam.buf[1]) << 8) | (@as(u32, nCmdParam.buf[2]) << 16) | (@as(u32, nCmdParam.buf[3]) << 24);
     seekParam.num = @as(u32, nCmdParam.buf[4]) | (@as(u32, nCmdParam.buf[5]) << 8) | (@as(u32, nCmdParam.buf[6]) << 16) | (@as(u32, nCmdParam.buf[7]) << 24);
 
+    if (seekParam.num == 0) {
+        err("  [CDVD      ] No sectors to read.", .{});
+
+        assert(false);
+    }
+
+    if (seekParam.pos >= 0x8000_0000) {
+        err("  [CDVD      ] Negative sector number.", .{});
+
+        assert(false);
+    }
+
     switch (nCmdParam.buf[10]) {
         0    => seekParam.size = 2048,
         1    => seekParam.size = 2328,
@@ -612,6 +655,12 @@ fn cmdReadCd() void {
 
             assert(false);
         },
+    }
+
+    if (nCmdParam.buf[10] != 0) {
+        err("  [CDVD      ] Unhanded non-2048 byte CD sector.", .{});
+
+        assert(false);
     }
 
     doSeek();
@@ -654,6 +703,18 @@ fn cmdReadDvd() void {
     seekParam.num  = @as(u32, nCmdParam.buf[4]) | (@as(u32, nCmdParam.buf[5]) << 8) | (@as(u32, nCmdParam.buf[6]) << 16) | (@as(u32, nCmdParam.buf[7]) << 24);
     seekParam.size = 2048;
 
+    if (seekParam.num == 0) {
+        err("  [CDVD      ] No sectors to read.", .{});
+
+        assert(false);
+    }
+
+    if (seekParam.pos >= 0x8000_0000) {
+        err("  [CDVD      ] Negative sector number.", .{});
+
+        assert(false);
+    }
+
     doSeek();
 }
 
@@ -669,9 +730,9 @@ fn cmdReadRtc() void {
     sCmdData.write(0);
     
     sCmdData.write(0);
-    sCmdData.write(0);
-    sCmdData.write(0);
-    sCmdData.write(0);
+    sCmdData.write(1);
+    sCmdData.write(1);
+    sCmdData.write(100);
 
     sCmdLen = 8;
 }
@@ -688,7 +749,7 @@ fn cmdUpdateStickyFlags() void {
 }
 
 pub fn step() void {
-    if (cyclesToRead > 0) {
+    if (cyclesToRead >= 0) {
         cyclesToRead -= 1;
 
         if (cyclesToRead == 0) {
@@ -696,20 +757,19 @@ pub fn step() void {
         }
     }
 
-    if (cyclesToSeek > 0) {
-        cyclesToSeek -= 1;
-
+    if (cyclesToSeek >= 0) {
         if (cyclesToSeek == 0) {
-            if (nCmd == 6) {
-                doReadCd();
-                
-                // NOTE: This speeds up the boot process
-                cyclesToRead = 150;
-            } else {
+            const isDvd = nCmd == @enumToInt(NCommand.ReadDvd);
+
+            if (isDvd) {
                 doReadDvd();
-                
-                cyclesToRead = 15_000;
+            } else {
+                doReadCd();
             }
+            
+            cyclesToRead = getBlockTiming(isDvd);
         }
+        
+        cyclesToSeek -= 1;
     }
 }
