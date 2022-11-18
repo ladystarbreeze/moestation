@@ -393,6 +393,8 @@ pub fn read(comptime T: type, addr: u32) T {
 pub fn readDmac(addr: u32) u128 {
     var data: u128 = undefined;
 
+    if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
+
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(u128));
     } else {
@@ -508,6 +510,8 @@ pub fn readIop(comptime T: type, addr: u32) T {
 /// Reads data from the system bus (from IOP DMA)
 pub fn readDmacIop(addr: u32) u32 {
     var data: u32 = undefined;
+
+    if ((addr & 3) != 0) @panic("Unaligned IOP DMA address!!");
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(u32));
@@ -703,6 +707,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 /// Reads data from the system bus (for DMAC)
 pub fn writeDmac(addr: u32, data: u128) void {
     //info("   [Bus (DMAC)] [0x{X:0>8}] = 0x{X:0>32}", .{addr, data});
+    if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &rdram[addr]), @ptrCast([*]const u8, &data), @sizeOf(u128));
@@ -800,6 +805,7 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
 /// Writes data to the IOP bus (from IOP DMA)
 pub fn writeIopDmac(addr: u24, data: u32) void {
     //info("   [Bus (DMAC)] [0x{X:0>6}] = 0x{X:0>8}", .{addr, data});
+    if ((addr & 3) != 0) @panic("Unaligned IOP DMA address!!");
 
     if (addr == 0x05B1FC) {
         //info("   [Bus (DMAC)] Write @ 0x{X:0>8} = 0x{X}", .{addr, data});
@@ -816,7 +822,7 @@ pub fn writeIopDmac(addr: u24, data: u32) void {
 }
 
 /// Dumps RDRAM and IOP RAM images
-fn dumpRam() void {
+pub fn dumpRam() void {
     info("   [Bus       ] Dumping RAM...", .{});
 
     // Open RAM file
