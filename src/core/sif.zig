@@ -141,7 +141,7 @@ pub fn readSif0(comptime T: type) T {
 
     dmacIop.setRequest(dmacIop.Channel.Sif0, true);
 
-    if (sif1Fifo.readableLength() < 4) {
+    if (sif0Fifo.readableLength() < 4) {
         dmac.setRequest(dmac.Channel.Sif0, false);
     }
 
@@ -247,7 +247,7 @@ pub fn writeSif0(data: u32) void {
 
 /// Writes data to SIF1 FIFO
 pub fn writeSif1(data: u128) void {
-    // info("   [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
+    err("  [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
 
     var i: u7 = 0;
     while (i < 4) : (i += 1) {
