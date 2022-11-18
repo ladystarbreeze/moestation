@@ -23,6 +23,8 @@ const exts = @import("../common/extend.zig").exts;
 /// Enable/disable disassembler
 var doDisasm = false;
 
+const doIopPrintf = false;
+
 const resetVector: u32 = 0xBFC0_0000;
 
 /// Branch delay slot helper
@@ -1553,16 +1555,18 @@ pub fn step() void {
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
 
-    if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
-        var ptr = regFile.get(@enumToInt(CpuReg.A1));
-        var len = regFile.get(@enumToInt(CpuReg.A2));
+    if (doIopPrintf) {
+        if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
+            var ptr = regFile.get(@enumToInt(CpuReg.A1));
+            var len = regFile.get(@enumToInt(CpuReg.A2));
 
-        const stdOut = std.io.getStdOut().writer();
+            const stdOut = std.io.getStdOut().writer();
 
-        while (len != 0) : (len -= 1) {
-            stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
+            while (len != 0) : (len -= 1) {
+                stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
 
-            ptr += 1;
+                ptr += 1;
+            }
         }
     }
 
