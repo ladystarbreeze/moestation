@@ -92,7 +92,7 @@ pub fn getMaskIop(comptime T: type, offset: u2) T {
     switch (T) {
         u8  => assert(false),
         u16 => {
-            if ((offset & 1) == 0) {
+            if ((offset & 2) == 0) {
                 data = @truncate(u16, iMask);
             } else {
                 data = @truncate(u16, iMask >> 16);
@@ -134,7 +134,7 @@ pub fn setMaskIop(comptime T: type, data: T, offset: u2) void {
     switch (T) {
         u8  => assert(false),
         u16 => {
-            if ((offset & 1) == 0) {
+            if ((offset & 2) == 0) {
                 iMask = (iMask & 0x1F_0000) | @as(u25, data);
             } else {
                 iMask = (@as(u25, data) << 16) | (iMask & 0xFFFF);
@@ -159,7 +159,7 @@ pub fn setStatIop(comptime T: type, data: T, offset: u2) void {
     switch (T) {
         u8  => assert(false),
         u16 => {
-            if ((offset & 1) == 0) {
+            if ((offset & 2) == 0) {
                 iStat &= @as(u25, data & 0xFFFF);
             } else {
                 iStat &= (@as(u25, (data & 0xFFFF)) << 16);
