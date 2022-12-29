@@ -118,3 +118,30 @@ pub fn iMadd(instr: u32) void {
         info("   [COP1      ] MADD.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
     }
 }
+
+/// MOVe
+pub fn iMov(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+
+    regFile.set(fd, regFile.get(fs));
+
+    if (doDisasm) {
+        info("   [COP1      ] MOV.S ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fs)});
+    }
+}
+
+/// MULtiply
+pub fn iMul(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) * regFile.get(ft);
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        info("   [COP1      ] MUL.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+    }
+}
