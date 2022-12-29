@@ -367,10 +367,6 @@ pub fn init() void {
     info("   [EE Core   ] Successfully initialized.", .{});
 }
 
-pub fn printPc() void {
-    err("  [EE Core   ] PC: 0x{X:0>8}", .{regFile.cpc});
-}
-
 /// Translates virtual address to physical address. Returns true if scratchpad access
 fn translateAddr(comptime isWrite: bool, addr: *u32) bool {
     // NOTE: this is Kernel mode only!
@@ -798,6 +794,11 @@ fn decodeInstr(instr: u32) void {
             assert(false);
         }
     }
+}
+
+/// Sets COP0 IRQ flag, checks for interrupt
+pub fn setIntPending(irq: bool) void {
+    cop0.setIrqPending(irq);
 }
 
 /// Sets irqPending if interrupt is pending
@@ -3292,5 +3293,5 @@ pub fn step() void {
 }
 
 pub fn dumpRegs() void {
-    info("   [EE Core   ] PC = 0x{X:0>8}, $RA = 0x{X:0>8}", .{regFile.cpc, regFile.get(u32, @enumToInt(CpuReg.RA))});
+    err("  [EE Core   ] PC = 0x{X:0>8}, $RA = 0x{X:0>8}", .{regFile.cpc, regFile.get(u32, @enumToInt(CpuReg.RA))});
 }

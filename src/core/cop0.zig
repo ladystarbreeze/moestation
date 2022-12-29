@@ -469,6 +469,15 @@ pub fn setBranchDelay(bd: bool) void {
     cause.bd = bd;
 }
 
+/// Sets Cause.10
+pub fn setIrqPending(irq: bool) void {
+    cause.ip &= ~@as(u3, 1);
+
+    cause.ip |= @as(u3, @bitCast(u1, irq));
+
+    cpu.checkIntPending();
+}
+
 /// Sets Cause.11
 pub fn setDmacIrqPending(irq: bool) void {
     cause.ip &= ~@as(u3, 2);
