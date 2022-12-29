@@ -546,13 +546,17 @@ pub fn checkRunning() void {
     }
 }
 
-
-
 /// Performs AutoDMA
 pub fn doAdma(coreId: u1) u32 {
     const chn = if (coreId == 0) Channel.Spu1 else Channel.Spu2;
 
     const chnId = @enumToInt(chn);
+
+    if (channels[chnId].chcr.mod != @enumToInt(Mode.Slice)) {
+        err("  [DMAC (IOP)] Unhandled ADMA transfer mode.", .{});
+
+        assert(false);
+    }
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, AutoDMA.", .{chnId, chn});
