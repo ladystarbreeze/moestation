@@ -24,7 +24,7 @@ const timerIop = @import("core/timer_iop.zig");
 const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
-const biosPath = "moeFiles/bios.bin";
+const biosPath = "moeFiles/scph39001.bin";
 const cdvdPath = "moeFiles/atelier_iris.iso";
 const elfPath  = "moeFiles/tests/memory/ee/default.elf";
 
@@ -59,6 +59,7 @@ pub fn main() void {
         var i: i32 = 0;
 
         while (i < 4) : (i += 1) {
+            cpu.step();
             cpu.step();
 
             dmac.checkRunning();
