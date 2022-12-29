@@ -12,6 +12,7 @@ const assert = std.debug.assert;
 const err  = std.log.err;
 const info = std.log.info;
 
+const cpu = @import("cpu.zig");
 const iop = @import("iop.zig");
 
 /// Interrupt sources
@@ -192,11 +193,7 @@ pub fn sendInterruptIop(src: IntSourceIop) void {
 }
 
 fn checkInterrupt() void {
-    if ((intcStat & intcMask) != 0) {
-        err("  [INTC      ] Unhandled EE interrupt.", .{});
-
-        assert(false);
-    }
+    cpu.setIntPending((intcStat & intcMask) != 0);
 }
 
 fn checkInterruptIop() void {
