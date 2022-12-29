@@ -215,6 +215,8 @@ pub fn loadElf() u32 {
     return elfHeader.e_entry;
 }
 
+var tmVal: u128 = 0;
+
 /// Reads data from the system bus
 pub fn read(comptime T: type, addr: u32) T {
     assert(T == u8 or T == u16 or T == u32 or T == u64 or T == u128);
@@ -224,9 +226,12 @@ pub fn read(comptime T: type, addr: u32) T {
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Timer) and addr < (@enumToInt(MemBase.Timer) + @enumToInt(MemSize.Timer))) {
-        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Timer).", .{@typeName(T), addr});
+        //err("  [Bus       ] Read ({s}) @ 0x{X:0>8} (Timer).", .{@typeName(T), addr});
 
-        data = 0;
+        data = @truncate(T, tmVal);
+
+        tmVal += 1;
+        tmVal &= 0xFFFF_FFFF;
     } else if (addr >= @enumToInt(MemBase.Ipu) and addr < (@enumToInt(MemBase.Ipu) + @enumToInt(MemSize.Ipu))) {
         if (T != u32) {
             @panic("Unhandled read @ IPU I/O");
@@ -292,7 +297,7 @@ pub fn read(comptime T: type, addr: u32) T {
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
-        data = 0;
+        data = if (addr == 0x1A000006) 1 else 0;
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -373,7 +378,7 @@ pub fn read(comptime T: type, addr: u32) T {
                 data = dmac.getEnable();
             },
             0x1000_F130 => data = 0,
-            0x1000_F400, 0x1000_F410 => {
+            0x1000_F400, 0x1000_F410, 0x1000_F480 => {
                 warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
                 data = 0;
