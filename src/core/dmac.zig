@@ -18,6 +18,7 @@ const cop0    = @import("cop0.zig");
 const dmacIop = @import("dmac_iop.zig");
 const gif     = @import("gif.zig");
 const sif     = @import("sif.zig");
+const vif1    = @import("vif1.zig");
 
 /// DMA channels
 pub const Channel = enum(u4) {
@@ -449,6 +450,7 @@ pub fn checkRunning() void {
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
+                Channel.Vif1  => doVif1(),
                 Channel.Path3 => doPath3(),
                 Channel.Sif0  => doSif0(),
                 Channel.Sif1  => doSif1(),
@@ -667,6 +669,44 @@ fn doSif1() void {
         channels[chnId].qwc -= 1;
 
         sif.writeSif1(bus.readDmac(channels[chnId].madr));
+        
+        channels[chnId].madr += @sizeOf(u128);
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
+    }
+}
+
+/// Performs a VIF1 transfer
+fn doVif1() void {
+    const chnId = @enumToInt(Channel.Vif1);
+
+    if (channels[chnId].qwc == 0) {
+        info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Vif1)});
+
+        // Read new tag
+        const dmaTag = bus.readDmac(channels[chnId].tadr);
+
+        decodeSourceTag(chnId, dmaTag);
+
+        channels[chnId].hasTag = true;
+
+        if (channels[chnId].chcr.tte) {
+            info("  [DMAC      ] Unhandled tag transfer.", .{});
+            
+            assert(false);
+        }
+    } else {
+        if (!channels[chnId].hasTag) {
+            assert(false);
+        }
+
+        channels[chnId].qwc -= 1;
+
+        vif1.writeFifo(bus.readDmac(channels[chnId].madr));
         
         channels[chnId].madr += @sizeOf(u128);
 
