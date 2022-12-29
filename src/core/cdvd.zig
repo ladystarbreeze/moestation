@@ -26,7 +26,8 @@ const intc = @import("intc.zig");
 
 const IntSource = intc.IntSourceIop;
 
-const iopClock: i64 = 36_864_000;
+//const iopClock: i64 = 36_864_000;
+const iopClock: i64 = 36_864_0;
 
 const  readSpeedCd: i64 = 24 * 153_600;
 const readSpeedDvd: i64 =  4 * 1_382_400;
