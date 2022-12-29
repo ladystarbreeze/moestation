@@ -323,6 +323,10 @@ const RegFile = struct {
     pub fn set(self: *RegFile, comptime T: type, idx: u5, data: T) void {
         self.regs[idx].set(T, data);
 
+        //const tag = @tagName(@intToEnum(CpuReg, idx));
+
+        //info("   [EE Core   ] ${s} = 0x{X:0>8}", .{tag, data});
+
         self.regs[0].set(u128, 0);
     }
 
@@ -361,6 +365,10 @@ pub fn init() void {
     cop0.init();
 
     info("   [EE Core   ] Successfully initialized.", .{});
+}
+
+pub fn printPc() void {
+    err("  [EE Core   ] PC: 0x{X:0>8}", .{regFile.cpc});
 }
 
 /// Translates virtual address to physical address. Returns true if scratchpad access
@@ -2259,7 +2267,7 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
         regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
     }
 
-    regFile.set(u32, rd, @truncate(u32, @bitCast(u64, res)));
+    regFile.set(u64, rd, regFile.lo.get(u64));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2292,7 +2300,7 @@ fn iMultu(instr: u32, comptime pipeline: u1) void {
         regFile.hi.set(u32, @truncate(u32, res >> 32));
     }
 
-    regFile.set(u32, rd, @truncate(u32, res));
+    regFile.set(u64, rd, regFile.lo.get(u64));
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -3265,6 +3273,12 @@ pub fn step() void {
 
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
+
+    if (regFile.cpc == 0x8000_516C) {
+        //bus.dumpRam();
+
+        //@panic("blah");
+    }
 
     cop0.incrementCount();
 
