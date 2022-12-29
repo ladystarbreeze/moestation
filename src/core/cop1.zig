@@ -104,6 +104,23 @@ pub fn iAdda(instr: u32) void {
     }
 }
 
+
+
+/// DIVide
+pub fn iDiv(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) / regFile.get(ft);
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        info("   [COP1      ] DIV.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+    }
+}
+
 /// Multiply ADD
 pub fn iMadd(instr: u32) void {
     const fd = getRt(instr);

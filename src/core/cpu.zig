@@ -173,6 +173,7 @@ const Cop1Opcode = enum(u5) {
 /// COP1 Single instructions
 const Cop1Single = enum(u6) {
     Mul  = 0x02,
+    Div  = 0x03,
     Mov  = 0x06,
     Adda = 0x18,
     Madd = 0x1C,
@@ -607,6 +608,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (funct) {
                         @enumToInt(Cop1Single.Mul ) => cop1.iMul(instr),
+                        @enumToInt(Cop1Single.Div ) => cop1.iDiv(instr),
                         @enumToInt(Cop1Single.Mov ) => cop1.iMov(instr),
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
                         @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
