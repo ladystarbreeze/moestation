@@ -227,12 +227,12 @@ pub fn read(addr: u32) u16 {
                 @enumToInt(Spu2Reg.Endx) => {
                     info("   [SPU2      ] Read @ 0x{X:0>8} (ENDX_H{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = 0xFF;
                 },
                 @enumToInt(Spu2Reg.Endx) + 2 => {
                     info("   [SPU2      ] Read @ 0x{X:0>8} (ENDX_L{}).", .{addr, coreId});
 
-                    data = 0;
+                    data = 0xFFFF;
                 },
                 @enumToInt(Spu2Reg.CoreStat) => {
                     info("   [SPU2      ] Read @ 0x{X:0>8} (CORE_STAT{}).", .{addr, coreId});
@@ -532,6 +532,12 @@ pub fn writeDmac(coreId: u1, data: u32) void {
     coreStat[coreId] |= coreStatDmaBusy;
 }
 
+/// Clears DMA busy bit
+pub fn clearDmaBusy(coreId: u1) void {
+    coreStat[coreId] &= ~coreStatDmaBusy;
+    coreStat[coreId] |= coreStatDmaReady;
+}
+
 /// Returns true if AutoDMA is running
 fn isAdmaRunning() bool {
     return (admaStat[0] & (1 << 0)) != 0 or (admaStat[1] & (1 << 1)) != 0;
@@ -556,6 +562,8 @@ fn doAdma() void {
             admaCtr[coreId] = 0;
 
             admaStat[coreId] &= ~(@as(u16, 1) << coreId);
+
+            clearDmaBusy(@truncate(u1, coreId));
         }
     }
 }
@@ -582,8 +590,7 @@ fn setDmaRequest(coreId: u1, req: bool) void {
 pub fn dmaEnd(coreId: u1) void {
     info("   [SPU2      ] Core {} DMA transfer end.", .{coreId});
 
-    coreStat[coreId] &= ~(coreStatDmaBusy);
-    coreStat[coreId] |= coreStatDmaReady;
+    clearDmaBusy(coreId);
 }
 
 /// Steps SPU2
