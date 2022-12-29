@@ -105,6 +105,7 @@ const VifCode = enum(u7) {
     Stmod    = 0x05,
     Mskpath3 = 0x06,
     Mark     = 0x07,
+    Flushe   = 0x10,
     Stmask   = 0x20,
     Strow    = 0x30,
     Stcol    = 0x31,
@@ -269,6 +270,7 @@ fn doCmd() void {
         @enumToInt(VifCode.Stmod   ) => iStmod(vifCode),
         @enumToInt(VifCode.Mskpath3) => iMskpath3(vifCode),
         @enumToInt(VifCode.Mark    ) => iMark(vifCode),
+        @enumToInt(VifCode.Flushe  ) => iFlushe(),
         @enumToInt(VifCode.Stmask  ) => iStmask(),
         @enumToInt(VifCode.Strow   ) => iStrow(),
         @enumToInt(VifCode.Stcol   ) => iStcol(),
@@ -305,6 +307,13 @@ fn iBase(code: u32) void {
     const base = @truncate(u10, code);
 
     info("   [VIF1      ] BASE; BASE = 0x{X:0>3}", .{base});
+
+    isCmdDone = true;
+}
+
+/// FLUSHE
+fn iFlushe() void {
+    info("   [VIF1      ] FLUSHE", .{});
 
     isCmdDone = true;
 }
