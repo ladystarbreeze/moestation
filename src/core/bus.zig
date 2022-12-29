@@ -398,10 +398,10 @@ pub fn read(comptime T: type, addr: u32) T {
 pub fn readDmac(addr: u32) u128 {
     var data: u128 = undefined;
 
-    if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
+    //if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
-        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(u128));
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0xFFFF_FFF0]), @sizeOf(u128));
     } else {
         err("  [Bus (DMAC)] Unhandled read @ 0x{X:0>8}.", .{addr});
 
