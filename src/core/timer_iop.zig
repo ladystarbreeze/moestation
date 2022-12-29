@@ -294,10 +294,8 @@ pub fn step() void {
                 timers[i].mode.equf = true;
 
                 sendInterrupt(i);
-            }
 
-            if (timers[i].mode.zret) {
-                timers[i].count = 0;
+                // TODO: no zero return is a hack! Fix this!
             }
         } else if ((i < 3 and oldCount == 0xFFFF) or (oldCount == @bitCast(u32, @as(i32, -1)))) {
             if (timers[i].mode.ovfe) {
