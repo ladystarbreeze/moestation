@@ -375,8 +375,6 @@ fn doCmdChain() void {
         assert(false);
     }
 
-    const isChainValid = sio2Send3.readableLength() > 0;
-
     while (sio2Send3.readableLength() > 0) {
         const data = sio2Send3.readItem().?;
 
@@ -401,9 +399,7 @@ fn doCmdChain() void {
 
     updateDevStatus();
 
-    if (isChainValid) {
-        intc.sendInterruptIop(IntSource.Sio2);
-    }
+    intc.sendInterruptIop(IntSource.Sio2);
 }
 
 /// Executes a pad command
