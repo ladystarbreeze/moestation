@@ -95,6 +95,7 @@ const Opcode = enum(u6) {
     Lwc1    = 0x31,
     Ld      = 0x37,
     Swc1    = 0x39,
+    Sqc2    = 0x3E,
     Sd      = 0x3F,
 };
 
@@ -771,6 +772,7 @@ fn decodeInstr(instr: u32) void {
         0x33 => {},
         @enumToInt(Opcode.Ld   ) => iLd(instr),
         @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
+        @enumToInt(Opcode.Sqc2 ) => iSqc2(instr),
         @enumToInt(Opcode.Sd   ) => iSd(instr),
         else => {
             err("  [EE Core   ] Unhandled instruction 0x{X} (0x{X:0>8}).", .{opcode, instr});
@@ -2980,6 +2982,26 @@ fn iSq(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SQ ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
+    }
+
+    write(u128, addr, data);
+}
+
+/// Store Quadword Coprocessor 2
+fn iSqc2(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = (regFile.get(u32, rs) +% imm16s) & ~@as(u32, 15);
+    const data = vu0.get(u128, rt);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SQC2 ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     write(u128, addr, data);
