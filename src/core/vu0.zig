@@ -289,6 +289,33 @@ fn getRs(instr: u32) u5 {
     return @truncate(u5, instr >> 11);
 }
 
+/// floating-point ADDition
+pub fn iAdd(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) + regFile.getVfElement(f32, ft, e);
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] ADD.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
 /// Integer ADDition
 pub fn iIadd(instr: u32) void {
     const id = getRd(instr);
@@ -337,6 +364,35 @@ pub fn iIswr(instr: u32) void {
         const destStr = getDestStr(dest);
 
         info("   [VU0       ] ISWR.{s} VI[{}]{s}, (VI[{}])", .{destStr, it, destStr, is});
+    }
+}
+
+/// Move and Rotate per word
+pub fn iMr32(instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    if (dest & (1 << 0) != 0) {
+        regFile.setVfElement(f32, ft, Element.X, regFile.getVfElement(f32, fs, Element.W));
+    }
+    if (dest & (1 << 1) != 0) {
+        regFile.setVfElement(f32, ft, Element.W, regFile.getVfElement(f32, fs, Element.Z));
+    }
+    if (dest & (1 << 2) != 0) {
+        regFile.setVfElement(f32, ft, Element.Z, regFile.getVfElement(f32, fs, Element.Y));
+    }
+    if (dest & (1 << 3) != 0) {
+        regFile.setVfElement(f32, ft, Element.Y, regFile.getVfElement(f32, fs, Element.X));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = regFile.getVf(ft);
+
+        info("   [VU0       ] MR32.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, ft, destStr, fs, destStr, ft, vt});
     }
 }
 

@@ -626,37 +626,21 @@ fn decodeInstr(instr: u32) void {
                 const funct = getFunct(instr);
 
                 if ((funct >> 2) == 0xF) {
-                    const sa = getSa(instr);
+                    const f = (@as(u7, getSa(instr)) << 2) | (funct & 3);
 
-                    switch (sa) {
-                        0x0D => {
-                            switch (funct) {
-                                0x3D => vu0.iSqi(instr),
-                                else => {
-                                    err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction (0x0D) 0x{X} (0x{X:0>8}).", .{funct, instr});
-
-                                    assert(false);
-                                }
-                            }
-                        },
-                        0x0F => {
-                            switch (funct) {
-                                0x3F => vu0.iIswr(instr),
-                                else => {
-                                    err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction (0x0F) 0x{X} (0x{X:0>8}).", .{funct, instr});
-
-                                    assert(false);
-                                }
-                            }
-                        },
+                    switch (f) {
+                        0x31 => vu0.iMr32(instr),
+                        0x35 => vu0.iSqi(instr),
+                        0x3F => vu0.iIswr(instr),
                         else => {
-                            err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
+                            err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction 0x{X} (0x{X:0>8}).", .{f, instr});
 
                             assert(false);
                         }
                     }
                 } else {
                     switch (funct) {
+                        0x28 => vu0.iAdd(instr),
                         0x2C => vu0.iSub(instr),
                         0x30 => vu0.iIadd(instr),
                         else => {
