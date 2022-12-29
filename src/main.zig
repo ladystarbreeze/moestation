@@ -26,7 +26,7 @@ const vif1     = @import("core/vif1.zig");
 /// BIOS path
 const biosPath = "moeFiles/bios.bin";
 const cdvdPath = "moeFiles/atelier_iris.iso";
-const elfPath  = "moeFiles/3stars.elf";
+const elfPath  = "moeFiles/tests/memory/ee/default.elf";
 
 /// main()
 pub fn main() void {
