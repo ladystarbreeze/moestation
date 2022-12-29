@@ -18,7 +18,8 @@ const intc = @import("intc.zig");
 const IntSource = intc.IntSource;
 const IntSourceIop = intc.IntSourceIop;
 
-const timer = @import("timer_iop.zig");
+const timer = @import("timer.zig");
+const timerIop = @import("timer_iop.zig");
 
 /// GS registers
 const GsReg = enum(u8) {
@@ -102,8 +103,8 @@ const PrivReg = enum(u32) {
     Siglblid = 0x1200_1080,
 };
 
-const cyclesFrame: i64 = 147_000_000 / 60;
-const  cyclesLine: i64 = cyclesFrame / 544;
+const  cyclesLine: i64 = 9371;
+const cyclesFrame: i64 = cyclesLine * 60;
 
 /// Simple Line counter
 var cyclesToNextLine: i64 = 0;
@@ -192,6 +193,7 @@ pub fn step(cyclesElapsed: i64) void {
         lines += 1;
 
         timer.stepHblank();
+        timerIop.stepHblank();
 
         if (lines == 480) {
             intc.sendInterrupt(IntSource.VblankStart);
