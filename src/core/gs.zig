@@ -145,7 +145,7 @@ pub fn writePacked(addr: u4, data: u128) void {
 
 /// Writes data to HWREG
 pub fn writeHwreg(data: u64) void {
-    info("  [GS        ] Write @ HWREG = 0x{X:0>16}.", .{data});
+    info("   [GS        ] Write @ HWREG = 0x{X:0>16}.", .{data});
 }
 
 /// Writes data to privileged register
