@@ -22,6 +22,8 @@ const Channel = dmac.Channel;
 
 const gs = @import("gs.zig");
 
+const GsReg = gs.GsReg;
+
 /// GIF I/O
 const GifReg = enum(u32) {
     GifCtrl  = 0x1000_3000,
@@ -250,9 +252,7 @@ pub fn step() void {
             gifTag.hasTag = false;
         } else {
             if (gifTag.prim) {
-                err("  [GIF       ] Unhandled PRIM write.", .{});
-
-                assert(false);
+                gs.write(@enumToInt(GsReg.Prim), gifTag.pdata);
             }
 
             nloop = gifTag.nloop;
