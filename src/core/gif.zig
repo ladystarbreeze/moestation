@@ -116,7 +116,7 @@ var gifTag = GifTag{};
 
 /// Current NREGS and NLOOP
 var nloop: u15 = 0;
-var nregs: u5  = 0;
+var nregs: u6  = 0;
 
 /// Reads data from GIF I/O
 pub fn read(addr: u32) u32 {
