@@ -485,15 +485,15 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
             channels[chnId].tagEnd = true;
         },
         SourceTag.Cnt => {
-            channels[chnId].madr = channels[chnId].tadr + 8;
-            channels[chnId].tadr = channels[chnId].madr + 8 * channels[chnId].qwc;
+            channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
+            channels[chnId].tadr = channels[chnId].madr + @sizeOf(u128) * channels[chnId].qwc;
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
         SourceTag.Next => {
-            channels[chnId].madr = channels[chnId].tadr + 8;
+            channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
             channels[chnId].tadr = @truncate(u32, dmaTag >> 32);
 
             info("   [DMAC      ] New tag: next. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
@@ -518,7 +518,7 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
         SourceTag.End => {
-            channels[chnId].madr = channels[chnId].tadr + 8;
+            channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
             channels[chnId].tadr += @sizeOf(u128);
 
             info("   [DMAC      ] New tag: end. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
