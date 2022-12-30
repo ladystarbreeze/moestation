@@ -134,6 +134,31 @@ pub fn writePacked(addr: u4, data: u128) void {
         @enumToInt(GsReg.Prim) => {
             write(@enumToInt(GsReg.Prim), @truncate(u11, data));
         },
+        @enumToInt(GsReg.Rgbaq) => {
+            var rgbaq: u64 = 0;
+
+            // TODO: add Q!
+            rgbaq |= @as(u64, @truncate(u8, data));
+            rgbaq |= @as(u64, @truncate(u8, data >> 32)) <<  8;
+            rgbaq |= @as(u64, @truncate(u8, data >> 64)) << 16;
+            rgbaq |= @as(u64, @truncate(u8, data >> 96)) << 24;
+
+            write(@enumToInt(GsReg.Rgbaq), rgbaq);
+        },
+        @enumToInt(GsReg.Xyzf2) => {
+            var xyzf: u64 = 0;
+
+            xyzf |= @as(u64, @truncate(u16, data));
+            xyzf |= @as(u64, @truncate(u16, data >>  32)) << 16;
+            xyzf |= @as(u64, @truncate(u24, data >>  68)) << 32;
+            xyzf |= @as(u64, @truncate(u8 , data >> 100)) << 56;
+
+            if ((data & (1 << 111)) != 0) {
+                write(@enumToInt(GsReg.Xyzf3), xyzf);
+            } else {
+                write(@enumToInt(GsReg.Xyzf2), xyzf);
+            }
+        },
         @enumToInt(GsReg.AddrData) => {
             const reg = @truncate(u8, data >> 64);
 
