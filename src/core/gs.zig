@@ -22,7 +22,7 @@ const timer = @import("timer.zig");
 const timerIop = @import("timer_iop.zig");
 
 /// GS registers
-const GsReg = enum(u8) {
+pub const GsReg = enum(u8) {
     Prim       = 0x00,
     Rgbaq      = 0x01,
     St         = 0x02,
@@ -131,6 +131,9 @@ pub fn write(addr: u8, data: u64) void {
 /// Writes data to a GS register (from GIF)
 pub fn writePacked(addr: u4, data: u128) void {
     switch (addr) {
+        @enumToInt(GsReg.Prim) => {
+            write(@enumToInt(GsReg.Prim), @truncate(u11, data));
+        },
         @enumToInt(GsReg.AddrData) => {
             const reg = @truncate(u8, data >> 64);
 
