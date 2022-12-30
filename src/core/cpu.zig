@@ -56,6 +56,7 @@ const Opcode = enum(u6) {
     Bne     = 0x05,
     Blez    = 0x06,
     Bgtz    = 0x07,
+    Addi    = 0x08,
     Addiu   = 0x09,
     Slti    = 0x0A,
     Sltiu   = 0x0B,
@@ -124,7 +125,9 @@ const Special = enum(u6) {
     Multu   = 0x19,
     Div     = 0x1A,
     Divu    = 0x1B,
+    Add     = 0x20,
     Addu    = 0x21,
+    Sub     = 0x22,
     Subu    = 0x23,
     And     = 0x24,
     Or      = 0x25,
@@ -511,7 +514,9 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Multu  ) => iMultu(instr, 0),
                 @enumToInt(Special.Div    ) => iDiv(instr, 0),
                 @enumToInt(Special.Divu   ) => iDivu(instr, 0),
+                @enumToInt(Special.Add    ) => iAdd(instr),
                 @enumToInt(Special.Addu   ) => iAddu(instr),
+                @enumToInt(Special.Sub    ) => iSub(instr),
                 @enumToInt(Special.Subu   ) => iSubu(instr),
                 @enumToInt(Special.And    ) => iAnd(instr),
                 @enumToInt(Special.Or     ) => iOr(instr),
@@ -561,6 +566,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Bne  ) => iBne(instr),
         @enumToInt(Opcode.Blez ) => iBlez(instr),
         @enumToInt(Opcode.Bgtz ) => iBgtz(instr),
+        @enumToInt(Opcode.Addi ) => iAddi(instr),
         @enumToInt(Opcode.Addiu) => iAddiu(instr),
         @enumToInt(Opcode.Slti ) => iSlti(instr),
         @enumToInt(Opcode.Sltiu) => iSltiu(instr),
@@ -847,6 +853,56 @@ fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
         regFile.setPc(regFile.npc);
 
         inDelaySlot[1] = false;
+    }
+}
+
+/// ADD
+fn iAdd(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@addWithOverflow(i32, @bitCast(i32, regFile.get(u32, rs)), @bitCast(i32, regFile.get(u32, rt)), &res)) {
+        err("  [EE Core   ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(u32, rd, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ADD ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// ADD Immediate
+fn iAddi(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@addWithOverflow(i32, @bitCast(i32, regFile.get(u32, rs)), @bitCast(i32, imm16s), &res)) {
+        err("  [EE Core   ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(u32, rt, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] ADDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1623,7 +1679,7 @@ fn iEret() void {
 
     if (regFile.pc == 0x82000) {
         //bus.fastBoot();
-        //regFile.setPc(bus.loadElf());
+        regFile.setPc(bus.loadElf());
     }
 }
 
@@ -3078,6 +3134,31 @@ fn iSrlv(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] SRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+    }
+}
+
+/// SUBtract
+fn iSub(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res: i32 = undefined;
+
+    if (@subWithOverflow(i32, @bitCast(i32, regFile.get(u32, rs)), @bitCast(i32, regFile.get(u32, rt)), &res)) {
+        err("  [EE Core   ] Unhandled arithmetic overflow exception.", .{});
+
+        assert(false);
+    }
+
+    regFile.set(u32, rd, @bitCast(u32, res));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] SUB ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
