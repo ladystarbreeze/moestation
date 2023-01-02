@@ -399,8 +399,10 @@ pub fn readDmac(addr: u32) u128 {
 
     if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
 
-    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
-        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr]), @sizeOf(u128));
+    const addrMasked = addr & 0x1FF_FFFF;
+
+    if (addrMasked >= @enumToInt(MemBase.Ram) and addrMasked < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addrMasked]), @sizeOf(u128));
     } else {
         err("  [Bus (DMAC)] Unhandled read @ 0x{X:0>8}.", .{addr});
 

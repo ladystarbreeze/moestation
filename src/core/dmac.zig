@@ -486,7 +486,7 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
         },
         SourceTag.Cnt => {
             channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
-            channels[chnId].tadr = channels[chnId].madr + @sizeOf(u128) * channels[chnId].qwc;
+            channels[chnId].tadr = channels[chnId].madr;
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
@@ -519,7 +519,7 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
         },
         SourceTag.End => {
             channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
-            channels[chnId].tadr += @sizeOf(u128);
+            //channels[chnId].tadr += @sizeOf(u128);
 
             info("   [DMAC      ] New tag: end. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
@@ -593,7 +593,7 @@ fn doPath3() void {
         }
     } else {
         if (!channels[chnId].hasTag) {
-            // info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
+            //info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
         }
 
         channels[chnId].qwc -= 1;
