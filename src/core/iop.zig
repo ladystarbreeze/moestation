@@ -24,6 +24,9 @@ const exts = @import("../common/extend.zig").exts;
 var doDisasm = false;
 
 const doIopPrintf = false;
+var   doNewPrintf = false;
+
+var msgAddr: u32 = 0;
 
 const resetVector: u32 = 0xBFC0_0000;
 
@@ -214,6 +217,10 @@ fn write(comptime T: type, addr: u32, data: T) void {
         // info("   [IOP       ] Cache is isolated!", .{});
 
         return;
+    }
+
+    if (T == u8 and doNewPrintf and addr >= msgAddr) {
+        std.debug.print("{c}", .{data});
     }
 
     bus.writeIop(T, translateAddr(addr), data);
@@ -1552,23 +1559,16 @@ fn iXori(instr: u32) void {
 pub fn step() void {
     regFile.cpc = regFile.pc;
 
+    if (regFile.cpc == 0x8EE0) {
+        doNewPrintf = true;
+
+        msgAddr = regFile.get(@enumToInt(CpuReg.SP)) + 0x14;
+    } else if (regFile.cpc == 0x9664) {
+        doNewPrintf = false;
+    }
+
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
-
-    if (doIopPrintf) {
-        if (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C) {
-            var ptr = regFile.get(@enumToInt(CpuReg.A1));
-            var len = regFile.get(@enumToInt(CpuReg.A2));
-
-            const stdOut = std.io.getStdOut().writer();
-
-            while (len != 0) : (len -= 1) {
-                stdOut.print("{c}", .{read(u8, ptr, true)}) catch unreachable;
-
-                ptr += 1;
-            }
-        }
-    }
 
     if (intPending) {
         intPending = false;
@@ -1576,5 +1576,9 @@ pub fn step() void {
         return raiseException(ExCode.Interrupt);
     }
 
-    decodeInstr(fetchInstr());
+    decodeInstr(fetchInstr());    
+}
+
+pub fn dumpRegs() void {
+    err("  [IOP       ] PC = 0x{X:0>8}, $RA = 0x{X:0>8}", .{regFile.cpc, regFile.get(@enumToInt(CpuReg.RA))});
 }
