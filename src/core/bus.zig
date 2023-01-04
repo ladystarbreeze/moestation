@@ -126,6 +126,8 @@ var mchRicm: u32 = undefined;
 
 var rdramSdevId: u32 = 0;
 
+var cdvdmanVerbose = true;
+
 /// Initializes the bus module
 pub fn init(allocator: Allocator, biosPath: []const u8, elfPath: []const u8) !void {
     info("   [Bus       ] Loading BIOS image {s}...", .{biosPath});
@@ -272,27 +274,7 @@ pub fn read(comptime T: type, addr: u32) T {
 
         data = sif.read(addr);
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
-        if (T != u32 and T != u64) {
-            @panic("Unhandled read @ GS I/O");
-        }
-
-        info("   [Bus       ] Read ({s}) @ 0x{X:0>8} (GS).", .{@typeName(T), addr});
-
-        if (T == u32) {
-            if (addr == 0x1200_1000) {
-                data = ~@as(u32, 0);
-            } else {
-                data = 0;
-            }
-        } else {
-            if (addr == 0x1200_1000) {
-                data = ~@as(u64, 0);
-            } else {
-                data = 0;
-            }
-        }
-
-        
+        data = gs.readPriv(T, addr);
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
@@ -415,6 +397,8 @@ pub fn readDmac(addr: u32) u128 {
 /// Reads data from the IOP bus
 pub fn readIop(comptime T: type, addr: u32) T {
     var data: T = undefined;
+
+    if (addr == 0x2B6E0 and cdvdmanVerbose) return 1;
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &iopRam[addr]), @sizeOf(T));
@@ -655,9 +639,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 // info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (KPUTCHAR) = 0x{X}.", .{@typeName(T), addr, data});
 
                 if (data != 0) {
-                    const stdOut = std.io.getStdOut().writer();
-
-                    stdOut.print("{c}", .{data}) catch unreachable;
+                    std.debug.print("{c}", .{data});
                 }
             },
             0x1000_F430 => {
