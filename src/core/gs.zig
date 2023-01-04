@@ -101,6 +101,76 @@ const PrivReg = enum(u32) {
     GsImr    = 0x1200_1010,
     Busdir   = 0x1200_1040,
     Siglblid = 0x1200_1080,
+    _
+};
+
+/// Control/Status Register
+const Csr = struct {
+    signal: bool = false,
+    finish: bool = false,
+     hsint: bool = false,
+     vsint: bool = false,
+    edwint: bool = false,
+     field: bool = true,
+      fifo: u2   = 1,
+    
+    /// Returns CSR
+    pub fn get(self: Csr) u64 {
+        var data: u64 = 0;
+
+        data |= @as(u64, @bitCast(u1, self.signal));
+        data |= @as(u64, @bitCast(u1, self.finish)) <<  1;
+        data |= @as(u64, @bitCast(u1, self.hsint )) <<  2;
+        data |= @as(u64, @bitCast(u1, self.vsint )) <<  3;
+        data |= @as(u64, @bitCast(u1, self.edwint)) <<  4;
+        data |= @as(u64, @bitCast(u1, !self.field)) << 12;
+        data |= @as(u64, @bitCast(u1, self.field )) << 13;
+        data |= @as(u64, self.fifo) << 14;
+        data |= 0x1B << 16; // revision
+        data |= 0x55 << 24; // ID
+
+        return data;
+    }
+
+    /// Sets CSR
+    pub fn set(self: *Csr, data: u64) void {
+        if ((data & (1 << 0)) != 0) self.signal = false;
+        if ((data & (1 << 1)) != 0) self.finish = false;
+        if ((data & (1 << 2)) != 0) self.hsint  = false;
+        if ((data & (1 << 3)) != 0) self.vsint  = false;
+        if ((data & (1 << 4)) != 0) self.edwint = false;
+    }
+};
+
+/// Interrupt Mask Register
+const Imr = struct {
+       sigmsk: bool = true, // SIGNAL mask
+    finishmsk: bool = true, // FINISH mask
+        hsmsk: bool = true, // HSYNC mask
+        vsmsk: bool = true, // VSYNC mask
+       edwmsk: bool = true, // Rectangular area write mask
+
+    /// Returns IMR
+    pub fn get(self: Imr) u64 {
+        var data: u64 = 0;
+
+        data |= @as(u64, @bitCast(u1, self.sigmsk)) << 8;
+        data |= @as(u64, @bitCast(u1, self.sigmsk)) << 8;
+        data |= @as(u64, @bitCast(u1, self.sigmsk)) << 8;
+        data |= @as(u64, @bitCast(u1, self.sigmsk)) << 8;
+        data |= @as(u64, @bitCast(u1, self.sigmsk)) << 8;
+
+        return data;
+    }
+    
+    /// Sets IMR
+    pub fn set(self: *Imr, data: u64) void {
+        self.sigmsk    = (data & (1 <<  8)) != 0;
+        self.finishmsk = (data & (1 <<  9)) != 0;
+        self.hsmsk     = (data & (1 << 10)) != 0;
+        self.vsmsk     = (data & (1 << 11)) != 0;
+        self.edwmsk    = (data & (1 << 12)) != 0;
+    }
 };
 
 const  cyclesLine: i64 = 9371;
@@ -113,7 +183,45 @@ var lines: i64 = 0;
 // GS registers
 var gsRegs: [0x63]u64 = undefined;
 
+// GS privileged registers
+var csr: Csr = Csr{};
+var imr: Imr = Imr{};
+
 var vtxCount: i32 = 0;
+
+/// Resets the GS
+fn reset() void {
+    info("   [GS        ] GS reset.", .{});
+
+    csr.set(0);
+    imr.set(0xFF00);
+
+    csr.fifo = 1;
+}
+
+/// Reads data from a GS privileged register
+pub fn readPriv(comptime T: type, addr: u32) T {
+    if (!(T == u32 or T == u64)) {
+        @panic("Unhandled read @ GS I/O");
+    }
+
+    var data: T = undefined;
+
+    switch (addr) {
+        @enumToInt(PrivReg.GsCsr) => {
+            data = @truncate(T, csr.get());
+        },
+        else => {
+            err("  [GS        ] Unhandled read ({s}) @ 0x{X:0>8} ({s}).", .{@typeName(T), addr, @tagName(@intToEnum(PrivReg, addr))});
+
+            assert(false);
+        }
+    }
+
+    info("   [GS        ] Read ({s}) @ 0x{X:0>8} ({s}).", .{@typeName(T), addr, @tagName(@intToEnum(PrivReg, addr))});
+
+    return data;
+}
 
 /// Writes data to a GS register
 pub fn write(addr: u8, data: u64) void {
@@ -180,35 +288,35 @@ pub fn writeHwreg(data: u64) void {
 /// Writes data to privileged register
 pub fn writePriv(addr: u32, data: u64) void {
     switch (addr) {
-        @enumToInt(PrivReg.Smode1) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SMODE1) = 0x{X:0>16}.", .{addr, data});
-        },
-        @enumToInt(PrivReg.Smode2) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SMODE2) = 0x{X:0>16}.", .{addr, data});
-        },
-        @enumToInt(PrivReg.Srfsh) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SRFSH) = 0x{X:0>16}.", .{addr, data});
-        },
-        @enumToInt(PrivReg.Synch1) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SYNCH1) = 0x{X:0>16}.", .{addr, data});
-        },
-        @enumToInt(PrivReg.Synch2) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SYNCH2) = 0x{X:0>16}.", .{addr, data});
-        },
-        @enumToInt(PrivReg.Syncv) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (SYNCV) = 0x{X:0>16}.", .{addr, data});
-        },
         @enumToInt(PrivReg.GsCsr) => {
-            info("   [GS        ] Write @ 0x{X:0>8} (GS_CSR) = 0x{X:0>16}.", .{addr, data});
-
             if ((data & (1 << 9)) != 0) {
-                info("   [GS        ] GS reset.", .{});
+                reset();
             }
+
+            csr.set(data);
         },
+        @enumToInt(PrivReg.GsImr) => {
+            imr.set(data);
+        },
+        @enumToInt(PrivReg.Pmode   ),
+        @enumToInt(PrivReg.Smode1  ),
+        @enumToInt(PrivReg.Smode2  ),
+        @enumToInt(PrivReg.Srfsh   ),
+        @enumToInt(PrivReg.Synch1  ),
+        @enumToInt(PrivReg.Synch2  ),
+        @enumToInt(PrivReg.Syncv   ),
+        @enumToInt(PrivReg.Dispfb1 ),
+        @enumToInt(PrivReg.Dispfb2 ),
+        @enumToInt(PrivReg.Display2),
+        @enumToInt(PrivReg.Bgcolor ) => {},
         else => {
-            warn("[GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
+            err("  [GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>16} ({s}).", .{addr, data, @tagName(@intToEnum(PrivReg, addr))});
+
+            assert(false);
         }
     }
+
+    info("   [GS        ] Write @ 0x{X:0>8} = 0x{X:0>16} ({s}).", .{addr, data, @tagName(@intToEnum(PrivReg, addr))});
 }
 
 /// Steps the GS module
@@ -223,9 +331,17 @@ pub fn step(cyclesElapsed: i64) void {
         timer.stepHblank();
         timerIop.stepHblank();
 
+        csr.hsint = true;
+
+        csr.field = !csr.field;
+
+        //intc.printIntcMask();
+
         if (lines == 480) {
             intc.sendInterrupt(IntSource.VblankStart);
             intc.sendInterruptIop(IntSourceIop.VblankStart);
+
+            csr.vsint = true;
         } else if (lines == 544) {
             lines = 0;
 
