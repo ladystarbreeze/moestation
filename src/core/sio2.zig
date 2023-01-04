@@ -506,8 +506,8 @@ fn cmdPadConfigMode() void {
 
     if (isEnter) {
         // Send button state
-        writeFifoOut(0);
-        writeFifoOut(0);
+        writeFifoOut(0xFF);
+        writeFifoOut(0xFF);
     } else {
         // Send six 0 bytes
         writeFifoOut(0);
