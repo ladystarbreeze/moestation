@@ -124,10 +124,10 @@ pub fn read(comptime T: type, addr: u32) T {
                 @panic("Unhandled read @ Timer I/O");
             }
 
-            info("   [Timer     ] Read ({s}) @ 0x{X:0>8} (T{}_COUNT).", .{@typeName(T), addr, tmId});
+            info("   [Timer     ] Read ({s}) @ 0x{X:0>8} (T{}_COUNT) = 0x{X:0>8} (COMP = 0x{X:0>8}).", .{@typeName(T), addr, tmId, timers[tmId].count, timers[tmId].comp});
 
             if (T == u16) {
-                data = @truncate(u16, timers[tmId].count);
+                data = @truncate(u16, timers[tmId].count >> @truncate(u5, 16 * ((addr >> 1) & 1)));
             } else {
                 data = timers[tmId].count;
             }
@@ -192,6 +192,8 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             info("   [Timer     ] Write @ 0x{X:0>8} (T{}_COMP) = 0x{X:0>4}.", .{addr, tmId, data});
 
             timers[tmId].comp = @as(u32, data);
+
+            if (!timers[tmId].mode.levl) timers[tmId].mode.intf = true;
         },
         else => {
             err("  [Timer     ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X:0>8}.", .{@typeName(T), addr, data});
@@ -217,28 +219,16 @@ pub fn stepHblank() void {
 
         if (timers[i].count == timers[i].comp) {
             if (timers[i].mode.cmpe) {
-                if (timers[i].mode.rept and timers[i].mode.levl) {
-                    timers[i].mode.intf = !timers[i].mode.intf;
-                } else {
-                    timers[i].mode.intf = false;
-                }
-
                 timers[i].mode.equf = true;
 
                 sendInterrupt(i);
-            }
 
-            if (timers[i].mode.zret) {
-                timers[i].count = 0;
-            }
-        } else if ((i < 3 and oldCount == 0xFFFF) or (oldCount == @bitCast(u32, @as(i32, -1)))) {
-            if (timers[i].mode.ovfe) {
-                if (timers[i].mode.rept and timers[i].mode.levl) {
-                    timers[i].mode.intf = !timers[i].mode.intf;
-                } else {
-                    timers[i].mode.intf = false;
+                if (timers[i].mode.zret) {
+                    timers[i].count = 0;
                 }
-
+            }
+        } else if ((i < 3 and oldCount == 0xFFFF) or (i >= 3 and oldCount == @bitCast(u32, @as(i32, -1)))) {
+            if (timers[i].mode.ovfe) {
                 timers[i].mode.ovff = true;
                 
                 sendInterrupt(i);
@@ -285,26 +275,17 @@ pub fn step() void {
 
         if (timers[i].count == timers[i].comp) {
             if (timers[i].mode.cmpe) {
-                if (timers[i].mode.rept and timers[i].mode.levl) {
-                    timers[i].mode.intf = !timers[i].mode.intf;
-                } else {
-                    timers[i].mode.intf = false;
-                }
-
                 timers[i].mode.equf = true;
 
                 sendInterrupt(i);
 
                 // TODO: no zero return is a hack! Fix this!
-            }
-        } else if ((i < 3 and oldCount == 0xFFFF) or (oldCount == @bitCast(u32, @as(i32, -1)))) {
-            if (timers[i].mode.ovfe) {
-                if (timers[i].mode.rept and timers[i].mode.levl) {
-                    timers[i].mode.intf = !timers[i].mode.intf;
-                } else {
-                    timers[i].mode.intf = false;
+                if (timers[i].mode.zret) {
+                    timers[i].count = 0;
                 }
-
+            }
+        } else if ((i < 3 and oldCount == 0xFFFF) or (i >= 3 and oldCount == @bitCast(u32, @as(i32, -1)))) {
+            if (timers[i].mode.ovfe) {
                 timers[i].mode.ovff = true;
                 
                 sendInterrupt(i);
@@ -315,9 +296,15 @@ pub fn step() void {
 
 /// Sends an interrupt request to INTC
 fn sendInterrupt(tmId: u3) void {
-    if (!timers[tmId].mode.intf) {
+    if (timers[tmId].mode.intf) {
         const intSource = if (tmId < 3) @intToEnum(IntSourceIop, @as(u5, tmId) + 4) else @intToEnum(IntSourceIop, @as(u5, tmId) + 11);
 
         intc.sendInterruptIop(intSource);
+    }
+
+    if (timers[tmId].mode.rept and timers[tmId].mode.levl) {
+        timers[tmId].mode.intf = !timers[tmId].mode.intf;
+    } else {
+        timers[tmId].mode.intf = false;
     }
 }
