@@ -126,7 +126,7 @@ var mchRicm: u32 = undefined;
 
 var rdramSdevId: u32 = 0;
 
-var cdvdmanVerbose = true;
+var cdvdmanVerbose = false;
 
 /// Initializes the bus module
 pub fn init(allocator: Allocator, biosPath: []const u8, elfPath: []const u8) !void {
@@ -381,10 +381,10 @@ pub fn readDmac(addr: u32) u128 {
 
     if ((addr & 15) != 0) @panic("Unaligned DMA address!!");
 
-    const addrMasked = addr & 0x1FF_FFFF;
-
-    if (addrMasked >= @enumToInt(MemBase.Ram) and addrMasked < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
-        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addrMasked]), @sizeOf(u128));
+    if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0x1FF_FFF0]), @sizeOf(u128));
+    } else if ((addr & (1 << 31)) != 0) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &cpu.spram[addr & 0x3FF0]), @sizeOf(u128));
     } else {
         err("  [Bus (DMAC)] Unhandled read @ 0x{X:0>8}.", .{addr});
 
@@ -494,8 +494,6 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
     return data;
 }
-
-
 
 /// Reads data from the system bus (from IOP DMA)
 pub fn readDmacIop(addr: u32) u32 {
@@ -708,12 +706,6 @@ pub fn writeDmac(addr: u32, data: u128) void {
 
 /// Writes data to the IOP bus
 pub fn writeIop(comptime T: type, addr: u32, data: T) void {
-    if ((addr >= 0x01B354 and addr < 0x01B35C) or (addr >= 0x01B154 and addr < 0x01B15C) or (addr >= 0x01B364 and addr < 0x01B36C) or (addr >= 0x05A3D0 and addr < 0x05A400)) {
-    //if (addr == 0x05B1FC) {
-        //info("   [Bus       ] Write @ 0x{X:0>8} = 0x{X}.", .{addr, data});
-        //info("   [Bus       ] PC = 0x{X:0>8}", .{iop.getPc()});
-    }
-
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSizeIop.Ram))) {
         @memcpy(@ptrCast([*]u8, &iopRam[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBaseIop.Sif) and addr < (@enumToInt(MemBaseIop.Sif) + @enumToInt(MemSize.Sif))) {
