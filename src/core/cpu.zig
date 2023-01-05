@@ -34,6 +34,8 @@ const resetVector: u32 = 0xBFC0_0000;
 /// Branch delay slot helper
 var inDelaySlot: [2]bool = undefined;
 
+var inBifco = false;
+
 /// Register aliases
 const CpuReg = enum(u5) {
     R0 =  0, AT =  1, V0 =  2, V1 =  3,
@@ -175,9 +177,11 @@ const Cop1Opcode = enum(u5) {
 
 /// COP1 Single instructions
 const Cop1Single = enum(u6) {
+    Add  = 0x00,
     Mul  = 0x02,
     Div  = 0x03,
     Mov  = 0x06,
+    Neg  = 0x07,
     Adda = 0x18,
     Madd = 0x1C,
 };
@@ -217,6 +221,8 @@ const Mmi0Opcode = enum(u5) {
     Psubw  = 0x01,
     Psubb  = 0x09,
     Pextlw = 0x12,
+    Pextlh = 0x16,
+    Pext5  = 0x1E,
 };
 
 /// MMI1 instructions
@@ -339,6 +345,12 @@ const RegFile = struct {
 
     /// Sets program counter
     pub fn setPc(self: *RegFile, data: u32) void {
+        if (inBifco and (data < 0x81FC0 or data >= 0x81FDC)) {
+            inBifco = false;
+
+            std.debug.print("Leaving BIFCO loop\n", .{});
+        }
+
         if ((data & 3) != 0) {
             err("  [EE Core   ] PC is not aligned. PC = 0x{X:0>8}", .{self.pc});
 
@@ -438,7 +450,7 @@ fn write(comptime T: type, addr: u32, data: T) void {
 }
 
 /// Writes data to scratchpad RAM
-fn writeSpram(comptime T: type, addr: u32, data: T) void {
+pub fn writeSpram(comptime T: type, addr: u32, data: T) void {
     @memcpy(@ptrCast([*]u8, &spram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
 }
 
@@ -613,9 +625,11 @@ fn decodeInstr(instr: u32) void {
                     const funct = getFunct(instr);
 
                     switch (funct) {
+                        @enumToInt(Cop1Single.Add ) => cop1.iAdd(instr),
                         @enumToInt(Cop1Single.Mul ) => cop1.iMul(instr),
                         @enumToInt(Cop1Single.Div ) => cop1.iDiv(instr),
                         @enumToInt(Cop1Single.Mov ) => cop1.iMov(instr),
+                        @enumToInt(Cop1Single.Neg ) => cop1.iNeg(instr),
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
                         @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
                         else => {
@@ -696,6 +710,8 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Mmi0Opcode.Psubw ) => iPsubw(instr),
                         @enumToInt(Mmi0Opcode.Psubb ) => iPsubb(instr),
                         @enumToInt(Mmi0Opcode.Pextlw) => iPextlw(instr),
+                        @enumToInt(Mmi0Opcode.Pextlh) => iPextlh(instr),
+                        @enumToInt(Mmi0Opcode.Pext5 ) => iPext5(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI0 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -1661,6 +1677,8 @@ fn iEi() void {
     }
 }
 
+var fastBootDone = false;
+
 /// Exception RETurn
 fn iEret() void {
     if (doDisasm) {
@@ -1677,9 +1695,11 @@ fn iEret() void {
         cop0.setExl(false);
     }
 
-    if (regFile.pc == 0x82000) {
-        //bus.fastBoot();
-        regFile.setPc(bus.loadElf());
+    if (!fastBootDone and regFile.pc == 0x82000) {
+        bus.fastBoot();
+        //regFile.setPc(bus.loadElf());
+
+        fastBootDone = true;
     }
 }
 
@@ -2528,18 +2548,79 @@ fn iPcpyud(instr: u32) void {
     }
 }
 
+/// Parallel EXTend from 5 bits
+fn iPext5(instr: u32) void {
+    const rd = getRd(instr);
+    const rt = getRt(instr);
+
+    const data = regFile.get(u128, rt);
+
+    var res: u128 = 0;
+
+    var i: u7 = 0;
+    while (i < 4) : (i += 1) {
+        const h = (data >> (32 * i)) & 0xFFFF;
+
+        res |= (h & 0x1F) << (32 * i + 3);
+        res |= ((h >>  5) & 0x1F) << (32 * i + 11);
+        res |= ((h >> 10) & 0x1F) << (32 * i + 19);
+        res |= ((h >> 15) & 1) << (32 * i + 31);
+    }
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PEXT5 ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel EXTend Lower from Halfword
+fn iPextlh(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const a0 = @truncate(u16, regFile.get(u64, rs));
+    const a1 = @truncate(u16, regFile.get(u64, rs) >> 16);
+    const a2 = @truncate(u16, regFile.get(u64, rs) >> 32);
+    const a3 = @truncate(u16, regFile.get(u64, rs) >> 48);
+    const b0 = @truncate(u16, regFile.get(u64, rt));
+    const b1 = @truncate(u16, regFile.get(u64, rt) >> 16);
+    const b2 = @truncate(u16, regFile.get(u64, rt) >> 32);
+    const b3 = @truncate(u16, regFile.get(u64, rt) >> 48);
+
+    var res = (@as(u128, a0) << 16) | @as(u128, b0);
+
+    res |= (@as(u128, a1) <<  48) | (@as(u128, b1) << 32);
+    res |= (@as(u128, a2) <<  80) | (@as(u128, b2) << 64);
+    res |= (@as(u128, a3) << 112) | (@as(u128, b3) << 96);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PEXTLH ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
 /// Parallel EXTend Lower from Word
 fn iPextlw(instr: u32) void {
     const rd = getRd(instr);
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    const rsLo0 = regFile.get(u32, rs);
-    const rsLo1 = regFile.get(u64, rs) >> 32;
-    const rtLo0 = regFile.get(u32, rt);
-    const rtLo1 = regFile.get(u64, rt) >> 32;
+    const a0 = regFile.get(u32, rs);
+    const a1 = regFile.get(u64, rs) >> 32;
+    const b0 = regFile.get(u32, rt);
+    const b1 = regFile.get(u64, rt) >> 32;
 
-    const res = (@as(u128, rsLo1) << 96) | (@as(u128, rtLo1) << 64) | (@as(u128, rsLo0) << 32) | @as(u128, rtLo0);
+    const res = (@as(u128, a1) << 96) | (@as(u128, b1) << 64) | (@as(u128, a0) << 32) | @as(u128, b0);
 
     regFile.set(u128, rd, res);
 
@@ -3368,10 +3449,14 @@ pub fn step() void {
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
 
-    if (regFile.cpc == 0x8000_516C) {
-        //bus.dumpRam();
+    if (regFile.cpc == 0x2BDC40) {
+        std.debug.print("sceSifCallRpc @ 0x{X:0>8}, $A0 = 0x{X:0>8}, $A1 = 0x{X:0>8}\n", .{regFile.get(u64, @enumToInt(CpuReg.RA)) - 8, regFile.get(u64, @enumToInt(CpuReg.A0)), regFile.get(u64, @enumToInt(CpuReg.A1))});
+    }
 
-        //@panic("blah");
+    if ((regFile.cpc & 0xFFFFF) == 0x81FC0 and !inBifco) {
+        inBifco = true;
+
+        std.debug.print("Entering BIFCO loop\n", .{});
     }
 
     cop0.incrementCount();
