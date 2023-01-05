@@ -90,6 +90,21 @@ fn getRt(instr: u32) u5 {
     return @truncate(u5, instr >> 16);
 }
 
+/// ADD
+pub fn iAdd(instr: u32) void {
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) + regFile.get(ft);
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        info("   [COP1      ] ADD.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+    }
+}
+
 /// ADD Accumulator
 pub fn iAdda(instr: u32) void {
     const fs = getRs(instr);
@@ -103,8 +118,6 @@ pub fn iAdda(instr: u32) void {
         info("   [COP1      ] ADDA.S ${}, ${}; ACC = {}", .{fs, ft, res});
     }
 }
-
-
 
 /// DIVide
 pub fn iDiv(instr: u32) void {
@@ -160,5 +173,17 @@ pub fn iMul(instr: u32) void {
 
     if (doDisasm) {
         info("   [COP1      ] MUL.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+    }
+}
+
+/// NEGate
+pub fn iNeg(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+
+    regFile.set(fd, -regFile.get(fs));
+
+    if (doDisasm) {
+        info("   [COP1      ] NEG.S ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fs)});
     }
 }
