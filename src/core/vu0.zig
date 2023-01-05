@@ -381,6 +381,47 @@ pub fn iAddbc(instr: u32) void {
     }
 }
 
+/// floating-point ADDition with Q
+pub fn iAddq(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) + regFile.q;
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] ADD.{s} VF[{}]{s}, VF[{}]{s}, Q; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
+    }
+}
+
+/// DIVide
+pub fn iDiv(instr: u32) void {
+    const fsf = @intToEnum(Element, @as(u4, 1) << @truncate(u2, 3 - (getDest(instr)  & 3)));
+    const ftf = @intToEnum(Element, @as(u4, 1) << @truncate(u2, 3 - (getDest(instr) >> 2)));
+
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    regFile.q = regFile.getVfElement(f32, ft, ftf) / regFile.getVfElement(f32, fs, fsf);
+
+    if (doDisasm) {
+        info("   [VU0       ] SQRT Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}", .{ft, @tagName(ftf), fs, @tagName(fsf), @bitCast(u32, regFile.q)});
+    }
+}
+
 /// Integer ADDition
 pub fn iIadd(instr: u32) void {
     const id = getRd(instr);
@@ -588,6 +629,13 @@ pub fn iMulabc(instr: u32) void {
         const acc = regFile.acc.get();
 
         info("   [VU0       ] VMULA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+    }
+}
+
+/// No OPeration
+pub fn iNop() void {
+    if (doDisasm) {
+        info("   [VU0       ] NOP", .{});
     }
 }
 

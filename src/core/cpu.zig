@@ -660,8 +660,10 @@ fn decodeInstr(instr: u32) void {
                         0x08 ... 0x0B => vu0.iMaddabc(instr),
                         0x18 ... 0x1B => vu0.iMulabc(instr),
                         0x2E => vu0.iOpmula(instr),
+                        0x2F => vu0.iNop(),
                         0x31 => vu0.iMr32(instr),
                         0x35 => vu0.iSqi(instr),
+                        0x38 => vu0.iDiv(instr),
                         0x39 => vu0.iSqrt(instr),
                         0x3B => vu0.iWaitq(),
                         0x3F => vu0.iIswr(instr),
@@ -675,6 +677,7 @@ fn decodeInstr(instr: u32) void {
                     switch (funct) {
                         0x00 ... 0x03 => vu0.iAddbc(instr),
                         0x08 ... 0x0B => vu0.iMaddbc(instr),
+                        0x20 => vu0.iAddq(instr),
                         0x28 => vu0.iAdd(instr),
                         0x2A => vu0.iMul(instr),
                         0x2C => vu0.iSub(instr),
