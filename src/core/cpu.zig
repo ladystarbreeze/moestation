@@ -96,6 +96,7 @@ const Opcode = enum(u6) {
     Swr     = 0x2E,
     Cache   = 0x2F,
     Lwc1    = 0x31,
+    Lqc2    = 0x36,
     Ld      = 0x37,
     Swc1    = 0x39,
     Sqc2    = 0x3E,
@@ -656,6 +657,9 @@ fn decodeInstr(instr: u32) void {
                     const f = (@as(u7, getSa(instr)) << 2) | (funct & 3);
 
                     switch (f) {
+                        0x08 ... 0x0B => vu0.iMaddabc(instr),
+                        0x18 ... 0x1B => vu0.iMulabc(instr),
+                        0x2E => vu0.iOpmula(instr),
                         0x31 => vu0.iMr32(instr),
                         0x35 => vu0.iSqi(instr),
                         0x3F => vu0.iIswr(instr),
@@ -667,8 +671,10 @@ fn decodeInstr(instr: u32) void {
                     }
                 } else {
                     switch (funct) {
+                        0x08 ... 0x0B => vu0.iMaddbc(instr),
                         0x28 => vu0.iAdd(instr),
                         0x2C => vu0.iSub(instr),
+                        0x2E => vu0.iOpmsub(instr),
                         0x30 => vu0.iIadd(instr),
                         else => {
                             err("  [EE Core   ] Unhandled VU0 macro instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
@@ -798,6 +804,7 @@ fn decodeInstr(instr: u32) void {
         @enumToInt(Opcode.Cache) => iCache(instr),
         @enumToInt(Opcode.Lwc1 ) => iLwc(instr, 1),
         0x33 => {},
+        @enumToInt(Opcode.Lqc2 ) => iLqc2(instr),
         @enumToInt(Opcode.Ld   ) => iLd(instr),
         @enumToInt(Opcode.Swc1 ) => iSwc(instr, 1),
         @enumToInt(Opcode.Sqc2 ) => iSqc2(instr),
@@ -1947,6 +1954,25 @@ fn iLq(instr: u32) void {
     }
 
     regFile.set(u128, rt, data);
+}
+
+/// Load Quadword Coprocessor 2
+fn iLqc2(instr: u32) void {
+    const imm16s = exts(u32, u16, getImm16(instr));
+
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const addr = (regFile.get(u32, rs) +% imm16s) & ~@as(u32, 15);
+    const data = read(u128, addr);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] LQC2 ${}, 0x{X}(${s}); ${} = [0x{X:0>8}] = 0x{X:0>32}", .{rt, imm16s, tagRs, rt, addr, data});
+    }
+
+    vu0.set(u128, rt, data);
 }
 
 /// Load Upper Immediate

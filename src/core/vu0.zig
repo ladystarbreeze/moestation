@@ -45,6 +45,20 @@ const Vf = struct {
         return (@as(u128, self.x) << 96) | (@as(u128, self.y) << 64) | (@as(u128, self.z) << 32) | @as(u128, self.w);
     }
 
+    /// Returns an element
+    pub fn getElement(self: Vf, e: Element) f32 {
+        var data: u32 = undefined;
+
+        switch (e) {
+            Element.W => data = self.w,
+            Element.Z => data = self.z,
+            Element.Y => data = self.y,
+            Element.X => data = self.x,
+        }
+
+        return @bitCast(f32, data);
+    }
+
     /// Sets the full 128-bit VF
     pub fn set(self: *Vf, data: u128) void {
         self.x = @truncate(u32, data >> 96);
@@ -52,12 +66,26 @@ const Vf = struct {
         self.z = @truncate(u32, data >> 32);
         self.w = @truncate(u32, data);
     }
+
+    /// Sets an element
+    pub fn setElement(self: *Vf, e: Element, data: f32) void {
+        const data_ = @bitCast(u32, data);
+
+        switch (e) {
+            Element.W => self.w = data_,
+            Element.Z => self.z = data_,
+            Element.Y => self.y = data_,
+            Element.X => self.x = data_,
+        }
+    }
 };
 
 /// VU0 register file
 const RegFile = struct {
     vf: [32]Vf  = undefined,
     vi: [16]u16 = undefined,
+
+    acc: Vf = undefined,
 
     cmsar: u16 = undefined,
 
@@ -367,6 +395,75 @@ pub fn iIswr(instr: u32) void {
     }
 }
 
+/// Multiply-ADD to Accumulator BroadCast
+pub fn iMaddabc(instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc) + regFile.acc.getElement(e);
+
+            regFile.acc.setElement(e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const acc = regFile.acc.get();
+
+        info("   [VU0       ] VMADDA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+    }
+}
+
+/// Multiply-ADD BroadCast
+pub fn iMaddbc(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc) + regFile.acc.getElement(e);
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] VMADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
 /// Move and Rotate per word
 pub fn iMr32(instr: u32) void {
     const dest = getDest(instr);
@@ -393,6 +490,81 @@ pub fn iMr32(instr: u32) void {
         const vt = regFile.getVf(ft);
 
         info("   [VU0       ] MR32.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, ft, destStr, fs, destStr, ft, vt});
+    }
+}
+
+/// MULtiply to Accumulator BroadCast
+pub fn iMulabc(instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc);
+
+            regFile.acc.setElement(e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const acc = regFile.acc.get();
+
+        info("   [VU0       ] VMULA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+    }
+}
+
+/// Outer Product Multiply-SUBtract
+pub fn iOpmsub(instr: u32) void {
+    const dest = getDest(instr) & 0xE;
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    regFile.setVfElement(f32, fd, Element.X, (regFile.getVfElement(f32, fs, Element.Y) * regFile.getVfElement(f32, ft, Element.Z)) + (regFile.getVfElement(f32, fs, Element.Z) * regFile.getVfElement(f32, ft, Element.Y)));
+    regFile.setVfElement(f32, fd, Element.Y, (regFile.getVfElement(f32, fs, Element.Z) * regFile.getVfElement(f32, ft, Element.X)) + (regFile.getVfElement(f32, fs, Element.X) * regFile.getVfElement(f32, ft, Element.Z)));
+    regFile.setVfElement(f32, fd, Element.Z, (regFile.getVfElement(f32, fs, Element.X) * regFile.getVfElement(f32, ft, Element.Y)) + (regFile.getVfElement(f32, fs, Element.Y) * regFile.getVfElement(f32, ft, Element.X)));
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] OPMSUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
+/// Outer Product MULtiply to Accumulator
+pub fn iOpmula(instr: u32) void {
+    const dest = getDest(instr) & 0xE;
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    regFile.acc.setElement(Element.X, (regFile.getVfElement(f32, fs, Element.Y) * regFile.getVfElement(f32, ft, Element.Z)) + (regFile.getVfElement(f32, fs, Element.Z) * regFile.getVfElement(f32, ft, Element.Y)));
+    regFile.acc.setElement(Element.Y, (regFile.getVfElement(f32, fs, Element.Z) * regFile.getVfElement(f32, ft, Element.X)) + (regFile.getVfElement(f32, fs, Element.X) * regFile.getVfElement(f32, ft, Element.Z)));
+    regFile.acc.setElement(Element.Z, (regFile.getVfElement(f32, fs, Element.X) * regFile.getVfElement(f32, ft, Element.Y)) + (regFile.getVfElement(f32, fs, Element.Y) * regFile.getVfElement(f32, ft, Element.X)));
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const acc = regFile.acc.get();
+
+        info("   [VU0       ] OPMULA.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{destStr, destStr, fs, destStr, ft, destStr, acc});
     }
 }
 
