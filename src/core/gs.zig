@@ -253,6 +253,14 @@ pub fn writePacked(addr: u4, data: u128) void {
 
             write(@enumToInt(GsReg.Rgbaq), rgbaq);
         },
+        @enumToInt(GsReg.St) => {
+            write(@enumToInt(GsReg.St), @truncate(u64, data));
+        },
+        @enumToInt(GsReg.Uv) => {
+            const uv = @truncate(u64, ((data >> 16) & 0x3FFF_0000) | (data & 0x3FFF));
+
+            write(@enumToInt(GsReg.Uv), uv);
+        },
         @enumToInt(GsReg.Xyzf2) => {
             var xyzf: u64 = 0;
 
@@ -267,11 +275,17 @@ pub fn writePacked(addr: u4, data: u128) void {
                 write(@enumToInt(GsReg.Xyzf2), xyzf);
             }
         },
+        @enumToInt(GsReg.Fog) => {
+            const fog = @truncate(u64, data >> 40);
+
+            write(@enumToInt(GsReg.Fog), fog);
+        },
         @enumToInt(GsReg.AddrData) => {
             const reg = @truncate(u8, data >> 64);
 
             write(reg, @truncate(u64, data));
         },
+        0x6, 0x8, 0xC => write(addr, @truncate(u64, data)),
         else => {
             err("  [GS        ] Unhandled PACKED write @ 0x{X} = 0x{X:0>32}.", .{addr, data});
 
