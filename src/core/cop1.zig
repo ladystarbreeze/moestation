@@ -187,3 +187,18 @@ pub fn iNeg(instr: u32) void {
         info("   [COP1      ] NEG.S ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fs)});
     }
 }
+
+/// SUB
+pub fn iSub(instr: u32) void {
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) - regFile.get(ft);
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        info("   [COP1      ] SUB.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+    }
+}

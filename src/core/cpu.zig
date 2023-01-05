@@ -179,6 +179,7 @@ const Cop1Opcode = enum(u5) {
 /// COP1 Single instructions
 const Cop1Single = enum(u6) {
     Add  = 0x00,
+    Sub  = 0x01,
     Mul  = 0x02,
     Div  = 0x03,
     Mov  = 0x06,
@@ -229,6 +230,7 @@ const Mmi0Opcode = enum(u5) {
 /// MMI1 instructions
 const Mmi1Opcode = enum(u5) {
     Padduw = 0x10,
+    Pextuw = 0x12,
 };
 
 /// MMI2 instructions
@@ -627,6 +629,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (funct) {
                         @enumToInt(Cop1Single.Add ) => cop1.iAdd(instr),
+                        @enumToInt(Cop1Single.Sub ) => cop1.iSub(instr),
                         @enumToInt(Cop1Single.Mul ) => cop1.iMul(instr),
                         @enumToInt(Cop1Single.Div ) => cop1.iDiv(instr),
                         @enumToInt(Cop1Single.Mov ) => cop1.iMov(instr),
@@ -762,6 +765,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (sa) {
                         @enumToInt(Mmi1Opcode.Padduw) => iPadduw(instr),
+                        @enumToInt(Mmi1Opcode.Pextuw) => iPextuw(instr),
                         else => {
                             err("  [EE Core   ] Unhandled MMI1 instruction 0x{X} (0x{X:0>8}).", .{sa, instr});
 
@@ -2665,6 +2669,30 @@ fn iPextlw(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] PEXTLW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+    }
+}
+
+/// Parallel EXTend Upper from Word
+fn iPextuw(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const a0 = @truncate(u32, regFile.get(u128, rs) >> 64);
+    const a1 = @truncate(u32, regFile.get(u128, rs) >> 96);
+    const b0 = @truncate(u32, regFile.get(u128, rt) >> 64);
+    const b1 = @truncate(u32, regFile.get(u128, rt) >> 96);
+
+    const res = (@as(u128, a1) << 96) | (@as(u128, b1) << 64) | (@as(u128, a0) << 32) | @as(u128, b0);
+
+    regFile.set(u128, rd, res);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] PEXTUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
