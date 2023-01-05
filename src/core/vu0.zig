@@ -87,6 +87,8 @@ const RegFile = struct {
 
     acc: Vf = undefined,
 
+    q: f32 = 0.0,
+
     cmsar: u16 = undefined,
 
     /// Returns a VI register
@@ -344,6 +346,41 @@ pub fn iAdd(instr: u32) void {
     }
 }
 
+/// ADD BroadCast
+pub fn iAddbc(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) + regFile.getVfElement(f32, ft, bc);
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] ADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
 /// Integer ADDition
 pub fn iIadd(instr: u32) void {
     const id = getRd(instr);
@@ -493,6 +530,33 @@ pub fn iMr32(instr: u32) void {
     }
 }
 
+/// floating-point MULtiply
+pub fn iMul(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, e);
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] MUL.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
 /// MULtiply to Accumulator BroadCast
 pub fn iMulabc(instr: u32) void {
     const dest = getDest(instr);
@@ -599,6 +663,19 @@ pub fn iSqi(instr: u32) void {
     }
 }
 
+/// SQuare RooT
+pub fn iSqrt(instr: u32) void {
+    const ftf = @intToEnum(Element, @as(u4, 1) << @truncate(u2, 3 - (getDest(instr)) >> 2));
+
+    const ft = getRt(instr);
+
+    regFile.q = @sqrt(regFile.getVfElement(f32, ft, ftf));
+
+    if (doDisasm) {
+        info("   [VU0       ] SQRT Q, VF[{}]{s}; Q = 0x{X:0>8}", .{ft, @tagName(ftf), @bitCast(u32, regFile.q)});
+    }
+}
+
 /// floating-point SUBtract
 pub fn iSub(instr: u32) void {
     const dest = getDest(instr);
@@ -623,5 +700,12 @@ pub fn iSub(instr: u32) void {
         const vd = regFile.getVf(fd);
 
         info("   [VU0       ] SUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
+/// WAIT Q
+pub fn iWaitq() void {
+    if (doDisasm) {
+        info("   [VU0       ] WAITQ", .{});
     }
 }
