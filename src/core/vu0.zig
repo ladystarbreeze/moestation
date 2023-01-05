@@ -403,7 +403,7 @@ pub fn iAddq(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] ADD.{s} VF[{}]{s}, VF[{}]{s}, Q; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
+        info("   [VU0       ] ADDQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
     }
 }
 
@@ -542,6 +542,35 @@ pub fn iMaddbc(instr: u32) void {
     }
 }
 
+/// MOVE
+pub fn iMove(instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    if (dest & (1 << 0) != 0) {
+        regFile.setVfElement(f32, ft, Element.W, regFile.getVfElement(f32, fs, Element.W));
+    }
+    if (dest & (1 << 1) != 0) {
+        regFile.setVfElement(f32, ft, Element.Z, regFile.getVfElement(f32, fs, Element.Z));
+    }
+    if (dest & (1 << 2) != 0) {
+        regFile.setVfElement(f32, ft, Element.Y, regFile.getVfElement(f32, fs, Element.Y));
+    }
+    if (dest & (1 << 3) != 0) {
+        regFile.setVfElement(f32, ft, Element.X, regFile.getVfElement(f32, fs, Element.X));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = regFile.getVf(ft);
+
+        info("   [VU0       ] MOVE.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, ft, destStr, fs, destStr, ft, vt});
+    }
+}
+
 /// Move and Rotate per word
 pub fn iMr32(instr: u32) void {
     const dest = getDest(instr);
@@ -629,6 +658,32 @@ pub fn iMulabc(instr: u32) void {
         const acc = regFile.acc.get();
 
         info("   [VU0       ] VMULA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+    }
+}
+
+/// floating-point MULtiply with Q
+pub fn iMulq(instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = regFile.getVfElement(f32, fs, e) * regFile.q;
+
+            regFile.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = regFile.getVf(fd);
+
+        info("   [VU0       ] MULQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
     }
 }
 
