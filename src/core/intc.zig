@@ -125,7 +125,7 @@ pub fn setCtrl(data: u32) void {
 
 /// Sets INTC_MASK, checks for interrupt
 pub fn setMask(data: u32) void {
-    intcMask = @truncate(u15, data);
+    intcMask ^= @truncate(u15, data);
 
     checkInterrupt();
 }
@@ -200,4 +200,8 @@ fn checkInterruptIop() void {
     // info("   [INTC (IOP)] I_CTRL = {}, I_STAT = 0b{b:0>25}, I_MASK = 0b{b:0>25}", .{iCtrl, iStat, iMask});
 
     iop.setIntPending(iCtrl and ((iStat & iMask) != 0));
+}
+
+pub fn printRegs() void {
+    std.debug.print("INTC_MASK = 0x{X:0>8}\n", .{intcMask});
 }
