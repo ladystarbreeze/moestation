@@ -119,6 +119,40 @@ pub fn iAdda(instr: u32) void {
     }
 }
 
+/// ConVerT to Single
+pub fn iCvts(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+
+    regFile.set(fd, @intToFloat(f32, getRaw(fs)));
+
+    if (doDisasm) {
+        info("   [COP1      ] CVT.S.W ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fd)});
+    }
+}
+
+/// ConVerT to Word
+pub fn iCvtw(instr: u32) void {
+    const fd = getRt(instr);
+    const fs = getRt(instr);
+
+    const s = getRaw(fs);
+
+    if (@truncate(u8, s >> 23) >= 0x9D) {
+        if ((s & (1 << 31)) != 0) {
+            setRaw(fd, 0x8000_0000);
+        } else {
+            setRaw(fd, 0x7FFF_FFFF);
+        }
+    } else {
+        setRaw(fd, @bitCast(u32, @floatToInt(i32, regFile.get(fs))));
+    }
+
+    if (doDisasm) {
+        info("   [COP1      ] CVT.W.S ${}, ${}; ${} = 0x{X:0>8}", .{fd, fs, fd, getRaw(fd)});
+    }
+}
+
 /// DIVide
 pub fn iDiv(instr: u32) void {
     const fd = getRt(instr);

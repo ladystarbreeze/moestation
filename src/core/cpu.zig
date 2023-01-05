@@ -174,6 +174,7 @@ const CopOpcode = enum(u5) {
 /// COP1 instructions
 const Cop1Opcode = enum(u5) {
     S = 0x10,
+    W = 0x14,
 };
 
 /// COP1 Single instructions
@@ -186,6 +187,12 @@ const Cop1Single = enum(u6) {
     Neg  = 0x07,
     Adda = 0x18,
     Madd = 0x1C,
+    Cvtw = 0x24,
+};
+
+/// COP1 Word instructions
+const Cop1Word = enum(u6) {
+    Cvts = 0x20,
 };
 
 /// COP2 instructions
@@ -378,7 +385,7 @@ var regFile = RegFile{};
 var intPending = false;
 
 /// Scratchpad RAM
-var spram: [0x4000]u8 = undefined;
+pub var spram: [0x4000]u8 = undefined;
 
 /// Initializes the EE Core interpreter
 pub fn init() void {
@@ -621,6 +628,7 @@ fn decodeInstr(instr: u32) void {
             const rs = getRs(instr);
 
             switch (rs) {
+                @enumToInt(CopOpcode.Mf) => iMfc(instr, 1),
                 @enumToInt(CopOpcode.Cf) => iCfc(instr, 1),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 1),
                 @enumToInt(CopOpcode.Ct) => iCtc(instr, 1),
@@ -636,8 +644,21 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Cop1Single.Neg ) => cop1.iNeg(instr),
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
                         @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
+                        @enumToInt(Cop1Single.Cvtw) => cop1.iCvtw(instr),
                         else => {
                             err("  [EE Core   ] Unhandled FPU Single instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
+                @enumToInt(Cop1Opcode.W) => {
+                    const funct = getFunct(instr);
+
+                    switch (funct) {
+                        @enumToInt(Cop1Word.Cvts) => cop1.iCvts(instr),
+                        else => {
+                            err("  [EE Core   ] Unhandled FPU Word instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
                             assert(false);
                         }
@@ -2161,6 +2182,7 @@ fn iMfc(instr: u32, comptime n: u2) void {
 
     switch (n) {
         0 => data = cop0.get(u32, rd),
+        1 => data = cop1.getRaw(rd),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
 
