@@ -170,8 +170,8 @@ const SourceTag = enum(u3) {
 
 /// Destination Chain tags
 const DestTag = enum(u3) {
-    Cnts,
     Cnt,
+    Cnts,
     End = 7,
 };
 
@@ -547,6 +547,13 @@ fn decodeDestTag(chnId: u4, dmaTag: u128) void {
             channels[chnId].madr = @truncate(u32, dmaTag >> 32);
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        @enumToInt(DestTag.Cnts) => {
+            channels[chnId].madr = @truncate(u32, dmaTag >> 32);
+
+            info("   [DMAC      ] New tag: cnts. MADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
