@@ -225,6 +225,8 @@ pub fn readPriv(comptime T: type, addr: u32) T {
 
 /// Writes data to a GS register
 pub fn write(addr: u8, data: u64) void {
+    if (addr == 0xF) return;
+
     if (addr > @enumToInt(GsReg.Label)) {
         err("  [GS        ] Invalid GS register address 0x{X:0>2}.", .{addr});
 
@@ -273,6 +275,19 @@ pub fn writePacked(addr: u4, data: u128) void {
                 write(@enumToInt(GsReg.Xyzf3), xyzf);
             } else {
                 write(@enumToInt(GsReg.Xyzf2), xyzf);
+            }
+        },
+        @enumToInt(GsReg.Xyz2) => {
+            var xyz: u64 = 0;
+
+            xyz |= @as(u64, @truncate(u16, data));
+            xyz |= @as(u64, @truncate(u16, data >>  32)) << 16;
+            xyz |= @as(u64, @truncate(u24, data >>  64)) << 32;
+
+            if ((data & (1 << 111)) != 0) {
+                write(@enumToInt(GsReg.Xyz3), xyz);
+            } else {
+                write(@enumToInt(GsReg.Xyz2), xyz);
             }
         },
         @enumToInt(GsReg.Fog) => {
