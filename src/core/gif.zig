@@ -124,7 +124,7 @@ pub fn read(addr: u32) u32 {
 
     switch (addr) {
         @enumToInt(GifReg.GifStat) => {
-            info("   [GIF       ] Read @ 0x{X:0>8} (GIF_STAT).", .{addr});
+            //info("   [GIF       ] Read @ 0x{X:0>8} (GIF_STAT).", .{addr});
 
             data = gifStat.get() | (@truncate(u32, gifFifo.readableLength()) << 24);
         },
@@ -259,13 +259,9 @@ pub fn step() void {
         }
     } else {
         switch (gifTag.fmt) {
-            Format.Packed => doPacked(),
-            Format.Image  => doImage(),
-            else => {
-                err("  [GIF       ] Unhandled {s} format.", .{@tagName(gifTag.fmt)});
-
-                assert(false);
-            }
+            Format.Packed  => doPacked(),
+            Format.Reglist => doReglist(),
+            Format.Image   => doImage(),
         }
     }
 }
@@ -316,6 +312,45 @@ fn doPacked() void {
             gifTag.hasTag = false;
 
             info("   [GIF       ] PACKED mode end.", .{});
+
+            if (gifTag.eop) {
+                pathEnd();
+            }
+        }
+    }
+}
+
+/// Processes a REGLIST primitive
+fn doReglist() void {
+    if (nregs == 0 and nloop == gifTag.nloop) {
+        info("   [GIF       ] REGLIST mode. NREGS = {}, NLOOP = {}", .{gifTag.nregs, gifTag.nloop});
+    }
+
+    const data = readFifo();
+
+    var reg = @truncate(u4, gifTag.regs >> (4 * nregs));
+
+    gs.write(reg, @truncate(u64, data));
+
+    nregs += 1;
+
+    if (nregs != gifTag.nregs or nregs != 16) {
+        reg = @truncate(u4, gifTag.regs >> (4 * nregs));
+
+        s.write(reg, @truncate(u64, data >> 64));
+
+        nregs += 1;
+    }
+
+    if (nregs == gifTag.nregs or nregs == 16) {
+        nregs = 0;
+
+        nloop -= 1;
+
+        if (nloop == 0) {
+            gifTag.hasTag = false;
+
+            info("   [GIF       ] REGLIST mode end.", .{});
 
             if (gifTag.eop) {
                 pathEnd();
