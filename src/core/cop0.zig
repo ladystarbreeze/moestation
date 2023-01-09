@@ -588,7 +588,9 @@ pub fn translateAddrTlb(comptime isWrite: bool, addr: *u32) bool {
         }
     }
 
-    @panic("TLB miss exception");
+    std.debug.print("TLB miss @ 0x{X:0>8}, VAddr = 0x{X:0>8}\n", .{cpu.getCpc(), addr.*});
+
+    @panic("Unhandled TLB miss exception");
 }
 
 /// Writes an indexed TLB entry
