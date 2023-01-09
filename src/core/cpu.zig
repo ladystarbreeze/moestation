@@ -142,6 +142,7 @@ const Special = enum(u6) {
     Sltu    = 0x2B,
     Daddu   = 0x2D,
     Dsubu   = 0x2F,
+    Teq     = 0x34,
     Dsll    = 0x38,
     Dsrl    = 0x3A,
     Dsra    = 0x3B,
@@ -550,6 +551,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Special.Sltu   ) => iSltu(instr),
                 @enumToInt(Special.Daddu  ) => iDaddu(instr),
                 @enumToInt(Special.Dsubu  ) => iDsubu(instr),
+                @enumToInt(Special.Teq    ) => iTeq(instr),
                 @enumToInt(Special.Dsll   ) => iDsll(instr),
                 @enumToInt(Special.Dsrl   ) => iDsrl(instr),
                 @enumToInt(Special.Dsra   ) => iDsra(instr),
@@ -1737,8 +1739,8 @@ fn iEret() void {
     }
 
     if (!fastBootDone and regFile.pc == 0x82000) {
-        bus.fastBoot();
-        //regFile.setPc(bus.loadElf());
+        //bus.fastBoot();
+        regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
     }
@@ -3479,6 +3481,24 @@ fn iSync(instr: u32) void {
         const syncType = if ((stype >> 4) != 0) "P" else "L";
 
         info("   [EE Core   ] SYNC.{s}", .{syncType});
+    }
+}
+
+/// Trap if EQual
+fn iTeq(instr: u32) void {
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    const s = regFile.get(u64, rs);
+    const t = regFile.get(u64, rt);
+
+    if (s == t) @panic("Trap!");
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        info("   [EE Core   ] TEQ ${s}, ${s}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, tagRs, s, tagRt, t});
     }
 }
 
