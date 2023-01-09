@@ -594,6 +594,17 @@ pub fn write(addr: u8, data: u64) void {
                         std.debug.print("Unsupported primitive: {s}\n", .{@tagName(prim.prim)});
                     }
                 }
+
+                switch (prim.prim) {
+                    Primitive.Line     => clearVtxQueue(2),
+                    Primitive.Triangle => clearVtxQueue(3),
+                    Primitive.Sprite   => clearVtxQueue(2),
+                    else => {
+                        std.debug.print("Unhandled primitive: {s}\n", .{@tagName(prim.prim)});
+
+                        @panic("Unhandled primitive");
+                    }
+                }
             }
         },
         @enumToInt(GsReg.PrMode    ) => prmode.set(data),
@@ -736,6 +747,7 @@ pub fn writePriv(addr: u32, data: u64) void {
         @enumToInt(PrivReg.Synch2  ),
         @enumToInt(PrivReg.Syncv   ),
         @enumToInt(PrivReg.Dispfb1 ),
+        @enumToInt(PrivReg.Display1),
         @enumToInt(PrivReg.Dispfb2 ),
         @enumToInt(PrivReg.Display2),
         @enumToInt(PrivReg.Bgcolor ) => {},
