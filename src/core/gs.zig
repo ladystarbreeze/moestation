@@ -631,7 +631,8 @@ pub fn write(addr: u8, data: u64) void {
                 if (trxdir == Trxdir.VramToVram) transmissionVramToVram();
             }
         },
-        @enumToInt(GsReg.Hwreg) => writeHwreg(data),
+        @enumToInt(GsReg.Hwreg ) => writeHwreg(data),
+        @enumToInt(GsReg.Finish) => csr.finish = true,
         else => {
             gsRegs[addr] = data;
         }
