@@ -1,4 +1,5 @@
 const std = @import("std");
+const Sdk = @import("Sdk.zig");
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -10,6 +11,8 @@ pub fn build(b: *std.build.Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
+
+    const sdk = Sdk.init(b);
 
     const exe = b.addExecutable("moestation", "src/main.zig");
     exe.setTarget(target);
@@ -28,6 +31,11 @@ pub fn build(b: *std.build.Builder) void {
     const exe_tests = b.addTest("src/main.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
+
+    sdk.link(exe, .dynamic);
+
+    exe.addPackage(sdk.getNativePackage("sdl2"));
+    exe.install();
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
