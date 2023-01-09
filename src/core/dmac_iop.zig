@@ -646,7 +646,7 @@ fn doSif0() void {
         assert(false);
     }
 
-    if (channels[chnId].bcr.count == 0) {
+    if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Chain mode.", .{chnId, @tagName(Channel.Sif0)});
 
         // Read new tag
@@ -666,15 +666,15 @@ fn doSif0() void {
         }
 
         channels[chnId].madr = @truncate(u24, tag);
-        channels[chnId].bcr.count = @truncate(u16, tag >> 32);
+        channels[chnId].bcr.len = @truncate(u32, tag >> 32) & 0xFFFFF;
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
 
-        if ((channels[chnId].bcr.count & 3) != 0) {
-            channels[chnId].bcr.count = (channels[chnId].bcr.count | 3) + 1;
+        if ((channels[chnId].bcr.len & 3) != 0) {
+            channels[chnId].bcr.len = (channels[chnId].bcr.len | 3) + 1;
         }
     } else {
-        channels[chnId].bcr.count -= 1;
+        channels[chnId].bcr.len -= 1;
         
         const data = bus.readDmacIop(channels[chnId].madr);
 
@@ -682,7 +682,7 @@ fn doSif0() void {
 
         channels[chnId].madr +%= 4;
 
-        if (channels[chnId].bcr.count == 0 and channels[chnId].tagEnd) {
+        if (channels[chnId].bcr.len == 0 and channels[chnId].tagEnd) {
             channels[chnId].chcr.str = false;
 
             transferEnd(chnId);
@@ -717,6 +717,8 @@ fn doSif1() void {
         channels[chnId].bcr.count = @truncate(u16, (tag >> 32) & ~@as(u32, 3));
 
         info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
+
+        //std.debug.print("IOP DMAC channel {} transfer, MADR = 0x{X:0>6}, WC = {}\n", .{chnId, channels[chnId].madr, channels[chnId].bcr.count});
     } else {
         channels[chnId].bcr.count -= 1;
 
