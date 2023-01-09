@@ -337,7 +337,7 @@ fn doReglist() void {
     if (nregs != gifTag.nregs or nregs != 16) {
         reg = @truncate(u4, gifTag.regs >> (4 * nregs));
 
-        s.write(reg, @truncate(u64, data >> 64));
+        gs.write(reg, @truncate(u64, data >> 64));
 
         nregs += 1;
     }
