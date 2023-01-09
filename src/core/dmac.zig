@@ -156,6 +156,31 @@ const DmaStatus = struct {
     }
 };
 
+/// D_PCR
+const PriorityControl = struct {
+    cpc: u10  = 0,
+    cde: u10  = 0,
+    pce: bool = false,
+
+    /// Returns D_PCR
+    pub fn get(self: PriorityControl) u32 {
+        var data: u32 = 0;
+
+        data |= @as(u32, self.cpc);
+        data |= @as(u32, self.cde) << 16;
+        data |= @as(u32, @bitCast(u1, self.pce)) << 31;
+
+        return data;
+    }
+
+    /// Sets D_PCR
+    pub fn set(self: *PriorityControl, data: u32) void {
+        self.cpc = @truncate(u10, data);
+        self.cde = @truncate(u10, data >> 16);
+        self.pce = (data & (1 << 31)) != 0;
+    }
+};
+
 /// Source Chain tags
 const SourceTag = enum(u3) {
     Refe,
@@ -178,9 +203,9 @@ const DestTag = enum(u3) {
 var channels: [10]DmaChannel = undefined;
 
 var dStat: DmaStatus = DmaStatus{};
+var  dPcr: PriorityControl = PriorityControl{};
 
 var dEnable: u32 = 0x1201;
-var    dpcr: u32 = undefined;
 var   dctrl: u32 = undefined;
 
 /// Initializes the DMAC module
@@ -283,7 +308,7 @@ pub fn read(addr: u32) u32 {
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Read @ 0x{X:0>8} (D_PCR).", .{addr});
 
-                data = dpcr;
+                data = dPcr.get();
             },
             @enumToInt(ControlReg.DSqwc) => {
                 warn("[DMAC      ] Read @ 0x{X:0>8} (D_SQWC).", .{addr});
@@ -380,7 +405,7 @@ pub fn write(addr: u32, data: u32) void {
             @enumToInt(ControlReg.DPcr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_PCR) = 0x{X:0>8}.", .{addr, data});
 
-                dpcr = data;
+                dPcr.set(data);
             },
             @enumToInt(ControlReg.DSqwc) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D_SQWC) = 0x{X:0>8}.", .{addr, data});
@@ -398,6 +423,11 @@ pub fn write(addr: u32, data: u32) void {
             }
         }
     }
+}
+
+/// Returns coprocessor 0 signal
+pub fn getCpcond0() bool {
+    return (~dPcr.cpc | dStat.ip) == 0x3FF;
 }
 
 /// Returns D_ENABLER
