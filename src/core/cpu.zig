@@ -22,6 +22,8 @@ const ExCode  = cop0.ExCode;
 
 const cop1 = @import("cop1.zig");
 
+const dmac = @import("dmac.zig");
+
 const vu0 = @import("vu0.zig");
 
 const exts = @import("../common/extend.zig").exts;
@@ -169,6 +171,7 @@ const CopOpcode = enum(u5) {
     Cf = 0x02,
     Mt = 0x04,
     Ct = 0x06,
+    Bc = 0x08,
     Co = 0x10,
 };
 
@@ -189,11 +192,18 @@ const Cop1Single = enum(u6) {
     Adda = 0x18,
     Madd = 0x1C,
     Cvtw = 0x24,
+    C    = 0x30,
 };
 
 /// COP1 Word instructions
 const Cop1Word = enum(u6) {
     Cvts = 0x20,
+};
+
+/// BC instructions
+const CopBranch = enum(u5) {
+    Bcf = 0x00,
+    Bct = 0x01,
 };
 
 /// COP2 instructions
@@ -212,6 +222,7 @@ const ControlOpcode = enum(u6) {
 
 /// MMI instructions
 const MmiOpcode = enum(u6) {
+    Madd  = 0x00,
     Plzcw = 0x04,
     Mmi0  = 0x08,
     Mmi2  = 0x09,
@@ -224,6 +235,7 @@ const MmiOpcode = enum(u6) {
     Divu1 = 0x1B,
     Mmi1  = 0x28,
     Mmi3  = 0x29,
+    Pmfhl = 0x30,
 };
 
 /// MMI0 instructions
@@ -258,6 +270,16 @@ const Mmi3Opcode = enum(u5) {
     Por    = 0x12,
     Pnor   = 0x13,
     Pcpyh  = 0x1B,
+};
+
+/// PMFHL/PMTHL format
+const PmhlFormat = enum(u6) {
+    Lw,
+    Uw,
+    Slw,
+    Lh,
+    Sh,
+    _
 };
 
 /// EE Core General-purpose register
@@ -604,6 +626,19 @@ fn decodeInstr(instr: u32) void {
             switch (rs) {
                 @enumToInt(CopOpcode.Mf) => iMfc(instr, 0),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 0),
+                @enumToInt(CopOpcode.Bc) => {
+                    const rt = getRt(instr);
+
+                    switch (rt) {
+                        @enumToInt(CopBranch.Bcf) => iBcf(instr, 0),
+                        @enumToInt(CopBranch.Bct) => iBct(instr, 0),
+                        else => {
+                            err("  [EE Core   ] Unhandled COP0 Branch instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 @enumToInt(CopOpcode.Co) => {
                     const funct = getFunct(instr);
 
@@ -634,6 +669,19 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(CopOpcode.Cf) => iCfc(instr, 1),
                 @enumToInt(CopOpcode.Mt) => iMtc(instr, 1),
                 @enumToInt(CopOpcode.Ct) => iCtc(instr, 1),
+                @enumToInt(CopOpcode.Bc) => {
+                    const rt = getRt(instr);
+
+                    switch (rt) {
+                        @enumToInt(CopBranch.Bcf) => iBcf(instr, 1),
+                        @enumToInt(CopBranch.Bct) => iBct(instr, 1),
+                        else => {
+                            err("  [EE Core   ] Unhandled COP1 Branch instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
+
+                            assert(false);
+                        }
+                    }
+                },
                 @enumToInt(Cop1Opcode.S) => {
                     const funct = getFunct(instr);
 
@@ -647,6 +695,9 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
                         @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
                         @enumToInt(Cop1Single.Cvtw) => cop1.iCvtw(instr),
+                        @enumToInt(Cop1Single.C   ) ... @enumToInt(Cop1Single.C) + 0xF => {
+                            cop1.iC(instr, @truncate(u4, instr));
+                        },
                         else => {
                             err("  [EE Core   ] Unhandled FPU Single instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -685,6 +736,7 @@ fn decodeInstr(instr: u32) void {
                     switch (f) {
                         0x08 ... 0x0B => vu0.iMaddabc(instr),
                         0x18 ... 0x1B => vu0.iMulabc(instr),
+                        0x1F => {},
                         0x2E => vu0.iOpmula(instr),
                         0x2F => vu0.iNop(),
                         0x30 => vu0.iMove(instr),
@@ -743,6 +795,7 @@ fn decodeInstr(instr: u32) void {
             const funct = getFunct(instr);
 
             switch (funct) {
+                @enumToInt(MmiOpcode.Madd ) => iMadd(instr),
                 @enumToInt(MmiOpcode.Plzcw) => iPlzcw(instr),
                 @enumToInt(MmiOpcode.Mmi0 ) => {
                     const sa = getSa(instr);
@@ -813,6 +866,7 @@ fn decodeInstr(instr: u32) void {
                         }
                     }
                 },
+                @enumToInt(MmiOpcode.Pmfhl) => iPmfhl(instr),
                 else => {
                     err("  [EE Core   ] Unhandled MMI instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -1032,6 +1086,52 @@ fn iAndi(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         info("   [EE Core   ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+    }
+}
+
+/// Branch on Coprocessor False
+fn iBcf(instr: u32, comptime n: u2) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const target = regFile.pc +% offset;
+
+    const cpcond = switch (n) {
+           0 => dmac.getCpcond0(),
+           1 => cop1.getCpcond1(),
+        else => {
+            std.debug.print("Unhandled coprocessor: {}\n", .{n});
+
+            @panic("Unhandled coprocessor");
+        }
+    };
+
+    doBranch(target, !cpcond, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        info("   [EE Core   ] BC{}F 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
+    }
+}
+
+/// Branch on Coprocessor True
+fn iBct(instr: u32, comptime n: u2) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const target = regFile.pc +% offset;
+
+    const cpcond = switch (n) {
+           0 => dmac.getCpcond0(),
+           1 => cop1.getCpcond1(),
+        else => {
+            std.debug.print("Unhandled coprocessor: {}\n", .{n});
+
+            @panic("Unhandled coprocessor");
+        }
+    };
+
+    doBranch(target, cpcond, @enumToInt(CpuReg.R0), false);
+
+    if (doDisasm) {
+        info("   [EE Core   ] BC{}T 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
     }
 }
 
@@ -2169,6 +2269,34 @@ fn iLwu(instr: u32) void {
     regFile.set(u64, rt, data);
 }
 
+/// Multiply-ADD
+fn iMadd(instr: u32) void {
+    const rd = getRd(instr);
+    const rs = getRs(instr);
+    const rt = getRt(instr);
+
+    var res = @as(i64, @bitCast(i32, regFile.get(u32, rs))) * @as(i64, @bitCast(i32, regFile.get(u32, rt)));
+
+    res +%= @bitCast(i64, ((@as(u64, regFile.hi.get(u32)) << 32) | @as(u64, regFile.lo.get(u32))));
+
+    regFile.lo.set(u32, @truncate(u32, @bitCast(u64, res)));
+    regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+
+    regFile.set(u64, rd, regFile.lo.get(u64));
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+        const tagRt = @tagName(@intToEnum(CpuReg, rt));
+
+        if (rd == 0) {
+            info("   [EE Core   ] MADD ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        } else {
+            info("   [EE Core   ] MADD ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+        }
+    }
+}
+
 /// Move From Coprocessor
 fn iMfc(instr: u32, comptime n: u2) void {
     const rd = getRd(instr);
@@ -2764,6 +2892,38 @@ fn iPmfhi(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
         info("   [EE Core   ] PMFHI ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
+    }
+}
+
+/// Parallel Move From Hi/Lo
+fn iPmfhl(instr: u32) void {
+    const rd = getRd(instr);
+
+    const fmt = @intToEnum(PmhlFormat, getSa(instr));
+
+    const hi = regFile.hi.get(u128);
+    const lo = regFile.lo.get(u128);
+
+    var data: u128 = 0;
+
+    switch (fmt) {
+        PmhlFormat.Lw => {
+            data |= (hi & 0xFFFFFFFF_00000000_FFFFFFFF) << 32;
+            data |= (lo & 0xFFFFFFFF_00000000_FFFFFFFF);
+        },
+        else => {
+            std.debug.print("Unhandled PMFHL format: {s}\n", .{@tagName(fmt)});
+
+            @panic("Unhandled PMFHL format");
+        }
+    }
+
+    regFile.set(u128, rd, data);
+
+    if (doDisasm) {
+        const tagRd = @tagName(@intToEnum(CpuReg, rd));
+
+        info("   [EE Core   ] PMFHL.{s} ${s}; ${s} = 0x{X:0>32}", .{@tagName(fmt), tagRd, tagRd, data});
     }
 }
 

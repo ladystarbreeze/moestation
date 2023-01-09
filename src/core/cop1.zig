@@ -13,6 +13,27 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const math = std.math;
+
+const Cond = enum(u4) {
+    F    = 0x0,
+    Un   = 0x1,
+    Eq   = 0x2,
+    Ueq  = 0x3,
+    Olt  = 0x4,
+    Ult  = 0x5,
+    Ole  = 0x6,
+    Ule  = 0x7,
+    Sf   = 0x8,
+    Ngle = 0x9,
+    Seq  = 0xA,
+    Ngl  = 0xB,
+    Lt   = 0xC,
+    Nge  = 0xD,
+    Le   = 0xE,
+    Ngt  = 0xF,
+};
+
 const RegFile = struct {
     regs: [32]u32 = undefined,
 
@@ -43,10 +64,7 @@ const doDisasm = true;
 
 var regFile: RegFile = RegFile{};
 
-/// Returns raw FP register
-pub fn getRaw(idx: u5) u32 {
-    return regFile.regs[idx];
-}
+var cpcond1 = false;
 
 /// Returns FPU control register
 pub fn getControl(idx: u5) u32 {
@@ -59,6 +77,16 @@ pub fn getControl(idx: u5) u32 {
     }
 
     return data;
+}
+
+/// Returns CPCOND1
+pub fn getCpcond1() bool {
+    return cpcond1;
+}
+
+/// Returns raw FP register
+pub fn getRaw(idx: u5) u32 {
+    return regFile.regs[idx];
 }
 
 /// Sets FPU control register
@@ -116,6 +144,34 @@ pub fn iAdda(instr: u32) void {
 
     if (doDisasm) {
         info("   [COP1      ] ADDA.S ${}, ${}; ACC = {}", .{fs, ft, res});
+    }
+}
+
+/// C - Compare
+pub fn iC(instr: u32, cond: u4) void {
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    var cond_: u4 = 0;
+
+    const s = regFile.get(fs);
+    const t = regFile.get(ft);
+
+    if (math.isNan(s) or math.isNan(t)) {
+        if ((cond & 8) != 0) @panic("Invalid C.COND operation");
+
+        cond_ = 1;
+    } else {
+        if (s <  t) cond_ |= 2;
+        if (s == t) cond_ |= 4;
+    }
+
+    //fcr31.c = (cond & cond_) != 0;
+
+    cpcond1 = (cond & cond_) != 0;
+
+    if (doDisasm) {
+        info("[COP1      ] C.{s}.S ${}, ${}", .{@tagName(@intToEnum(Cond, cond)), fs, ft});
     }
 }
 
