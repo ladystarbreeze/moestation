@@ -60,7 +60,7 @@ const RegFile = struct {
     }
 };
 
-const doDisasm = false;
+const doDisasm = true;
 
 var regFile: RegFile = RegFile{};
 
@@ -105,7 +105,7 @@ pub fn setRaw(idx: u5, data: u32) void {
 
 /// Get Rd field
 fn getRd(instr: u32) u5 {
-    return @truncate(u5, instr >> 5);
+    return @truncate(u5, instr >> 6);
 }
 
 /// Get Rs field
