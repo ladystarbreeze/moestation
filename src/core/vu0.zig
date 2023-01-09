@@ -183,6 +183,11 @@ pub fn getControl(comptime T: type, idx: u5) T {
 
             data = @as(T, regFile.getVi(@truncate(u4, idx)));
         },
+        @enumToInt(ControlReg.Cf) => {
+            info("   [VU0 (COP2)] Control register read ({s}) @ $CF.", .{@typeName(T)});
+
+            data = 0;
+        },
         @enumToInt(ControlReg.Fbrst) => {
             info("   [VU0 (COP2)] Control register read ({s}) @ $FBRST.", .{@typeName(T)});
 
