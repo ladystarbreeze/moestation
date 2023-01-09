@@ -188,6 +188,14 @@ const Vertex = struct {
     a: u8 = undefined,
 };
 
+/// Depth test
+const ZTest = enum(u2) {
+    Never,
+    Always,
+    GEqual,
+    Greater,
+};
+
 /// --- GS internal registers
 
 /// Bit blit buffer
@@ -249,6 +257,18 @@ const Prim = struct {
         self.fst  = (data & (1 <<  8)) != 0;
         self.ctxt = (data & (1 <<  9)) != 0;
         self.fix  = (data & (1 << 10)) != 0;
+    }
+};
+
+/// TEST (incomplete)
+const Test = struct {
+     zte: bool  = false,
+    ztst: ZTest = ZTest.Never,
+
+    /// Sets TEST
+    pub fn set(self: *Test, data: u64) void {
+        self.zte  = (data & (1 << 16)) != 0;
+        self.ztst = @intToEnum(ZTest, @truncate(u2, data >> 17));
     }
 };
 
@@ -325,6 +345,21 @@ const Xyoffset = struct {
     pub fn set(self: *Xyoffset, data: u64) void {
         self.ofx = @bitCast(i16, @truncate(u16, data));
         self.ofy = @bitCast(i16, @truncate(u16, data >> 32));
+    }
+};
+
+
+/// Z buffer setting
+const Zbuf = struct {
+     zbp: u9   = 0,
+     psm: PixelFormat = PixelFormat.Psmct32,
+    zmsk: bool = false,
+
+    /// Sets ZBUF
+    pub fn set(self: *Zbuf, data: u64) void {
+        self.zbp  = @truncate(u9, data);
+        self.psm  = @intToEnum(PixelFormat, @truncate(u6, data >> 24));
+        self.zmsk = (data & (1 << 32)) != 0;
     }
 };
 
@@ -424,6 +459,8 @@ var xyoffset: [2]Xyoffset = undefined;
 var  scissor: [2]Scissor  = undefined;
 
 var frame: [2]Frame = undefined;
+var  zbuf: [2]Zbuf  = undefined;
+var test_: [2]Test  = undefined;
 
 var bitbltbuf: Bitbltbuf = Bitbltbuf{};
 var    trxpos: Trxpos    = Trxpos{};
@@ -565,8 +602,12 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.PrModeCont) => prmodecont = (data & 1) != 0,
         @enumToInt(GsReg.Scissor1  ) => scissor[0].set(data),
         @enumToInt(GsReg.Scissor2  ) => scissor[1].set(data),
+        @enumToInt(GsReg.Test1     ) => test_[0].set(data),
+        @enumToInt(GsReg.Test2     ) => test_[1].set(data),
         @enumToInt(GsReg.Frame1    ) => frame[0].set(data),
         @enumToInt(GsReg.Frame2    ) => frame[1].set(data),
+        @enumToInt(GsReg.Zbuf1     ) => zbuf[0].set(data),
+        @enumToInt(GsReg.Zbuf2     ) => zbuf[1].set(data),
         @enumToInt(GsReg.BitBltBuf ) => bitbltbuf.set(data),
         @enumToInt(GsReg.TrxPos    ) => trxpos.set(data),
         @enumToInt(GsReg.TrxReg    ) => trxreg.set(data),
@@ -713,6 +754,28 @@ fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i16 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
+/// Performs a depth test
+fn depthTest(x: i16, y: i16, depth: u32) bool {
+    const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    if (!test_[ctxt].zte) return true;
+
+    const zAddr = @as(u23, zbuf[ctxt].zbp) * 2048;
+
+    const oldDepth = vram[zAddr + 1024 * @as(u23, @bitCast(u16, y)) + @as(u23, @bitCast(u16, x))];
+
+    switch (test_[ctxt].ztst) {
+        ZTest.Never   => return false,
+        ZTest.Always  => {},
+        ZTest.GEqual  => if (depth <  oldDepth) return false,
+        ZTest.Greater => if (depth <= oldDepth) return false,
+    }
+
+    if (!zbuf[ctxt].zmsk) vram[zAddr + 1024 * @as(u23, @bitCast(u16, y)) + @as(u23, @bitCast(u16, x))] = depth;
+
+    return true;
+}
+
 /// Draws a sprite
 fn drawSprite() void {
     std.debug.print("Drawing sprite...\n", .{});
@@ -768,6 +831,8 @@ fn drawSprite() void {
         var x = a_.x;
         while (x <= xMax) : (x += 1) {
             if (x >= scissor[ctxt].scax0 and x <= scissor[ctxt].scax1 and y >= scissor[ctxt].scay0 and y <= scissor[ctxt].scay1) {
+                if (!depthTest(x, y, a.z)) continue;
+
                 const color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
 
                 vram[fbAddr + 1024 * @as(u23, @bitCast(u16, y)) + @as(u23, @bitCast(u16, x))] = color;
@@ -832,6 +897,8 @@ fn drawTriangle() void {
             //std.debug.print("w0 = {}, w1 = {}, w2 = {}\n", .{w0, w1, w2});
 
             if (w0 >= 0 and w1 >= 0 and w2 >= 0) {
+                if (!depthTest(p.x, p.y, a.z)) continue;
+                
                 const color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
 
                 vram[fbAddr + 1024 * @as(u23, @bitCast(u16, p.y)) + @as(u23, @bitCast(u16, p.x))] = color;
