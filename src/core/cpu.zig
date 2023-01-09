@@ -527,6 +527,11 @@ fn getRt(instr: u32) u5 {
     return @truncate(u5, instr >> 16);
 }
 
+/// Returns CPC
+pub fn getCpc() u32 {
+    return regFile.cpc;
+}
+
 /// Decodes and executes instructions
 fn decodeInstr(instr: u32) void {
     const opcode = getOpcode(instr);
