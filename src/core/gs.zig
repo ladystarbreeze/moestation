@@ -521,12 +521,18 @@ pub fn write(addr: u8, data: u64) void {
             }
         },
         @enumToInt(GsReg.Rgbaq     ) => rgbaq.set(data),
-        @enumToInt(GsReg.Xyzf2     ) => {
+        @enumToInt(GsReg.Xyzf2     ),
+        @enumToInt(GsReg.Xyz2      ), => {
             var vtx = Vertex{};
 
             vtx.x = @intCast(i16, @truncate(u16, data));
             vtx.y = @intCast(i16, @truncate(u16, data >> 16));
-            vtx.z = @as(u32, @truncate(u24, data >> 32)) << 8;
+
+            if (addr == @enumToInt(GsReg.Xyzf2)) {
+                vtx.z = @as(u32, @truncate(u24, data >> 32)) << 8;
+            } else {
+                vtx.z = @as(u32, @truncate(u32, data >> 32));
+            }
 
             // TODO: write fog value
 
@@ -546,6 +552,7 @@ pub fn write(addr: u8, data: u64) void {
             if (vtxCount == 0) {
                 switch (prim.prim) {
                     Primitive.Triangle => drawTriangle(),
+                    Primitive.Sprite   => drawSprite(),
                     else => {
                         std.debug.print("Unsupported primitive: {s}\n", .{@tagName(prim.prim)});
                     }
@@ -706,6 +713,69 @@ fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i16 {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
+/// Draws a sprite
+fn drawSprite() void {
+    std.debug.print("Drawing sprite...\n", .{});
+
+    var b = vtxQueue.readItem().?;
+    var a = vtxQueue.readItem().?;
+
+    const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    // Offset coordinates
+    a.x -= xyoffset[ctxt].ofx;
+    b.x -= xyoffset[ctxt].ofx;
+    a.y -= xyoffset[ctxt].ofy;
+    b.y -= xyoffset[ctxt].ofy;
+    
+    a.x >>= 4;
+    a.y >>= 4;
+    b.x >>= 4;
+    b.y >>= 4;
+
+    std.debug.print("a = [{};{}], b = [{};{}]\n", .{a.x, a.y, b.x, b.y});
+
+    var a_ = Vertex{};
+    var b_ = Vertex{};
+
+    // Sort vertices from left to right
+    if (a.x < b.x) {
+        a_ = a;
+        b_ = b;
+    } else {
+        a_ = b;
+        b_ = a;
+    }
+
+    // Swap Y coordinates to draw from top-left to bottom-right
+    if (a_.y > b_.y) {
+        const temp = b_.y;
+
+        b_.y = a_.y;
+        a_.y = temp;
+    }
+
+    const fbAddr = @as(u23, frame[ctxt].fbp) * 2048;
+
+    std.debug.print("Frame buffer address = 0x{X:0>6}, OFX = {}, OFY = {}\n", .{fbAddr, xyoffset[ctxt].ofx >> 4, xyoffset[ctxt].ofy >> 4});
+    std.debug.print("SCAX0 = {}, SCAX1 = {}, SCAY0 = {}, SCAY1 = {}\n", .{scissor[ctxt].scax0, scissor[ctxt].scax1, scissor[ctxt].scay0, scissor[ctxt].scay1});
+
+    const xMax = b_.x - a_.x;
+    const yMax = b_.y - a_.y;
+
+    var y = a_.y;
+    while (y <= yMax) : (y += 1) {
+        var x = a_.x;
+        while (x <= xMax) : (x += 1) {
+            if (x >= scissor[ctxt].scax0 and x <= scissor[ctxt].scax1 and y >= scissor[ctxt].scay0 and y <= scissor[ctxt].scay1) {
+                const color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
+
+                vram[fbAddr + 1024 * @as(u23, @bitCast(u16, y)) + @as(u23, @bitCast(u16, x))] = color;
+            }
+        }
+    }
+}
+
 /// Draws a triangle
 fn drawTriangle() void {
     std.debug.print("Drawing triangle...\n", .{});
@@ -744,7 +814,6 @@ fn drawTriangle() void {
         b_ = b;
         c_ = c;
     }
-
 
     const fbAddr = @as(u23, frame[ctxt].fbp) * 2048;
     //const fbWidth = @as(u23, frame[ctxt].fbw) * 64;
