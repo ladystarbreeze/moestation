@@ -60,7 +60,7 @@ const RegFile = struct {
     }
 };
 
-const doDisasm = true;
+const doDisasm = false;
 
 var regFile: RegFile = RegFile{};
 
@@ -105,12 +105,12 @@ pub fn setRaw(idx: u5, data: u32) void {
 
 /// Get Rd field
 fn getRd(instr: u32) u5 {
-    return @truncate(u5, instr >> 11);
+    return @truncate(u5, instr >> 5);
 }
 
 /// Get Rs field
 fn getRs(instr: u32) u5 {
-    return @truncate(u5, instr >> 21);
+    return @truncate(u5, instr >> 11);
 }
 
 /// Get Rt field
@@ -129,7 +129,7 @@ pub fn iAdd(instr: u32) void {
     regFile.set(fd, res);
 
     if (doDisasm) {
-        info("   [COP1      ] ADD.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+        std.debug.print("[COP1      ] ADD.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
     }
 }
 
@@ -143,7 +143,7 @@ pub fn iAdda(instr: u32) void {
     regFile.setAcc(res);
 
     if (doDisasm) {
-        info("   [COP1      ] ADDA.S ${}, ${}; ACC = {}", .{fs, ft, res});
+        std.debug.print("[COP1      ] ADDA.S ${}, ${}; ACC = {}\n", .{fs, ft, res});
     }
 }
 
@@ -171,7 +171,7 @@ pub fn iC(instr: u32, cond: u4) void {
     cpcond1 = (cond & cond_) != 0;
 
     if (doDisasm) {
-        info("[COP1      ] C.{s}.S ${}, ${}", .{@tagName(@intToEnum(Cond, cond)), fs, ft});
+        std.debug.print("[COP1      ] C.{s}.S ${}, ${}\n", .{@tagName(@intToEnum(Cond, cond)), fs, ft});
     }
 }
 
@@ -183,7 +183,7 @@ pub fn iCvts(instr: u32) void {
     regFile.set(fd, @intToFloat(f32, getRaw(fs)));
 
     if (doDisasm) {
-        info("   [COP1      ] CVT.S.W ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fd)});
+        std.debug.print("[COP1      ] CVT.S.W ${}, ${}; ${} = {}\n", .{fd, fs, fd, regFile.get(fd)});
     }
 }
 
@@ -205,7 +205,7 @@ pub fn iCvtw(instr: u32) void {
     }
 
     if (doDisasm) {
-        info("   [COP1      ] CVT.W.S ${}, ${}; ${} = 0x{X:0>8}", .{fd, fs, fd, getRaw(fd)});
+        std.debug.print("[COP1      ] CVT.W.S ${}, ${}; ${} = 0x{X:0>8}\n", .{fd, fs, fd, getRaw(fd)});
     }
 }
 
@@ -220,7 +220,7 @@ pub fn iDiv(instr: u32) void {
     regFile.set(fd, res);
 
     if (doDisasm) {
-        info("   [COP1      ] DIV.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+        std.debug.print("[COP1      ] DIV.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
     }
 }
 
@@ -235,7 +235,7 @@ pub fn iMadd(instr: u32) void {
     regFile.set(fd, res);
 
     if (doDisasm) {
-        info("   [COP1      ] MADD.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+        std.debug.print("[COP1      ] MADD.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
     }
 }
 
@@ -247,7 +247,7 @@ pub fn iMov(instr: u32) void {
     regFile.set(fd, regFile.get(fs));
 
     if (doDisasm) {
-        info("   [COP1      ] MOV.S ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fs)});
+        std.debug.print("[COP1      ] MOV.S ${}, ${}; ${} = {}\n", .{fd, fs, fd, regFile.get(fs)});
     }
 }
 
@@ -262,7 +262,7 @@ pub fn iMul(instr: u32) void {
     regFile.set(fd, res);
 
     if (doDisasm) {
-        info("   [COP1      ] MUL.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+        std.debug.print("[COP1      ] MUL.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
     }
 }
 
@@ -274,7 +274,7 @@ pub fn iNeg(instr: u32) void {
     regFile.set(fd, -regFile.get(fs));
 
     if (doDisasm) {
-        info("   [COP1      ] NEG.S ${}, ${}; ${} = {}", .{fd, fs, fd, regFile.get(fs)});
+        std.debug.print("[COP1      ] NEG.S ${}, ${}; ${} = {}\n", .{fd, fs, fd, regFile.get(fs)});
     }
 }
 
@@ -289,6 +289,6 @@ pub fn iSub(instr: u32) void {
     regFile.set(fd, res);
 
     if (doDisasm) {
-        info("   [COP1      ] SUB.S ${}, ${}, ${}; ${} = {}", .{fd, fs, ft, fd, res});
+        std.debug.print("[COP1      ] SUB.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
     }
 }
