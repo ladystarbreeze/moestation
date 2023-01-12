@@ -42,7 +42,7 @@ const Vf = struct {
 
     /// Returns the full 128-bit VF
     pub fn get(self: Vf) u128 {
-        return (@as(u128, self.x) << 96) | (@as(u128, self.y) << 64) | (@as(u128, self.z) << 32) | @as(u128, self.w);
+        return (@as(u128, self.w) << 96) | (@as(u128, self.z) << 64) | (@as(u128, self.y) << 32) | @as(u128, self.x);
     }
 
     /// Returns an element
@@ -61,10 +61,10 @@ const Vf = struct {
 
     /// Sets the full 128-bit VF
     pub fn set(self: *Vf, data: u128) void {
-        self.x = @truncate(u32, data >> 96);
-        self.y = @truncate(u32, data >> 64);
-        self.z = @truncate(u32, data >> 32);
-        self.w = @truncate(u32, data);
+        self.x = @truncate(u32, data);
+        self.y = @truncate(u32, data >> 32);
+        self.z = @truncate(u32, data >> 64);
+        self.w = @truncate(u32, data >> 96);
     }
 
     /// Sets an element
@@ -132,7 +132,7 @@ const RegFile = struct {
     pub fn setVf(self: *RegFile, idx: u5, data: u128) void {
         self.vf[idx].set(data);
 
-        self.vf[0].set(0x3F800000);
+        self.vf[0].set(0x3F800000 << 96);
     }
 
     /// Sets a VF element
@@ -148,11 +148,11 @@ const RegFile = struct {
             Element.X => self.vf[idx].x = data_,
         }
 
-        self.vf[0].set(0);
+        self.vf[0].set(0x3F800000 << 96);
     }
 };
 
-const doDisasm = true;
+const doDisasm = false;
 
 /// VU0 code
 pub var vuCode: []u8 = undefined;
@@ -347,7 +347,7 @@ pub fn iAdd(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] ADD.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+        std.debug.print("[VU0       ] VADD.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
 
@@ -382,7 +382,7 @@ pub fn iAddbc(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] ADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+        std.debug.print("[VU0       ] VADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
     }
 }
 
@@ -408,7 +408,7 @@ pub fn iAddq(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] ADDQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
+        std.debug.print("[VU0       ] VADDQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, fd, vd});
     }
 }
 
@@ -420,10 +420,10 @@ pub fn iDiv(instr: u32) void {
     const fs = getRs(instr);
     const ft = getRt(instr);
 
-    regFile.q = regFile.getVfElement(f32, ft, ftf) / regFile.getVfElement(f32, fs, fsf);
+    regFile.q = regFile.getVfElement(f32, fs, ftf) / regFile.getVfElement(f32, ft, fsf);
 
     if (doDisasm) {
-        info("   [VU0       ] SQRT Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}", .{ft, @tagName(ftf), fs, @tagName(fsf), @bitCast(u32, regFile.q)});
+        std.debug.print("[VU0       ] VDIV Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}\n", .{fs, @tagName(fsf), ft, @tagName(ftf), @bitCast(u32, regFile.q)});
     }
 }
 
@@ -444,7 +444,7 @@ pub fn iIadd(instr: u32) void {
     regFile.setVi(@truncate(u4, id), res);
 
     if (doDisasm) {
-        info("   [VU0       ] IADD VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}", .{id, is, it, id, res});
+        std.debug.print("[VU0       ] VIADD VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{id, is, it, id, res});
     }
 }
 
@@ -474,7 +474,7 @@ pub fn iIswr(instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        info("   [VU0       ] ISWR.{s} VI[{}]{s}, (VI[{}])", .{destStr, it, destStr, is});
+        std.debug.print("[VU0       ] VISWR.{s} VI[{}]{s}, (VI[{}])\n", .{destStr, it, destStr, is});
     }
 }
 
@@ -508,7 +508,7 @@ pub fn iMaddabc(instr: u32) void {
 
         const acc = regFile.acc.get();
 
-        info("   [VU0       ] VMADDA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+        std.debug.print("[VU0       ] VMADDA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}\n", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
     }
 }
 
@@ -543,7 +543,7 @@ pub fn iMaddbc(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] VMADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+        std.debug.print("[VU0       ] VMADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
     }
 }
 
@@ -572,7 +572,7 @@ pub fn iMove(instr: u32) void {
 
         const vt = regFile.getVf(ft);
 
-        info("   [VU0       ] MOVE.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, ft, destStr, fs, destStr, ft, vt});
+        std.debug.print("[VU0       ] VMOVE.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, ft, destStr, fs, destStr, ft, vt});
     }
 }
 
@@ -601,7 +601,7 @@ pub fn iMr32(instr: u32) void {
 
         const vt = regFile.getVf(ft);
 
-        info("   [VU0       ] MR32.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, ft, destStr, fs, destStr, ft, vt});
+        std.debug.print("[VU0       ] VMR32.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, ft, destStr, fs, destStr, ft, vt});
     }
 }
 
@@ -628,7 +628,7 @@ pub fn iMul(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] MUL.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+        std.debug.print("[VU0       ] VMUL.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
 
@@ -662,7 +662,7 @@ pub fn iMulabc(instr: u32) void {
 
         const acc = regFile.acc.get();
 
-        info("   [VU0       ] VMULA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
+        std.debug.print("[VU0       ] VMULA{s}.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}\n", .{bcStr, destStr, destStr, fs, destStr, ft, bcStr, acc});
     }
 }
 
@@ -688,14 +688,14 @@ pub fn iMulq(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] MULQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, fd, vd});
+        std.debug.print("[VU0       ] VMULQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, fd, vd});
     }
 }
 
 /// No OPeration
 pub fn iNop() void {
     if (doDisasm) {
-        info("   [VU0       ] NOP", .{});
+        std.debug.print("[VU0       ] VNOP\n", .{});
     }
 }
 
@@ -716,7 +716,7 @@ pub fn iOpmsub(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] OPMSUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+        std.debug.print("[VU0       ] VOPMSUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
 
@@ -736,7 +736,7 @@ pub fn iOpmula(instr: u32) void {
 
         const acc = regFile.acc.get();
 
-        info("   [VU0       ] OPMULA.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}", .{destStr, destStr, fs, destStr, ft, destStr, acc});
+        std.debug.print("[VU0       ] VOPMULA.{s} ACC{s}, VF[{}]{s}, VF[{}]{s}; ACC = 0x{X:0>32}\n", .{destStr, destStr, fs, destStr, ft, destStr, acc});
     }
 }
 
@@ -767,7 +767,7 @@ pub fn iSqi(instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        info("   [VU0       ] SQI.{s} VF[{}]{s}, (VI[{}]++)", .{destStr, ft, destStr, is});
+        std.debug.print("[VU0       ] VSQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{destStr, ft, destStr, is});
     }
 }
 
@@ -780,7 +780,7 @@ pub fn iSqrt(instr: u32) void {
     regFile.q = @sqrt(regFile.getVfElement(f32, ft, ftf));
 
     if (doDisasm) {
-        info("   [VU0       ] SQRT Q, VF[{}]{s}; Q = 0x{X:0>8}", .{ft, @tagName(ftf), @bitCast(u32, regFile.q)});
+        info("   [VU0       ] VSQRT Q, VF[{}]{s}; Q = 0x{X:0>8}\n", .{ft, @tagName(ftf), @bitCast(u32, regFile.q)});
     }
 }
 
@@ -807,13 +807,19 @@ pub fn iSub(instr: u32) void {
 
         const vd = regFile.getVf(fd);
 
-        info("   [VU0       ] SUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+        std.debug.print("[VU0       ] VSUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
 
 /// WAIT Q
 pub fn iWaitq() void {
     if (doDisasm) {
-        info("   [VU0       ] WAITQ", .{});
+        std.debug.print("[VU0       ] VWAITQ\n", .{});
     }
+}
+
+pub fn printVf7() void {
+    std.debug.print("VF7 = 0x{X:0>32}\n", .{regFile.getVf(7)});
+
+    @panic("aa");
 }
