@@ -177,8 +177,8 @@ pub fn iC(instr: u32, cond: u4) void {
 
 /// ConVerT to Single
 pub fn iCvts(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
 
     regFile.set(fd, @intToFloat(f32, getRaw(fs)));
 
@@ -189,8 +189,8 @@ pub fn iCvts(instr: u32) void {
 
 /// ConVerT to Word
 pub fn iCvtw(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
 
     const s = getRaw(fs);
 
@@ -211,8 +211,8 @@ pub fn iCvtw(instr: u32) void {
 
 /// DIVide
 pub fn iDiv(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
     const ft = getRt(instr);
 
     const res = regFile.get(fs) / regFile.get(ft);
@@ -226,8 +226,8 @@ pub fn iDiv(instr: u32) void {
 
 /// Multiply ADD
 pub fn iMadd(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
     const ft = getRt(instr);
 
     const res = regFile.get(fs) * regFile.get(ft) + regFile.getAcc();
@@ -241,8 +241,8 @@ pub fn iMadd(instr: u32) void {
 
 /// MOVe
 pub fn iMov(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
 
     regFile.set(fd, regFile.get(fs));
 
@@ -253,8 +253,8 @@ pub fn iMov(instr: u32) void {
 
 /// MULtiply
 pub fn iMul(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
     const ft = getRt(instr);
 
     const res = regFile.get(fs) * regFile.get(ft);
@@ -268,8 +268,8 @@ pub fn iMul(instr: u32) void {
 
 /// NEGate
 pub fn iNeg(instr: u32) void {
-    const fd = getRt(instr);
-    const fs = getRt(instr);
+    const fd = getRd(instr);
+    const fs = getRs(instr);
 
     regFile.set(fd, -regFile.get(fs));
 
