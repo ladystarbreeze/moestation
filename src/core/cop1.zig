@@ -15,23 +15,11 @@ const warn = std.log.warn;
 
 const math = std.math;
 
-const Cond = enum(u4) {
-    F    = 0x0,
-    Un   = 0x1,
-    Eq   = 0x2,
-    Ueq  = 0x3,
-    Olt  = 0x4,
-    Ult  = 0x5,
-    Ole  = 0x6,
-    Ule  = 0x7,
-    Sf   = 0x8,
-    Ngle = 0x9,
-    Seq  = 0xA,
-    Ngl  = 0xB,
-    Lt   = 0xC,
-    Nge  = 0xD,
-    Le   = 0xE,
-    Ngt  = 0xF,
+pub const Cond = enum(u2) {
+    F  = 0,
+    Eq = 1,
+    Lt = 2,
+    Le = 3,
 };
 
 const RegFile = struct {
@@ -71,6 +59,7 @@ pub fn getControl(idx: u5) u32 {
     var data: u32 = 0;
 
     switch (idx) {
+          31 => data |= @as(u32, @bitCast(u1, cpcond1)) << 23,
         else => {
             warn("[COP1      ] Control register read @ ${}.", .{idx});
         }
@@ -148,30 +137,22 @@ pub fn iAdda(instr: u32) void {
 }
 
 /// C - Compare
-pub fn iC(instr: u32, cond: u4) void {
+pub fn iC(instr: u32, comptime cond: Cond) void {
     const fs = getRs(instr);
     const ft = getRt(instr);
-
-    var cond_: u4 = 0;
 
     const s = regFile.get(fs);
     const t = regFile.get(ft);
 
-    if (math.isNan(s) or math.isNan(t)) {
-        if ((cond & 8) != 0) @panic("Invalid C.COND operation");
-
-        cond_ = 1;
-    } else {
-        if (s <  t) cond_ |= 2;
-        if (s == t) cond_ |= 4;
-    }
-
-    //fcr31.c = (cond & cond_) != 0;
-
-    cpcond1 = (cond & cond_) != 0;
+    cpcond1 = switch (cond) {
+        Cond.F  => false,
+        Cond.Eq => s == t,
+        Cond.Lt => s <  t,
+        Cond.Le => s <= t,
+    };
 
     if (doDisasm) {
-        std.debug.print("[COP1      ] C.{s}.S ${}, ${}\n", .{@tagName(@intToEnum(Cond, cond)), fs, ft});
+        std.debug.print("[COP1      ] C.{s}.S ${}, ${}; ${} = {}, ${} = {}\n", .{@tagName(cond), fs, ft, fs, s, ft, t});
     }
 }
 

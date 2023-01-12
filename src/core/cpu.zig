@@ -22,6 +22,8 @@ const ExCode  = cop0.ExCode;
 
 const cop1 = @import("cop1.zig");
 
+const Cond = cop1.Cond;
+
 const dmac = @import("dmac.zig");
 
 const vu0 = @import("vu0.zig");
@@ -700,9 +702,10 @@ fn decodeInstr(instr: u32) void {
                         @enumToInt(Cop1Single.Adda) => cop1.iAdda(instr),
                         @enumToInt(Cop1Single.Madd) => cop1.iMadd(instr),
                         @enumToInt(Cop1Single.Cvtw) => cop1.iCvtw(instr),
-                        @enumToInt(Cop1Single.C   ) ... @enumToInt(Cop1Single.C) + 0xF => {
-                            cop1.iC(instr, @truncate(u4, instr));
-                        },
+                        @enumToInt(Cop1Single.C   ) + 0 => cop1.iC(instr, Cond.F ),
+                        @enumToInt(Cop1Single.C   ) + 2 => cop1.iC(instr, Cond.Eq),
+                        @enumToInt(Cop1Single.C   ) + 4 => cop1.iC(instr, Cond.Lt),
+                        @enumToInt(Cop1Single.C   ) + 6 => cop1.iC(instr, Cond.Le),
                         else => {
                             err("  [EE Core   ] Unhandled FPU Single instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
