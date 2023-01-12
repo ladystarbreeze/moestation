@@ -763,8 +763,8 @@ pub fn writePriv(addr: u32, data: u64) void {
 }
 
 /// Computes edge function
-fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i16 {
-    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i32 {
+    return (@as(i32, b.x) - @as(i32, a.x)) * (@as(i32, c.y) - @as(i32, a.y)) - (@as(i32, b.y) - @as(i32, a.y)) * (@as(i32, c.x) - @as(i32, a.x));
 }
 
 /// Performs a depth test
@@ -793,8 +793,8 @@ fn depthTest(x: i16, y: i16, depth: u32) bool {
 fn drawSprite() void {
     std.debug.print("Drawing sprite...\n", .{});
 
-    var b = vtxQueue.readItem().?;
     var a = vtxQueue.readItem().?;
+    var b = vtxQueue.readItem().?;
 
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
@@ -858,9 +858,9 @@ fn drawSprite() void {
 fn drawTriangle() void {
     std.debug.print("Drawing triangle...\n", .{});
 
-    var c = vtxQueue.readItem().?;
-    var b = vtxQueue.readItem().?;
     var a = vtxQueue.readItem().?;
+    var b = vtxQueue.readItem().?;
+    var c = vtxQueue.readItem().?;
 
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
