@@ -13,8 +13,6 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
-const math = std.math;
-
 pub const Cond = enum(u2) {
     F  = 0,
     Eq = 1,
@@ -48,7 +46,7 @@ const RegFile = struct {
     }
 };
 
-const doDisasm = true;
+const doDisasm = false;
 
 var regFile: RegFile = RegFile{};
 
@@ -161,7 +159,7 @@ pub fn iCvts(instr: u32) void {
     const fd = getRd(instr);
     const fs = getRs(instr);
 
-    regFile.set(fd, @intToFloat(f32, getRaw(fs)));
+    regFile.set(fd, @intToFloat(f32, @bitCast(i32, getRaw(fs))));
 
     if (doDisasm) {
         std.debug.print("[COP1      ] CVT.S.W ${}, ${}; ${} = {}\n", .{fd, fs, fd, regFile.get(fd)});
