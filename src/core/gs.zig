@@ -789,6 +789,19 @@ fn depthTest(x: i16, y: i16, depth: u32) bool {
     return true;
 }
 
+/// Calculates Z
+fn getDepth(a: Vertex, b: Vertex, c: Vertex, w0: i32, w1: i32, w2: i32) u32 {
+    const area = @as(i64, edgeFunction(a, b, c));
+
+    const az = @as(i64, @bitCast(i32, a.z));
+    const bz = @as(i64, @bitCast(i32, b.z));
+    const cz = @as(i64, @bitCast(i32, c.z));
+
+    const z = @divTrunc((@as(i64, w0) * az) + (@as(i64, w1) * bz) + (@as(i64, w2) * cz), area);
+
+    return @bitCast(u32, @truncate(i32, z));
+}
+
 /// Draws a sprite
 fn drawSprite() void {
     std.debug.print("Drawing sprite...\n", .{});
@@ -910,7 +923,9 @@ fn drawTriangle() void {
             //std.debug.print("w0 = {}, w1 = {}, w2 = {}\n", .{w0, w1, w2});
 
             if (w0 >= 0 and w1 >= 0 and w2 >= 0) {
-                if (!depthTest(p.x, p.y, a.z)) continue;
+                const depth = getDepth(a, b_, c_, w0, w1, w2);
+
+                if (!depthTest(p.x, p.y, depth)) continue;
                 
                 const color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
 
