@@ -802,6 +802,19 @@ fn getDepth(a: Vertex, b: Vertex, c: Vertex, w0: i32, w1: i32, w2: i32) u32 {
     return @bitCast(u32, @truncate(i32, z));
 }
 
+/// Calculates RGBA
+fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i32, w1: i32, w2: i32) u32 {
+    const area = @as(i64, edgeFunction(a, b, c));
+
+    const colorA = @as(i64, @intCast(i32, (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | (@as(u32, a.r))));
+    const colorB = @as(i64, @intCast(i32, (@as(u32, b.a) << 24) | (@as(u32, b.b) << 16) | (@as(u32, b.g) << 8) | (@as(u32, b.r))));
+    const colorC = @as(i64, @intCast(i32, (@as(u32, c.a) << 24) | (@as(u32, c.b) << 16) | (@as(u32, c.g) << 8) | (@as(u32, c.r))));
+
+    const color = @divTrunc((@as(i64, w0) * colorA) + (@as(i64, w1) * colorB) + (@as(i64, w2) * colorC), area);
+
+    return @bitCast(u32, @truncate(i32, color));
+}
+
 /// Draws a sprite
 fn drawSprite() void {
     std.debug.print("Drawing sprite...\n", .{});
@@ -927,7 +940,7 @@ fn drawTriangle() void {
 
                 if (!depthTest(p.x, p.y, depth)) continue;
                 
-                const color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
+                const color = getColor(a, b_, c_, w0, w1, w2);
 
                 vram[fbAddr + 1024 * @as(u23, @bitCast(u16, p.y)) + @as(u23, @bitCast(u16, p.x))] = color;
 
