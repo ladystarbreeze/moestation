@@ -152,7 +152,7 @@ const RegFile = struct {
     }
 };
 
-const doDisasm = false;
+const doDisasm = true;
 
 /// VU0 code
 pub var vuCode: []u8 = undefined;
@@ -366,11 +366,13 @@ pub fn iAddbc(instr: u32) void {
         3 => Element.W,
     };
 
+    const t = regFile.getVfElement(f32, ft, bc);
+
     var i: u4 = 1;
     while (i != 0) : (i <<= 1) {
         if ((dest & i) != 0) {
             const e = @intToEnum(Element, i);
-            const res = regFile.getVfElement(f32, fs, e) + regFile.getVfElement(f32, ft, bc);
+            const res = regFile.getVfElement(f32, fs, e) + t;
 
             regFile.setVfElement(f32, fd, e, res);
         }
@@ -420,7 +422,7 @@ pub fn iDiv(instr: u32) void {
     const fs = getRs(instr);
     const ft = getRt(instr);
 
-    regFile.q = regFile.getVfElement(f32, fs, ftf) / regFile.getVfElement(f32, ft, fsf);
+    regFile.q = regFile.getVfElement(f32, fs, fsf) / regFile.getVfElement(f32, ft, ftf);
 
     if (doDisasm) {
         std.debug.print("[VU0       ] VDIV Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}\n", .{fs, @tagName(fsf), ft, @tagName(ftf), @bitCast(u32, regFile.q)});
@@ -492,11 +494,13 @@ pub fn iMaddabc(instr: u32) void {
         3 => Element.W,
     };
 
+    const t = regFile.getVfElement(f32, ft, bc);
+
     var i: u4 = 1;
     while (i != 0) : (i <<= 1) {
         if ((dest & i) != 0) {
             const e = @intToEnum(Element, i);
-            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc) + regFile.acc.getElement(e);
+            const res = regFile.getVfElement(f32, fs, e) * t + regFile.acc.getElement(e);
 
             regFile.acc.setElement(e, res);
         }
@@ -527,11 +531,13 @@ pub fn iMaddbc(instr: u32) void {
         3 => Element.W,
     };
 
+    const t = regFile.getVfElement(f32, ft, bc);
+
     var i: u4 = 1;
     while (i != 0) : (i <<= 1) {
         if ((dest & i) != 0) {
             const e = @intToEnum(Element, i);
-            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc) + regFile.acc.getElement(e);
+            const res = regFile.getVfElement(f32, fs, e) * t + regFile.acc.getElement(e);
 
             regFile.setVfElement(f32, fd, e, res);
         }
@@ -646,11 +652,13 @@ pub fn iMulabc(instr: u32) void {
         3 => Element.W,
     };
 
+    const t = regFile.getVfElement(f32, ft, bc);
+
     var i: u4 = 1;
     while (i != 0) : (i <<= 1) {
         if ((dest & i) != 0) {
             const e = @intToEnum(Element, i);
-            const res = regFile.getVfElement(f32, fs, e) * regFile.getVfElement(f32, ft, bc);
+            const res = regFile.getVfElement(f32, fs, e) * t;
 
             regFile.acc.setElement(e, res);
         }
