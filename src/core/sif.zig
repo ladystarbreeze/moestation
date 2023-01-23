@@ -77,6 +77,11 @@ pub fn read(addr: u32) u32 {
 
             data = smflg;
         },
+        @enumToInt(SifReg.SifCtrl) => {
+            info("   [SIF       ] Read @ 0x{X:0>8} (SIF_CTRL).", .{addr});
+
+            data = 0xF000_0082;
+        },
         else => {
             err("  [SIF       ] Unhandled read @ 0x{X:0>8}.", .{addr});
 
@@ -247,7 +252,7 @@ pub fn writeSif0(data: u32) void {
 
 /// Writes data to SIF1 FIFO
 pub fn writeSif1(data: u128) void {
-    err("  [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
+    //err("  [SIF (DMAC)] Write @ SIF1 FIFO = 0x{X:0>32}.", .{data});
 
     var i: u7 = 0;
     while (i < 4) : (i += 1) {
