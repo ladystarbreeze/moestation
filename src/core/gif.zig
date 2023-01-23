@@ -118,6 +118,8 @@ var gifTag = GifTag{};
 var nloop: u15 = 0;
 var nregs: u6  = 0;
 
+var setFinish = false;
+
 /// Reads data from GIF I/O
 pub fn read(addr: u32) u32 {
     var data: u32 = 0;
@@ -199,6 +201,11 @@ pub fn writeFifo(data: u128) void {
     }
 }
 
+/// Sets FINISH signal after DMA finishes
+pub fn scheduleFinish() void {
+    setFinish = true;
+}
+
 /// Writes data to GIF FIFO via PATH3
 pub fn writePath3(data: u128) void {
     writeFifo(data);
@@ -233,6 +240,12 @@ pub fn pathEnd() void {
     gifStat.apath = @enumToInt(ActivePath.Idle);
 
     gifStat.oph = false;
+
+    if (setFinish) {
+        gs.setFinish();
+
+        setFinish = false;
+    }
 }
 
 /// Steps the GIF
