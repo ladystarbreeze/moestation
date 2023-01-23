@@ -1567,6 +1567,19 @@ pub fn step() void {
         doNewPrintf = false;
     }
 
+    if (doIopPrintf and (regFile.cpc == 0x12C48 or regFile.cpc == 0x1420C or regFile.cpc == 0x1430C)) {
+        var ptr = regFile.get(5);
+        var ctr = regFile.get(6);
+
+        while (ctr != 0) : (ctr -= 1) {
+            const c = read(u8, ptr & 0x1F_FFFF, true);
+
+            std.debug.print("{c}", .{c});
+
+            ptr += 1;
+        }
+    }
+
     inDelaySlot[0] = inDelaySlot[1];
     inDelaySlot[1] = false;
 
@@ -1576,7 +1589,7 @@ pub fn step() void {
         return raiseException(ExCode.Interrupt);
     }
 
-    decodeInstr(fetchInstr());    
+    decodeInstr(fetchInstr());
 }
 
 pub fn dumpRegs() void {
