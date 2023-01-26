@@ -1847,8 +1847,8 @@ fn iEret() void {
     }
 
     if (!fastBootDone and regFile.pc == 0x82000) {
-        //bus.fastBoot();
-        regFile.setPc(bus.loadElf());
+        bus.fastBoot();
+        //regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
     }
@@ -2525,7 +2525,7 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
     const rs = getRs(instr);
     const rt = getRt(instr);
 
-    const res = @intCast(i64, @bitCast(i32, regFile.get(u32, rs))) *% @intCast(i64, @bitCast(i32, regFile.get(u32, rt)));
+    const res = @as(i64, @bitCast(i32, regFile.get(u32, rs))) *% @as(i64, @bitCast(i32, regFile.get(u32, rt)));
 
     if (pipeline == 1) {
         regFile.lo.setHi(u32, @truncate(u32, @bitCast(u64, res)));
