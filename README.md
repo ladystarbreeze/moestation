@@ -6,4 +6,5 @@
  - SDL.zig (https://github.com/MasterQ32/SDL.zig)
  
  # Screenshots
-![moestation_3stars](https://user-images.githubusercontent.com/51570316/211250985-2e8f076c-4f63-451b-b91a-a710cc2a68dc.png)
+<img width="1092" alt="image" src="https://user-images.githubusercontent.com/51570316/212671604-60696145-20ee-4df1-924b-bc0bd6304f5d.png">
+<img width="1092" alt="image" src="https://user-images.githubusercontent.com/51570316/212671877-f26ef8b5-c816-4182-9ee9-c61211860f54.png">
