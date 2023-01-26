@@ -383,6 +383,8 @@ pub fn readDmac(addr: u32) u128 {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0x1FF_FFF0]), @sizeOf(u128));
+    } else if ((addr & (1 << 30)) != 0) {
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0x1FF_FFF0]), @sizeOf(u128));
     } else if ((addr & (1 << 31)) != 0) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &cpu.spram[addr & 0x3FF0]), @sizeOf(u128));
     } else {
