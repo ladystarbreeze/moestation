@@ -27,7 +27,7 @@ const intc = @import("intc.zig");
 const IntSource = intc.IntSourceIop;
 
 //const iopClock: i64 = 36_864_000;
-const iopClock: i64 = 36_864_0;
+const iopClock: i64 = 368_640; // Speed hack
 
 const  readSpeedCd: i64 = 24 * 153_600;
 const readSpeedDvd: i64 =  4 * 1_382_400;
@@ -58,6 +58,8 @@ const SCommand = enum(u8) {
     UpdateStickyFlags = 0x05,
     ReadRtc           = 0x08,
     ForbidDvd         = 0x15,
+    ReadILinkModel    = 0x17,
+    BootCertify       = 0x1A,
     OpenConfig        = 0x40,
     ReadConfig        = 0x41,
     CloseConfig       = 0x43,
@@ -329,6 +331,7 @@ pub fn read(addr: u32) u8 {
 
                 if (sCmdData.idx == sCmdLen) {
                     sCmdStat.noData = true;
+                    sCmdStat.busy   = false;
                     
                     sCmdData.clear();
                 }
@@ -359,6 +362,8 @@ pub fn readDmac() u32 {
             dmac.setRequest(Channel.Cdvd, false);
 
             oldSectorNum = seekParam.pos + sectorNum;
+
+            //std.debug.print("Reading sector {}...\n", .{seekParam.pos + sectorNum});
 
             sectorNum += 1;
 
@@ -465,6 +470,8 @@ fn runSCmd(cmd: u8) void {
         @enumToInt(SCommand.UpdateStickyFlags) => cmdUpdateStickyFlags(),
         @enumToInt(SCommand.ReadRtc          ) => cmdReadRtc(),
         @enumToInt(SCommand.ForbidDvd        ) => cmdForbidDvd(),
+        @enumToInt(SCommand.ReadILinkModel   ) => cmdReadILinkModel(),
+        @enumToInt(SCommand.BootCertify      ) => cmdBootCertify(),
         @enumToInt(SCommand.OpenConfig       ) => cmdOpenConfig(),
         @enumToInt(SCommand.ReadConfig       ) => cmdReadConfig(),
         @enumToInt(SCommand.CloseConfig      ) => cmdCloseConfig(),
@@ -591,11 +598,26 @@ fn doReadDvd() void {
     readBuf.buf[2063] = 0;
 }
 
+/// BootCertify
+fn cmdBootCertify() void {
+    info("   [CDVD      ] BootCertify", .{});
+
+    sCmdStat.noData = false;
+
+    sCmdData.write(1);
+
+    sCmdLen = 1;
+}
+
 /// OpenConfig
 fn cmdCloseConfig() void {
     info("   [CDVD      ] CloseConfig", .{});
 
-    sCmdLen = 0;
+    sCmdStat.noData = false;
+    
+    sCmdData.write(0);
+
+    sCmdLen = 1;
 }
 
 /// Forbid DVD
@@ -625,7 +647,11 @@ fn cmdMechaconVersion() void {
 fn cmdOpenConfig() void {
     info("   [CDVD      ] OpenConfig", .{});
 
-    sCmdLen = 0;
+    sCmdStat.noData = false;
+
+    sCmdData.write(0);
+
+    sCmdLen = 1;
 }
 
 /// ReadCd
@@ -719,6 +745,25 @@ fn cmdReadDvd() void {
     doSeek();
 }
 
+/// ReadiLinkModel
+fn cmdReadILinkModel() void {
+    info("   [CDVD      ] ReadiLinkModel", .{});
+
+    sCmdStat.noData = false;
+    
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+    sCmdData.write(0);
+
+    sCmdLen = 9;
+}
+
 /// ReadRtc
 fn cmdReadRtc() void {
     info("   [CDVD      ] ReadRtc", .{});
@@ -741,6 +786,8 @@ fn cmdReadRtc() void {
 /// Update Sticky Flags
 fn cmdUpdateStickyFlags() void {
     info("   [CDVD      ] UpdateStickyFlags", .{});
+
+    sCmdStat.noData = false;
 
     sDriveStat = driveStat;
 
