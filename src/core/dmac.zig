@@ -516,7 +516,7 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
         },
         SourceTag.Cnt => {
             channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
-            channels[chnId].tadr = channels[chnId].madr;
+            channels[chnId].tadr = channels[chnId].madr + @sizeOf(u128) * channels[chnId].qwc;
 
             info("   [DMAC      ] New tag: cnt. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
@@ -635,7 +635,7 @@ fn doPath3() void {
 
         channels[chnId].qwc -= 1;
 
-        gif.writePath3(bus.readDmac(channels[chnId].madr));
+        gif.writePath3(bus.readDmac(channels[chnId].madr & 0xFFFF_FFF0));
 
         channels[chnId].madr += @sizeOf(u128);
         
@@ -685,6 +685,7 @@ fn doSif1() void {
 
     if (channels[chnId].qwc == 0) {
         info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Sif1)});
+        //std.debug.print("EE SIF1 start\n", .{});
 
         // Read new tag
         const dmaTag = bus.readDmac(channels[chnId].tadr);
@@ -732,9 +733,7 @@ fn doVif1() void {
         channels[chnId].hasTag = true;
 
         if (channels[chnId].chcr.tte) {
-            info("  [DMAC      ] Unhandled tag transfer.", .{});
-            
-            assert(false);
+            vif1.writeFifo(dmaTag >> 64);
         }
     } else {
         if (!channels[chnId].hasTag) {
