@@ -389,10 +389,22 @@ fn doCmdChain() void {
         switch (activeDev) {
             Device.Controller => doPadCmd(),
             Device.MemoryCard => doMcCmd(),
-            else => {
-                err("  [SIO2      ] Unhandled {s} command.", .{@tagName(activeDev)});
+            Device.Infrared, Device.Multitap => {
+                sio2FifoIn.discard(send3.len - 1);
 
-                assert(false);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
+                writeFifoOut(0);
             }
         }
     }
