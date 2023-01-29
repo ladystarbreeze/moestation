@@ -278,7 +278,17 @@ pub fn read(comptime T: type, addr: u32) T {
     } else if (addr >= 0x1A00_0000 and addr < 0x1FC0_0000) {
         warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IOP).", .{@typeName(T), addr});
 
-        data = if (addr == 0x1A000006) 1 else 0;
+        if (addr >= @enumToInt(MemBaseIop.Cdvd) and addr < (@enumToInt(MemBaseIop.Cdvd) + @enumToInt(MemSizeIop.Cdvd))) {
+            std.debug.print("CDVD read from EE\n", .{});
+
+            if (T != u8) {
+                @panic("Unhandled read @ CDVD");
+            }
+
+            data = cdvd.read(addr);
+        } else {
+            data = if (addr == 0x1A000006) 1 else 0;
+        }
     } else if (addr >= @enumToInt(MemBase.Bios) and addr < (@enumToInt(MemBase.Bios) + @enumToInt(MemSize.Bios))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
@@ -383,8 +393,6 @@ pub fn readDmac(addr: u32) u128 {
 
     if (addr >= @enumToInt(MemBase.Ram) and addr < (@enumToInt(MemBase.Ram) + @enumToInt(MemSize.Ram))) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0x1FF_FFF0]), @sizeOf(u128));
-    } else if ((addr & (1 << 30)) != 0) {
-        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &rdram[addr & 0x1FF_FFF0]), @sizeOf(u128));
     } else if ((addr & (1 << 31)) != 0) {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &cpu.spram[addr & 0x3FF0]), @sizeOf(u128));
     } else {
@@ -444,7 +452,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
         @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &bios[addr - @enumToInt(MemBase.Bios)]), @sizeOf(T));
     } else {
         switch (addr) {
-            0x1F80_1010 => {
+            0x1F80_1010, 0x1F80_1020 => {
                 warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8} (Unknown).", .{@typeName(T), addr});
 
                 data = 0;
@@ -480,7 +488,7 @@ pub fn readIop(comptime T: type, addr: u32) T {
             0x1E00_0000 ... 0x1E00_8000,
             0x1F80_100C,
             0x1F80_1014,
-            0x1F80_1400, 0x1F80_1414,
+            0x1F80_1400, 0x1F80_1414, 0x1F80146E,
             0x1F80_1578 => {
                 warn("[Bus (IOP) ] Read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
