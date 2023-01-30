@@ -12,6 +12,14 @@ const assert = std.debug.assert;
 const Element = @import("vu.zig").Element;
 const Vu = @import("vu.zig").Vu;
 
+const LowerOp = enum(u7) {
+    Lq = 0x00,
+};
+
+const UpperOpSpecial = enum(u7) {
+    Nop = 0x2F,
+};
+
 const doDisasm = true;
 
 /// Get dest field
@@ -58,16 +66,42 @@ fn getRs(instr: u32) u5 {
 
 /// Decodes and executes a lower instruction
 pub fn executeLower(vu: *Vu, instr: u32) void {
-    std.debug.print("[VU{}       ] Unhandled lower instruction 0x{X:0>8}\n", .{vu.vuNum, instr});
+    const opcode = @truncate(u7, instr >> 25);
 
-    @panic("Unhandled lower instruction");
+    switch (opcode) {
+        @enumToInt(LowerOp.Lq) => iLq(vu, instr),
+        else => {
+            std.debug.print("[VU{}       ] Unhandled lower instruction  0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
+
+            @panic("Unhandled lower instruction");
+        }
+    }
 }
 
 /// Decodes and executes an upper instruction
 pub fn executeUpper(vu: *Vu, instr: u32) void {
-    std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>8}\n", .{vu.vuNum, instr});
+    const opcode = @truncate(u6, instr);
 
-    @panic("Unhandled upper instruction");
+    if ((opcode >> 2) == 0xF) {
+        const funct = (@truncate(u6, instr >> 6) << 2) | (opcode & 3);
+
+        switch (funct) {
+            @enumToInt(UpperOpSpecial.Nop) => iNop(vu),
+            else => {
+                std.debug.print("[VU{}       ] Unhandled 11-bit upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
+
+                @panic("Unhandled upper instruction");
+            }
+        }
+    } else {
+        switch (opcode) {
+            else => {
+                std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
+
+                @panic("Unhandled upper instruction");
+            }
+        }
+    }
 }
 
 /// floating-point ADDition
@@ -223,6 +257,46 @@ pub fn iIswr(vu: *Vu, instr: u32) void {
         const destStr = getDestStr(dest);
 
         std.debug.print("[VU{}       ] ISWR.{s} VI[{}]{s}, (VI[{}])\n", .{vu.vuNum, destStr, it, destStr, is});
+    }
+}
+
+/// Load Quadword
+pub fn iLq(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const is = getRs(instr);
+
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr))));
+
+    const addr = (vu.getVi(@truncate(u4, is)) +% imm) << 4;
+    const data = vu.readData(u128, addr);
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVfElement(f32, ft, Element.W, @bitCast(f32, @truncate(u32, data >> 96)));
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVfElement(f32, ft, Element.Z, @bitCast(f32, @truncate(u32, data >> 64)));
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVfElement(f32, ft, Element.Y, @bitCast(f32, @truncate(u32, data >> 32)));
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVfElement(f32, ft, Element.X, @bitCast(f32, @truncate(u32, data >> 0)));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVf(ft);
+
+        std.debug.print("[VU{}       ] LQ.{s} VF[{}]{s}, {}(VI[{}]); VF[{}] = [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, @bitCast(i16, imm), is, ft, addr, vt});
     }
 }
 

@@ -211,6 +211,27 @@ pub const Vu = struct {
         return data;
     }
 
+    /// Reads data from VU data memory
+    pub fn readData(self: *Vu, comptime T: type, addr: u16) T {
+        if (self.vuNum == 0 and addr >= 0x1000) {
+            if (addr >= 0x4000 and addr < 0x4400) {
+                std.debug.print("[VU0       ] Unhandled read @ VU1 registers\n", .{});
+
+                @panic("Unhandled VU1 read");
+            }
+
+            std.debug.print("[VU{}       ] Out-of-bounds read ({s}) @ 0x{X:0>4}\n", .{self.vuNum, @typeName(T), addr});
+
+            @panic("Read out of bounds");
+        }
+
+        var data: T = undefined;
+
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &self.vuMem[addr]), @sizeOf(T));
+
+        return data;
+    }
+
     /// Fetches a 64-bit LIW, advances CMSAR
     pub fn fetchInstr(self: *Vu) u64 {
         if ((self.pc & 7) != 0) {
