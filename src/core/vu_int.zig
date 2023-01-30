@@ -18,7 +18,9 @@ const LowerOp = enum(u7) {
     Lq      = 0x00,
     Sq      = 0x01,
     Ilw     = 0x04,
+    Isw     = 0x05,
     Iaddiu  = 0x08,
+    Isubiu  = 0x09,
     Special = 0x40,
 };
 
@@ -30,15 +32,20 @@ const LowerOpSpecial2 = enum(u7) {
     Xtop = 0x28,
     Move = 0x30,
     Sqi  = 0x35,
+    Div  = 0x38,
 };
 
 const UpperOp = enum(u7) {
     Maddbc = 0x08,
+    Mulq   = 0x1C,
+    Madd   = 0x29,
 };
 
 const UpperOpSpecial = enum(u7) {
     Maddabc = 0x08,
+    Ftoi4   = 0x15,
     Mulabc  = 0x18,
+    Clip    = 0x1F,
     Nop     = 0x2F,
 };
 
@@ -52,7 +59,7 @@ fn getDest(instr: u32) u4 {
 /// Get dest string
 fn getDestStr(dest: u4) []const u8 {
     return switch (dest) {
-        0x0 => "",
+        0x0 => "nop",
         0x1 => "w",
         0x2 => "z",
         0x3 => "zw",
@@ -94,8 +101,11 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.Lq     ) => iLq(vu, instr),
         @enumToInt(LowerOp.Sq     ) => iSq(vu, instr),
         @enumToInt(LowerOp.Ilw    ) => iIlw(vu, instr),
+        @enumToInt(LowerOp.Isw    ) => iIsw(vu, instr),
         @enumToInt(LowerOp.Iaddiu ) => iIaddiu(vu, instr),
+        @enumToInt(LowerOp.Isubiu ) => iIsubiu(vu, instr),
         0x11 => {},
+        0x12 => {},
         @enumToInt(LowerOp.Special) => {
             const funct = @truncate(u6, instr);
 
@@ -106,6 +116,7 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                     @enumToInt(LowerOpSpecial2.Xtop) => iXtop(vu, instr),
                     @enumToInt(LowerOpSpecial2.Move) => iMove(vu, instr),
                     @enumToInt(LowerOpSpecial2.Sqi ) => iSqi(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Div ) => iDiv(vu, instr),
                     else => {
                         std.debug.print("[VU{}       ] Unhandled 11-bit lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct2, instr});
 
@@ -140,7 +151,9 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
 
         switch (funct) {
             @enumToInt(UpperOpSpecial.Maddabc) ... @enumToInt(UpperOpSpecial.Maddabc) + 3 => iMaddabc(vu, instr),
+            @enumToInt(UpperOpSpecial.Ftoi4  ) => iFtoi4(vu, instr),
             @enumToInt(UpperOpSpecial.Mulabc ) ... @enumToInt(UpperOpSpecial.Mulabc ) + 3 => iMulabc(vu, instr),
+            @enumToInt(UpperOpSpecial.Clip   ) => {},
             @enumToInt(UpperOpSpecial.Nop    ) => iNop(vu),
             else => {
                 std.debug.print("[VU{}       ] Unhandled 11-bit upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
@@ -150,6 +163,9 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
         }
     } else {
         switch (opcode) {
+            @enumToInt(UpperOp.Maddbc) ... @enumToInt(UpperOp.Maddbc) + 3 => iMaddbc(vu, instr),
+            @enumToInt(UpperOp.Mulq  ) => iMulq(vu, instr),
+            @enumToInt(UpperOp.Madd  ) => iMadd(vu, instr),
             else => {
                 std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
 
@@ -264,6 +280,35 @@ pub fn iDiv(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Float to 28:4 fixed-point integer
+pub fn iFtoi4(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVfElement(u32, ft, Element.W, @truncate(u32, @bitCast(u64, @floatToInt(i64, @floatCast(f64, vu.getVfElement(f32, fs, Element.W)) * 16.0))));
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVfElement(u32, ft, Element.Z, @truncate(u32, @bitCast(u64, @floatToInt(i64, @floatCast(f64, vu.getVfElement(f32, fs, Element.Z)) * 16.0))));
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVfElement(u32, ft, Element.Y, @truncate(u32, @bitCast(u64, @floatToInt(i64, @floatCast(f64, vu.getVfElement(f32, fs, Element.Y)) * 16.0))));
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVfElement(u32, ft, Element.X, @truncate(u32, @bitCast(u64, @floatToInt(i64, @floatCast(f64, vu.getVfElement(f32, fs, Element.X)) * 16.0))));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVf(ft);
+
+        std.debug.print("[VU{}       ] FTOI4.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, fs, destStr, ft, vt});
+    }
+}
+
 /// Integer ADDition
 pub fn iIadd(vu: *Vu, instr: u32) void {
     const id = getRd(instr);
@@ -347,6 +392,62 @@ pub fn iIlw(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Integer SUBtract Immediate Unsigned
+pub fn iIsubiu(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @truncate(u15, ((instr >> 10) & 0x78000) | (instr & 0x7FF));
+
+    const res = vu.getVi(@truncate(u4, is)) -% imm;
+
+    vu.setVi(@truncate(u4, it), res);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] ISUBIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, imm, it, res});
+    }
+}
+
+/// Integer Store Word
+pub fn iIsw(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(is < 16 and it < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr))));
+
+    const addr = (vu.getVi(@truncate(u4, is)) +% imm) << 4;
+    const data = vu.getVi(@truncate(u4, it));
+
+    var i: u12 = 0;
+    while (i < 4) : (i += 1) {
+        if ((dest & (@as(u4, 1) << (3 - @truncate(u2, i)))) != 0) {
+            vu.writeData(u32, addr +% (i * 4), @as(u32, data));
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVi(@truncate(u4, it));
+
+        std.debug.print("[VU{}       ] ISW.{s} VI[{}]{s}, {}(VI[{}]); [0x{X:0>4}] = 0x{X:0>3}\n", .{vu.vuNum, destStr, it, destStr, @bitCast(i16, imm), is, addr, vt});
+    }
+}
+
 /// Integer Store
 pub fn iIswr(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
@@ -360,7 +461,7 @@ pub fn iIswr(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const addr = @as(u16, @truncate(u12, vu.getVi(@truncate(u4, is)))) << 4;
+    const addr = vu.getVi(@truncate(u4, is)) << 4;
     const data = vu.getVi(@truncate(u4, it));
 
     var i: u12 = 0;
@@ -414,6 +515,33 @@ pub fn iLq(vu: *Vu, instr: u32) void {
         const vt = vu.getVf(ft);
 
         std.debug.print("[VU{}       ] LQ.{s} VF[{}]{s}, {}(VI[{}]); VF[{}] = [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, @bitCast(i16, imm), is, ft, addr, vt});
+    }
+}
+
+/// floating-point Multiply ADD
+pub fn iMadd(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = vu.getVfElement(f32, fs, e) * vu.getVfElement(f32, ft, e) + vu.acc.getElement(e);
+
+            vu.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] MADD.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
     }
 }
 
