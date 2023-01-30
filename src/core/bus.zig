@@ -32,7 +32,6 @@ const spu2     = @import("spu2.zig");
 const timer    = @import("timer.zig");
 const timerIop = @import("timer_iop.zig");
 const vif1     = @import("vif1.zig");
-const vu0      = @import("vu0.zig");
 
 /// Memory base addresses
 const MemBase = enum(u32) {
@@ -149,8 +148,11 @@ pub fn init(allocator: Allocator, biosPath: []const u8, elfPath: []const u8) !vo
     iopRam = try allocator.alloc(u8, @enumToInt(MemSizeIop.Ram));
     rdram  = try allocator.alloc(u8, @enumToInt(MemSize.Ram));
 
-    vu0.vuCode = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
-    vu0.vuMem  = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+    cpu.vu[0].vuCode = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+    cpu.vu[0].vuMem  = try allocator.alloc(u8, @enumToInt(MemSize.Vu0));
+
+    cpu.vu[1].vuCode = try allocator.alloc(u8, @enumToInt(MemSize.Vu1));
+    cpu.vu[1].vuMem  = try allocator.alloc(u8, @enumToInt(MemSize.Vu1));
 
     info("   [Bus       ] Successfully loaded BIOS.", .{});
 }
@@ -161,8 +163,10 @@ pub fn deinit(allocator: Allocator) void {
     allocator.free(iopRam);
     allocator.free(rdram);
     allocator.free(elf);
-    allocator.free(vu0.vuCode);
-    allocator.free(vu0.vuMem);
+    allocator.free(cpu.vu[0].vuCode);
+    allocator.free(cpu.vu[1].vuCode);
+    allocator.free(cpu.vu[0].vuMem);
+    allocator.free(cpu.vu[1].vuMem);
 }
 
 // Taken from DobieStation. Replace "rom0:OSDSYS" with "cdrom0:[game executable]"
@@ -574,15 +578,19 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
     } else if (addr >= @enumToInt(MemBase.Vu0Code) and addr < (@enumToInt(MemBase.Vu0Code) + @enumToInt(MemSize.Vu0))) {
         //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Code) = 0x{X}.", .{@typeName(T), addr, data});
 
-        @memcpy(@ptrCast([*]u8, &vu0.vuCode[addr - @enumToInt(MemBase.Vu0Code)]), @ptrCast([*]const u8, &data), @sizeOf(T));
+        @memcpy(@ptrCast([*]u8, &cpu.vu[0].vuCode[addr - @enumToInt(MemBase.Vu0Code)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Vu0Data) and addr < (@enumToInt(MemBase.Vu0Data) + @enumToInt(MemSize.Vu0))) {
         //info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (VU0 Data) = 0x{X}.", .{@typeName(T), addr, data});
 
-        @memcpy(@ptrCast([*]u8, &vu0.vuMem[addr - @enumToInt(MemBase.Vu0Data)]), @ptrCast([*]const u8, &data), @sizeOf(T));
+        @memcpy(@ptrCast([*]u8, &cpu.vu[0].vuMem[addr - @enumToInt(MemBase.Vu0Data)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Vu1Code) and addr < (@enumToInt(MemBase.Vu1Code) + @enumToInt(MemSize.Vu1))) {
         //warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Code) = 0x{X}.", .{@typeName(T), addr, data});
+
+        @memcpy(@ptrCast([*]u8, &cpu.vu[1].vuCode[addr - @enumToInt(MemBase.Vu1Code)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Vu1Data) and addr < (@enumToInt(MemBase.Vu1Data) + @enumToInt(MemSize.Vu1))) {
         //warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (VU1 Data) = 0x{X}.", .{@typeName(T), addr, data});
+
+        @memcpy(@ptrCast([*]u8, &cpu.vu[1].vuMem[addr - @enumToInt(MemBase.Vu1Data)]), @ptrCast([*]const u8, &data), @sizeOf(T));
     } else if (addr >= @enumToInt(MemBase.Gs) and addr < (@enumToInt(MemBase.Gs) + @enumToInt(MemSize.Gs))) {
         if (T != u32 and T != u64) {
             @panic("Unhandled write @ GS I/O");

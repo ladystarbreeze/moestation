@@ -26,7 +26,9 @@ const Cond = cop1.Cond;
 
 const dmac = @import("dmac.zig");
 
-const vu0 = @import("vu0.zig");
+const Vu = @import("vu.zig").Vu;
+
+const vu_int = @import("vu_int.zig");
 
 const exts = @import("../common/extend.zig").exts;
 
@@ -406,6 +408,9 @@ const RegFile = struct {
 /// RegFile instance
 var regFile = RegFile{};
 
+/// Vector Units
+pub var vu = [_]Vu {Vu{.vuNum = 0}, Vu{.vuNum = 1}};
+
 /// Interrupt pending flag
 var intPending = false;
 
@@ -417,6 +422,9 @@ pub fn init() void {
     regFile.setPc(resetVector);
 
     cop0.init();
+
+    vu[0].setOther(&vu[1]);
+    vu[1].setOther(&vu[0]);
 
     info("   [EE Core   ] Successfully initialized.", .{});
 }
@@ -742,18 +750,18 @@ fn decodeInstr(instr: u32) void {
                     const f = (@as(u7, getSa(instr)) << 2) | (funct & 3);
 
                     switch (f) {
-                        0x08 ... 0x0B => vu0.iMaddabc(instr),
-                        0x18 ... 0x1B => vu0.iMulabc(instr),
+                        0x08 ... 0x0B => vu_int.iMaddabc(&vu[0], instr),
+                        0x18 ... 0x1B => vu_int.iMulabc(&vu[0], instr),
                         0x1F => {},
-                        0x2E => vu0.iOpmula(instr),
-                        0x2F => vu0.iNop(),
-                        0x30 => vu0.iMove(instr),
-                        0x31 => vu0.iMr32(instr),
-                        0x35 => vu0.iSqi(instr),
-                        0x38 => vu0.iDiv(instr),
-                        0x39 => vu0.iSqrt(instr),
-                        0x3B => vu0.iWaitq(),
-                        0x3F => vu0.iIswr(instr),
+                        0x2E => vu_int.iOpmula(&vu[0], instr),
+                        0x2F => vu_int.iNop(&vu[0]),
+                        0x30 => vu_int.iMove(&vu[0], instr),
+                        0x31 => vu_int.iMr32(&vu[0], instr),
+                        0x35 => vu_int.iSqi(&vu[0], instr),
+                        0x38 => vu_int.iDiv(&vu[0], instr),
+                        0x39 => vu_int.iSqrt(&vu[0], instr),
+                        0x3B => vu_int.iWaitq(&vu[0]),
+                        0x3F => vu_int.iIswr(&vu[0], instr),
                         else => {
                             err("  [EE Core   ] Unhandled 11-bit VU0 macro instruction 0x{X} (0x{X:0>8}).", .{f, instr});
 
@@ -762,15 +770,15 @@ fn decodeInstr(instr: u32) void {
                     }
                 } else {
                     switch (funct) {
-                        0x00 ... 0x03 => vu0.iAddbc(instr),
-                        0x08 ... 0x0B => vu0.iMaddbc(instr),
-                        0x1C => vu0.iMulq(instr),
-                        0x20 => vu0.iAddq(instr),
-                        0x28 => vu0.iAdd(instr),
-                        0x2A => vu0.iMul(instr),
-                        0x2C => vu0.iSub(instr),
-                        0x2E => vu0.iOpmsub(instr),
-                        0x30 => vu0.iIadd(instr),
+                        0x00 ... 0x03 => vu_int.iAddbc(&vu[0], instr),
+                        0x08 ... 0x0B => vu_int.iMaddbc(&vu[0], instr),
+                        0x1C => vu_int.iMulq(&vu[0], instr),
+                        0x20 => vu_int.iAddq(&vu[0], instr),
+                        0x28 => vu_int.iAdd(&vu[0], instr),
+                        0x2A => vu_int.iMul(&vu[0], instr),
+                        0x2C => vu_int.iSub(&vu[0], instr),
+                        0x2E => vu_int.iOpmsub(&vu[0], instr),
+                        0x30 => vu_int.iIadd(&vu[0], instr),
                         else => {
                             err("  [EE Core   ] Unhandled VU0 macro instruction 0x{X} (0x{X:0>8}).", .{funct, instr});
 
@@ -1448,7 +1456,7 @@ fn iCfc(instr: u32, comptime n: u2) void {
 
     switch (n) {
         1 => data = cop1.getControl(rd),
-        2 => data = vu0.getControl(u32, rd),
+        2 => data = vu[0].getControl(u32, rd),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
 
@@ -1474,7 +1482,7 @@ fn iCtc(instr: u32, comptime n: u2) void {
 
     switch (n) {
         1 => cop1.setControl(rd, data),
-        2 => vu0.setControl(u32, rd, data),
+        2 => vu[0].setControl(u32, rd, data),
         else => {
             err("  [EE Core   ] Unhandled coprocessor {}.", .{n});
 
@@ -1847,7 +1855,7 @@ fn iEret() void {
     }
 
     if (!fastBootDone and regFile.pc == 0x82000) {
-        bus.fastBoot();
+        //bus.fastBoot();
         //regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
@@ -2116,7 +2124,7 @@ fn iLqc2(instr: u32) void {
         info("   [EE Core   ] LQC2 ${}, 0x{X}(${s}); ${} = [0x{X:0>8}] = 0x{X:0>32}", .{rt, imm16s, tagRs, rt, addr, data});
     }
 
-    vu0.set(u128, rt, data);
+    vu[0].set(u128, rt, data);
 }
 
 /// Load Upper Immediate
@@ -3102,7 +3110,7 @@ fn iQmfc2(instr: u32) void {
         assert(false);
     }
 
-    var data: u128 = vu0.get(u128, rd);
+    var data: u128 = vu[0].get(u128, rd);
 
     regFile.set(u128, rt, data);
 
@@ -3126,7 +3134,7 @@ fn iQmtc2(instr: u32) void {
 
     const data = regFile.get(u128, rt);
 
-    vu0.set(u128, rd, data);
+    vu[0].set(u128, rd, data);
 
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
@@ -3393,7 +3401,7 @@ fn iSqc2(instr: u32) void {
     const rt = getRt(instr);
 
     const addr = (regFile.get(u32, rs) +% imm16s) & ~@as(u32, 15);
-    const data = vu0.get(u128, rt);
+    const data = vu[0].get(u128, rt);
 
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
