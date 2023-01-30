@@ -167,6 +167,8 @@ var vif1Ofst: u10 = 0;
 var vif1Base: u10 = 0;
 var vif1Tops: u10 = 0;
 
+pub var vif1Top: u10 = 0;
+
 /// Current VIFcode
 var vifCode: u32  = undefined;
 var hasCode: bool = false;
@@ -430,6 +432,12 @@ fn iMscal(code: u32) void {
     std.debug.print("[VIF1      ] MSCAL; EXECADDR = 0x{X:0>4}\n", .{execAddr});
 
     cpu.vu[1].startMicro(execAddr);
+
+    vif1Top = vif1Tops;
+
+    vif1Tops = if (vif1Stat.dbf) vif1Base else vif1Base + vif1Ofst;
+
+    vif1Stat.dbf = !vif1Stat.dbf;
 }
 
 /// MaSK PATH3
@@ -454,7 +462,7 @@ fn iOffset(code: u32) void {
 
     std.debug.print("[VIF1      ] OFFSET; OFFSET = 0x{X:0>3}\n", .{vif1Ofst});
 
-    vif1Base = vif1Tops;
+    vif1Tops = vif1Base;
 
     vif1Stat.dbf = false;
 

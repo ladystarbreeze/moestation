@@ -9,15 +9,37 @@ const std = @import("std");
 
 const assert = std.debug.assert;
 
+const vif1 = @import("vif1.zig");
+
 const Element = @import("vu.zig").Element;
 const Vu = @import("vu.zig").Vu;
 
 const LowerOp = enum(u7) {
-    Lq = 0x00,
+    Lq      = 0x00,
+    Sq      = 0x01,
+    Ilw     = 0x04,
+    Iaddiu  = 0x08,
+    Special = 0x40,
+};
+
+const LowerOpSpecial = enum(u6) {
+    Iadd = 0x30,
+};
+
+const LowerOpSpecial2 = enum(u7) {
+    Xtop = 0x28,
+    Move = 0x30,
+    Sqi  = 0x35,
+};
+
+const UpperOp = enum(u7) {
+    Maddbc = 0x08,
 };
 
 const UpperOpSpecial = enum(u7) {
-    Nop = 0x2F,
+    Maddabc = 0x08,
+    Mulabc  = 0x18,
+    Nop     = 0x2F,
 };
 
 const doDisasm = true;
@@ -69,7 +91,38 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
     const opcode = @truncate(u7, instr >> 25);
 
     switch (opcode) {
-        @enumToInt(LowerOp.Lq) => iLq(vu, instr),
+        @enumToInt(LowerOp.Lq     ) => iLq(vu, instr),
+        @enumToInt(LowerOp.Sq     ) => iSq(vu, instr),
+        @enumToInt(LowerOp.Ilw    ) => iIlw(vu, instr),
+        @enumToInt(LowerOp.Iaddiu ) => iIaddiu(vu, instr),
+        0x11 => {},
+        @enumToInt(LowerOp.Special) => {
+            const funct = @truncate(u6, instr);
+
+            if ((funct >> 2) == 0xF) {
+                const funct2 = (@truncate(u6, instr >> 6) << 2) | (funct & 3);
+
+                switch (funct2) {
+                    @enumToInt(LowerOpSpecial2.Xtop) => iXtop(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Move) => iMove(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Sqi ) => iSqi(vu, instr),
+                    else => {
+                        std.debug.print("[VU{}       ] Unhandled 11-bit lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct2, instr});
+
+                        @panic("Unhandled lower instruction");
+                    }
+                }
+            } else {
+                switch (funct) {
+                    @enumToInt(LowerOpSpecial.Iadd) => iIadd(vu, instr),
+                    else => {
+                        std.debug.print("[VU{}       ] Unhandled lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
+
+                        @panic("Unhandled lower instruction");
+                    }
+                }
+            }
+        },
         else => {
             std.debug.print("[VU{}       ] Unhandled lower instruction  0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
 
@@ -86,7 +139,9 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
         const funct = (@truncate(u6, instr >> 6) << 2) | (opcode & 3);
 
         switch (funct) {
-            @enumToInt(UpperOpSpecial.Nop) => iNop(vu),
+            @enumToInt(UpperOpSpecial.Maddabc) ... @enumToInt(UpperOpSpecial.Maddabc) + 3 => iMaddabc(vu, instr),
+            @enumToInt(UpperOpSpecial.Mulabc ) ... @enumToInt(UpperOpSpecial.Mulabc ) + 3 => iMulabc(vu, instr),
+            @enumToInt(UpperOpSpecial.Nop    ) => iNop(vu),
             else => {
                 std.debug.print("[VU{}       ] Unhandled 11-bit upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
 
@@ -227,6 +282,68 @@ pub fn iIadd(vu: *Vu, instr: u32) void {
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] IADD VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, id, is, it, id, res});
+    }
+}
+
+/// Integer ADDition Immediate Unsigned
+pub fn iIaddiu(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @truncate(u15, ((instr >> 10) & 0x78000) | (instr & 0x7FF));
+
+    const res = vu.getVi(@truncate(u4, is)) +% imm;
+
+    vu.setVi(@truncate(u4, it), res);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] IADDIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, imm, it, res});
+    }
+}
+
+/// Integer Load Word
+pub fn iIlw(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(is < 16 and it < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr))));
+
+    const addr = (vu.getVi(@truncate(u4, is)) +% imm) << 4;
+    const data = vu.readData(u128, addr);
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 96));
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 64));
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 32));
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 0));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVi(@truncate(u4, it));
+
+        std.debug.print("[VU{}       ] ILW.{s} VI[{}]{s}, {}(VI[{}]); VI[{}] = [0x{X:0>4}] = 0x{X:0>3}\n", .{vu.vuNum, destStr, it, destStr, @bitCast(i16, imm), is, it, addr, vt});
     }
 }
 
@@ -568,8 +685,8 @@ pub fn iOpmula(vu: *Vu, instr: u32) void {
     }
 }
 
-/// Store Quadword with post-Increment
-pub fn iSqi(vu: *Vu, instr: u32) void {
+/// Store Quadword
+pub fn iSq(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
 
     const ft = getRt(instr);
@@ -581,7 +698,7 @@ pub fn iSqi(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const addr = @as(u16, @truncate(u12, vu.getVi(@truncate(u4, is)))) << 4;
+    const addr = vu.getVi(@truncate(u4, is)) << 4;
 
     var i: u12 = 0;
     while (i < 4) : (i += 1) {
@@ -595,7 +712,40 @@ pub fn iSqi(vu: *Vu, instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        std.debug.print("[VU{}       ] VSQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, ft, destStr, is});
+        std.debug.print("[VU{}       ] SQ.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, ft, destStr, is});
+    }
+}
+
+/// Store Quadword with post-Increment
+pub fn iSqi(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const is = getRs(instr);
+    
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+        
+        @panic("Index out of bounds");
+    }
+
+    const addr = vu.getVi(@truncate(u4, is)) << 4;
+
+    var i: u12 = 0;
+    while (i < 4) : (i += 1) {
+        if ((dest & (@as(u4, 1) << (3 - @truncate(u2, i)))) != 0) {
+            const e = @intToEnum(Element, @as(u4, 1) << (3 - @truncate(u2, i)));
+
+            vu.writeData(u32, addr +% (i * 4), vu.getVfElement(u32, ft, e));
+        }
+    }
+
+    vu.setVi(@truncate(u4, is), (addr >> 4) + 1);
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        std.debug.print("[VU{}       ] SQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, ft, destStr, is});
     }
 }
 
@@ -643,5 +793,24 @@ pub fn iSub(vu: *Vu, instr: u32) void {
 pub fn iWaitq(vu: *Vu) void {
     if (doDisasm) {
         std.debug.print("[VU{}       ] VWAITQ\n", .{vu.vuNum});
+    }
+}
+
+/// Xfer TOP
+pub fn iXtop(vu: *Vu, instr: u32) void {
+    assert(vu.vuNum == 1);
+
+    const it = getRt(instr);
+
+    if (it >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+        
+        @panic("Index out of bounds");
+    }
+
+    vu.setVi(@truncate(u4, it), vif1.vif1Top);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] XTOP VI[{}]; VI[{}] = 0x{X:0>4}\n", .{vu.vuNum, it, it, vif1.vif1Top});
     }
 }
