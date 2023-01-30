@@ -286,10 +286,25 @@ pub const Vu = struct {
         self.vf[0].set(0x3F800000 << 96);
     }
 
-    /// Writes data from VU data memory
-    pub fn writeData(self: *Vu, comptime T: type, addr: u12, data: T) void {
-        if (self.vuNum == 0 and (addr + @sizeOf(T)) >= 0x1000) {
-            std.debug.print("[VU{}       ] Out-of-bounds write ({s}) @ 0x{X:0>4}/n", .{self.vuNum, @typeName(T), addr});
+    /// Writes data to VU code memory
+    pub fn writeCode(self: *Vu, comptime T: type, addr: u16, data: T) void {
+        if (self.vuNum == 0 and addr >= 0x1000) {
+            std.debug.print("[VU{}       ] Out-of-bounds write ({s}) @ 0x{X:0>4}\n", .{self.vuNum, @typeName(T), addr});
+
+            @panic("Write out of bounds");
+        }
+
+        @memcpy(@ptrCast([*]u8, &self.vuCode[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    }
+
+    /// Writes data to VU data memory
+    pub fn writeData(self: *Vu, comptime T: type, addr: u16, data: T) void {
+        if (self.vuNum == 0 and addr >= 0x1000) {
+            if (addr >= 0x4000 and addr < 0x4400) {
+                return std.debug.print("[VU0       ] Unhandled write @ VU1 registers\n", .{});
+            }
+
+            std.debug.print("[VU{}       ] Out-of-bounds write ({s}) @ 0x{X:0>4}\n", .{self.vuNum, @typeName(T), addr});
 
             @panic("Write out of bounds");
         }

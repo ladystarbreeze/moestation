@@ -16,6 +16,8 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const cpu = @import("cpu.zig");
+
 const dmac = @import("dmac.zig");
 
 const Channel = dmac.Channel;
@@ -109,6 +111,7 @@ const VifCode = enum(u7) {
     Stmask   = 0x20,
     Strow    = 0x30,
     Stcol    = 0x31,
+    Mpg      = 0x4A,
 };
 
 const VifFifo = LinearFifo(u32, LinearFifoBufferType{.Static = 64});
@@ -128,6 +131,12 @@ var hasCode: bool = false;
 
 var isCmdDone = false;
 
+/// MPG
+var isMpg = false;
+
+var     size: u9  = 0;
+var loadAddr: u16 = 0;
+
 // Stall control
 var isStall = false;
 var isStop  = false;
@@ -138,14 +147,14 @@ pub fn read(addr: u32) u32 {
 
     switch (addr) {
         @enumToInt(VifReg.VifStat) => {
-            info("   [VIF1      ] Read @ 0x{X:0>8} (VIF1_STAT).", .{addr});
+            std.debug.print("[VIF1      ] Read @ 0x{X:0>8} (VIF1_STAT)\n", .{addr});
 
             data = vif1Stat.get() | (@truncate(u32, vif1Fifo.readableLength()) << 24);
         },
         else => {
-            err("  [VIF1      ] Unhandled read @ 0x{X:0>8}.", .{addr});
+            std.debug.print("[VIF1      ] Unhandled read @ 0x{X:0>8}\n", .{addr});
 
-            assert(false);
+            @panic("Unhandled VIF1 read");
         }
     }
 
@@ -164,7 +173,7 @@ pub fn readFifo(comptime T: type) T {
         data = vif1Fifo.readItem().?;
     }
 
-    if (vif1Fifo.readableLength() != 64) {
+    if (vif1Fifo.readableLength() <= 60) {
         dmac.setRequest(Channel.Vif1, true);
     }
 
@@ -175,15 +184,15 @@ pub fn readFifo(comptime T: type) T {
 pub fn write(addr: u32, data: u32) void {
     switch (addr) {
         @enumToInt(VifReg.VifStat) => {
-            info("   [VIF1      ] Write @ 0x{X:0>8} (VIF1_STAT) = 0x{X:0>8}.", .{addr, data});
+            std.debug.print("[VIF1      ] Write @ 0x{X:0>8} (VIF1_STAT) = 0x{X:0>8}\n", .{addr, data});
 
             vif1Stat.set(data);
         },
         @enumToInt(VifReg.VifFbrst) => {
-            info("   [VIF1      ] Write @ 0x{X:0>8} (VIF1_FBRST) = 0x{X:0>8}.", .{addr, data});
+            std.debug.print("[VIF1      ] Write @ 0x{X:0>8} (VIF1_FBRST) = 0x{X:0>8}\n", .{addr, data});
 
             if ((data & 1) != 0) {
-                info("   [VIF1      ] VIF1 reset.", .{});
+                std.debug.print("[VIF1      ] VIF1 reset\n", .{});
 
                 hasCode = false;
 
@@ -195,7 +204,7 @@ pub fn write(addr: u32, data: u32) void {
             }
 
             if ((data & (1 << 1)) != 0) {
-                info("   [VIF1      ] Force break.", .{});
+                std.debug.print("[VIF1      ] Force break\n", .{});
 
                 vif1Stat.vfs = true;
 
@@ -203,13 +212,13 @@ pub fn write(addr: u32, data: u32) void {
             }
             
             if ((data & (1 << 2)) != 0) {
-                info("   [VIF1      ] STOP.", .{});
+                std.debug.print("[VIF1      ] STOP\n", .{});
                 
                 vif1Stat.vss = true;
             }
             
             if ((data & (1 << 3)) != 0) {
-                info("   [VIF1      ] Stall cancel.", .{});
+                std.debug.print("[VIF1      ] Stall cancel\n", .{});
                 
                 vif1Stat.vss = false;
                 vif1Stat.vfs = false;
@@ -222,32 +231,32 @@ pub fn write(addr: u32, data: u32) void {
             }
         },
         @enumToInt(VifReg.VifErr) => {
-            info("   [VIF1      ] Write @ 0x{X:0>8} (VIF1_ERR) = 0x{X:0>8}.", .{addr, data});
+            std.debug.print("[VIF1      ] Write @ 0x{X:0>8} (VIF1_ERR) = 0x{X:0>8}\n", .{addr, data});
 
             vif1Err.set(data);
         },
         else => {
-            err("  [VIF1      ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}.", .{addr, data});
+            std.debug.print("[VIF1      ] Unhandled write @ 0x{X:0>8} = 0x{X:0>8}\n", .{addr, data});
 
-            assert(false);
+            @panic("Unhandled VIF1 write");
         }
     }
 }
 
 /// Writes data to VIF1 FIFO
 pub fn writeFifo(data: u128) void {
-    info("   [VIF1      ] Write @ FIFO = 0x{X:0>32}.", .{data});
+    std.debug.print("[VIF1      ] Write @ FIFO = 0x{X:0>32}\n", .{data});
 
     var i: u7 = 0;
     while (i < 4) : (i += 1) {
         vif1Fifo.writeItem(@truncate(u32, data >> (32 * i))) catch {
-            err("  [VIF1      ] VIF1 FIFO is full.", .{});
+            std.debug.print("[VIF1      ] VIF1 FIFO is full\n", .{});
             
-            assert(false);
+            @panic("VIF FIFO is full");
         };
     }
 
-    if (vif1Fifo.readableLength() == 64) {
+    if (vif1Fifo.readableLength() > 60) {
         dmac.setRequest(Channel.Vif1, false);
     }
 }
@@ -274,25 +283,29 @@ fn doCmd() void {
         @enumToInt(VifCode.Stmask  ) => iStmask(),
         @enumToInt(VifCode.Strow   ) => iStrow(),
         @enumToInt(VifCode.Stcol   ) => iStcol(),
+        @enumToInt(VifCode.Mpg     ) => iMpg(vifCode),
         else => {
-            err("  [VIF1      ] Unhandled VIFcode 0x{X:0>2} (0x{X:0>8}).", .{cmd, vifCode});
+            std.debug.print("[VIF1      ] Unhandled VIFcode 0x{X:0>2} (0x{X:0>8})\n", .{cmd, vifCode});
 
-            assert(false);
+            @panic("Unhandled VIFcode");
         }
     }
 
-    if (!isCmdDone) {
-        return;
+    if (isCmdDone) {
+        cmdDone();
     }
+}
 
+/// Terminates a VIF command
+fn cmdDone() void {
     hasCode = false;
 
     vif1Stat.vps = 0;
 
     if ((vifCode & (1 << 31)) != 0) {
-        err("  [VIF1      ] Unhandled VIFcode interrupt.", .{});
+        std.debug.print("[VIF1      ] Unhandled VIFcode interrupt\n", .{});
 
-        assert(false);
+        @panic("Unhandled VIFcode interrupt");
     }
 
     if (vif1Stat.vss) {
@@ -300,20 +313,22 @@ fn doCmd() void {
 
         updateStall();
     }
+
+    isCmdDone = false;
 }
 
 /// BASE
 fn iBase(code: u32) void {
     const base = @truncate(u10, code);
 
-    info("   [VIF1      ] BASE; BASE = 0x{X:0>3}", .{base});
+    std.debug.print("[VIF1      ] BASE; BASE = 0x{X:0>3}\n", .{base});
 
     isCmdDone = true;
 }
 
 /// FLUSHE
 fn iFlushe() void {
-    info("   [VIF1      ] FLUSHE", .{});
+    std.debug.print("[VIF1      ] FLUSHE\n", .{});
 
     isCmdDone = true;
 }
@@ -322,7 +337,7 @@ fn iFlushe() void {
 fn iItop(code: u32) void {
     const addr = @truncate(u10, code);
 
-    info("   [VIF1      ] ITOP; ADDR = 0x{X:0>3}", .{addr});
+    std.debug.print("[VIF1      ] ITOP; ADDR = 0x{X:0>3}\n", .{addr});
 
     isCmdDone = true;
 }
@@ -331,23 +346,33 @@ fn iItop(code: u32) void {
 fn iMark(code: u32) void {
     const mark = @truncate(u16, code);
 
-    info("   [VIF1      ] MARK; MARK = 0x{X:0>4}", .{mark});
+    std.debug.print("[VIF1      ] MARK; MARK = 0x{X:0>4}\n", .{mark});
 
     isCmdDone = true;
+}
+
+/// upload MicroProGram
+fn iMpg(code: u32) void {
+        size = @as(u9, @truncate(u8, code >> 16)) << 1;
+    loadAddr = @truncate(u16, code) << 3;
+
+    std.debug.print("[VIF1      ] MPG; SIZE = {}, LOADADDR = 0x{X:0>4}\n", .{size >> 1, loadAddr});
+
+    isMpg = true;
 }
 
 /// MaSK PATH3
 fn iMskpath3(code: u32) void {
     const mask = (code & (1 << 15)) != 0;
 
-    info("   [VIF1      ] MSKPATH3; MASK = {}", .{mask});
+    std.debug.print("[VIF1      ] MSKPATH3; MASK = {}\n", .{mask});
 
     isCmdDone = true;
 }
 
 /// NO oPeration
 fn iNop() void {
-    info("   [VIF1      ] NOP", .{});
+    std.debug.print("[VIF1      ] NOP\n", .{});
 
     isCmdDone = true;
 }
@@ -356,7 +381,7 @@ fn iNop() void {
 fn iOffset(code: u32) void {
     const offset = @truncate(u10, code);
 
-    info("   [VIF1      ] OFFSET; OFFSET = 0x{X:0>3}", .{offset});
+    std.debug.print("[VIF1      ] OFFSET; OFFSET = 0x{X:0>3}\n", .{offset});
 
     isCmdDone = true;
 }
@@ -374,7 +399,7 @@ fn iStcol() void {
     const c2 = readFifo(u32);
     const c3 = readFifo(u32);
 
-    info("   [VIF1      ] STCOL; COL = 0x{X:0>8}{X:0>8}{X:0>8}{X:0>8}", .{c3, c2, c1, c0});
+    std.debug.print("[VIF1      ] STCOL; COL = 0x{X:0>8}{X:0>8}{X:0>8}{X:0>8}\n", .{c3, c2, c1, c0});
 
     isCmdDone = true;
 }
@@ -384,7 +409,7 @@ fn iStcycl(code: u32) void {
     const cl = @truncate(u8, code);
     const wl = @truncate(u8, code >> 8);
 
-    info("   [VIF1      ] STCYCL; CL = 0x{X:0>2}, WL = 0x{X:0>2}", .{cl, wl});
+    std.debug.print("[VIF1      ] STCYCL; CL = 0x{X:0>2}, WL = 0x{X:0>2}\n", .{cl, wl});
 
     isCmdDone = true;
 }
@@ -399,7 +424,7 @@ fn iStmask() void {
 
     const mask = readFifo(u32);
 
-    info("   [VIF1      ] STMASK; MASK = 0x{X:0>8}", .{mask});
+    std.debug.print("[VIF1      ] STMASK; MASK = 0x{X:0>8}\n", .{mask});
 
     isCmdDone = true;
 }
@@ -408,7 +433,7 @@ fn iStmask() void {
 fn iStmod(code: u32) void {
     const mode = @truncate(u2, code);
 
-    info("   [VIF1      ] STMOD; MODE = 0b{b:0>2}", .{mode});
+    std.debug.print("[VIF1      ] STMOD; MODE = 0b{b:0>2}\n", .{mode});
 
     isCmdDone = true;
 }
@@ -426,7 +451,7 @@ fn iStrow() void {
     const r2 = readFifo(u32);
     const r3 = readFifo(u32);
 
-    info("   [VIF1      ] STROW; ROW = 0x{X:0>8}{X:0>8}{X:0>8}{X:0>8}", .{r3, r2, r1, r0});
+    std.debug.print("[VIF1      ] STROW; ROW = 0x{X:0>8}{X:0>8}{X:0>8}{X:0>8}\n", .{r3, r2, r1, r0});
 
     isCmdDone = true;
 }
@@ -434,6 +459,26 @@ fn iStrow() void {
 /// Steps VIF1
 pub fn step() void {
     if (isStall or vif1Fifo.readableLength() == 0) {
+        return;
+    }
+
+    if (isMpg) {
+        const data = readFifo(u32);
+
+        std.debug.print("[VIF1      ] VU1 MPG write @ 0x{X:0>4} = 0x{X:0>8}\n", .{loadAddr, data});
+
+        cpu.vu[1].writeCode(u32, loadAddr, data);
+
+        loadAddr += 4;
+
+        size -%= 1;
+        
+        if (size == 0) {
+            isMpg = false;
+
+            cmdDone();
+        }
+
         return;
     }
 
