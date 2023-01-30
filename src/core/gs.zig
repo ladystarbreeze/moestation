@@ -1486,6 +1486,10 @@ fn setupTransmission() void {
     }
 }
 
+// Why
+var rgb24Pos: i32 = 0;
+var rgb24Rem: u32 = 0;
+
 /// Handles GIF->VRAM transfers
 fn transmissionGifToVram(data: u64) void {
     std.debug.print("GIF->VRAM write = 0x{X:0>16}\n", .{data});
@@ -1502,6 +1506,43 @@ fn transmissionGifToVram(data: u64) void {
             writeVram(u32, PixelFormat.Psmct32, base, x + 1, y, @truncate(u32, data >> 32));
 
             trxParam.dstX += 2;
+        },
+        PixelFormat.Psmct24 => {
+            switch (rgb24Pos) {
+                0 => {
+                    rgb24Rem = @truncate(u32, data >> 48);
+
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, @truncate(u32, data >>  0));
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >> 24));
+
+                    trxParam.dstX += 2;
+                },
+                1 => {
+                    rgb24Rem |= @truncate(u32, data & 0xFF) << 16;
+
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, rgb24Rem);
+
+                    rgb24Rem = @truncate(u32, data >> 56);
+
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >>  8));
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 2, y, @truncate(u32, data >> 32));
+
+                    trxParam.dstX += 3;
+                },
+                2 => {
+                    rgb24Rem |= @truncate(u32, data & 0xFFFF) << 8;
+
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, rgb24Rem);
+
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >> 16));
+                    writeVram(u32, PixelFormat.Psmct24, base, x + 2, y, @truncate(u32, data >> 40));
+
+                    trxParam.dstX += 3;
+                },
+                else => unreachable,
+            }
+
+            rgb24Pos = @rem(rgb24Pos + 1, 3);
         },
         PixelFormat.Psmct16 => {
             var i: u23 = 0;
