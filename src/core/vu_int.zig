@@ -195,7 +195,7 @@ pub fn iIswr(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const addr = @truncate(u12, vu.getVi(@truncate(u4, is)) << 4);
+    const addr = @as(u16, @truncate(u12, vu.getVi(@truncate(u4, is)))) << 4;
     const data = vu.getVi(@truncate(u4, it));
 
     var i: u12 = 0;
@@ -493,7 +493,7 @@ pub fn iSqi(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const addr = @truncate(u12, vu.getVi(@truncate(u4, is)) << 4);
+    const addr = @as(u16, @truncate(u12, vu.getVi(@truncate(u4, is)))) << 4;
 
     var i: u12 = 0;
     while (i < 4) : (i += 1) {
