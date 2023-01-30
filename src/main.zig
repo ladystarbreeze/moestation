@@ -27,8 +27,8 @@ const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/scph39001.bin";
-const cdvdPath = "moeFiles/atelier_iris.iso";
-const elfPath  = "moeFiles/3stars.elf";
+const cdvdPath = "moeFiles/planetarian.iso";
+const elfPath  = "moeFiles/vu1_demo.elf";
 
 /// SDL screen
 const Screen = struct {
@@ -80,13 +80,13 @@ pub fn main() void {
         sdlPanic();
     }
 
-    if(SDL.SDL_SetHint(SDL.SDL_HINT_RENDER_VSYNC, "0") < 0) {
+    if(SDL.SDL_SetHint(SDL.SDL_HINT_RENDER_VSYNC, "1") < 0) {
         sdlPanic();
     }
 
     screen.texture = SDL.SDL_CreateTexture(
         screen.renderer,
-        SDL.SDL_PIXELFORMAT_ABGR8888, SDL.SDL_TEXTUREACCESS_STREAMING,
+        SDL.SDL_PIXELFORMAT_XBGR8888, SDL.SDL_TEXTUREACCESS_STREAMING,
         screen.width, screen.height
     ) orelse sdlPanic();
     defer _ = SDL.SDL_DestroyTexture(screen.texture);
@@ -126,6 +126,9 @@ pub fn main() void {
         while (i < 4) : (i += 1) {
             cpu.step();
             cpu.step();
+
+            cpu.vu[1].step();
+            cpu.vu[1].step();
 
             dmac.checkRunning();
 

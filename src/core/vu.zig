@@ -9,6 +9,8 @@ const std = @import("std");
 
 const assert = std.debug.assert;
 
+const vu_int = @import("vu_int.zig");
+
 /// Macro mode control registers
 const ControlReg = enum(u5) {
     Sf      = 16,
@@ -92,6 +94,13 @@ pub const Vu = struct {
          q: f32     = 0.0,
      cmsar: u16     = 0,
 
+    // Program counters
+        pc: u16 = 0,
+       cpc: u16 = 0,
+       npc: u16 = 0,
+
+      idle: bool = true,
+
     /// Reset
     pub fn reset(self: *Vu) void {
         std.debug.print("[VU{}       ] Reset!\n", .{self.vuNum});
@@ -100,6 +109,11 @@ pub const Vu = struct {
     /// Force break
     pub fn forceBreak(self: *Vu) void {
         std.debug.print("[VU{}       ] Force break!\n", .{self.vuNum});
+    }
+
+    /// Returns true if VU1 is executing a microprogram
+    pub fn isIdle(self: *Vu) bool {
+        return self.idle;
     }
 
     /// Returns an integer register (macro mode)
@@ -180,6 +194,37 @@ pub const Vu = struct {
         }
 
         return data;
+    }
+
+    /// Reads data from VU code memory
+    pub fn readCode(self: *Vu, comptime T: type, addr: u16) T {
+        if (self.vuNum == 0 and addr >= 0x1000) {
+            std.debug.print("[VU{}       ] Out-of-bounds read ({s}) @ 0x{X:0>4}\n", .{self.vuNum, @typeName(T), addr});
+
+            @panic("Read out of bounds");
+        }
+
+        var data: T = undefined;
+
+        @memcpy(@ptrCast([*]u8, &data), @ptrCast([*]u8, &self.vuCode[addr]), @sizeOf(T));
+
+        return data;
+    }
+
+    /// Fetches a 64-bit LIW, advances CMSAR
+    pub fn fetchInstr(self: *Vu) u64 {
+        if ((self.pc & 7) != 0) {
+            std.debug.print("[VU{}       ] PC is not aligned (0x{X:0>4})\n", .{self.vuNum, self.pc});
+
+            @panic("Unaligned program counter");
+        }
+
+        const instr = self.readCode(u64, self.pc);
+
+        self.pc   = self.npc;
+        self.npc += 8;
+
+        return instr;
     }
 
     /// Sets an integer register (macro mode)
@@ -309,6 +354,45 @@ pub const Vu = struct {
             @panic("Write out of bounds");
         }
 
+        std.debug.print("[VU{}       ] Data write ({s}) @ 0x{X:0>4} = 0x{X}\n", .{self.vuNum, @typeName(T), addr, data});
+
         @memcpy(@ptrCast([*]u8, &self.vuMem[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    }
+
+    /// Starts a VU microprogram
+    pub fn startMicro(self: *Vu, pc: u16) void {
+        self.pc  = pc;
+        self.npc = pc + 8;
+
+        self.idle = false;
+    }
+
+    /// Steps the VU
+    pub fn step(self: *Vu) void {
+        if (self.idle) return;
+
+        self.cpc = self.pc;
+
+        const instr = self.fetchInstr();
+
+        if ((instr & (1 << 59)) != 0) {
+            @panic("VU debug halt");
+        }
+        if ((instr & (1 << 60)) != 0) {
+            @panic("VU debug break");
+        }
+        if ((instr & (1 << 62)) != 0) {
+            @panic("Microprogram end");
+        }
+
+        if ((instr & (1 << 63)) != 0) {
+            std.debug.print("[VU{}       ] Unhandled I register load\n", .{self.vuNum});
+
+            @panic("Unhandled I register load");
+        } else {
+            vu_int.executeLower(self, @truncate(u32, instr));
+        }
+
+        vu_int.executeUpper(self, @truncate(u32, instr >> 32) & 0x7FF_FFFF);
     }
 };

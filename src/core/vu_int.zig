@@ -56,6 +56,20 @@ fn getRs(instr: u32) u5 {
     return @truncate(u5, instr >> 11);
 }
 
+/// Decodes and executes a lower instruction
+pub fn executeLower(vu: *Vu, instr: u32) void {
+    std.debug.print("[VU{}       ] Unhandled lower instruction 0x{X:0>8}\n", .{vu.vuNum, instr});
+
+    @panic("Unhandled lower instruction");
+}
+
+/// Decodes and executes an upper instruction
+pub fn executeUpper(vu: *Vu, instr: u32) void {
+    std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>8}\n", .{vu.vuNum, instr});
+
+    @panic("Unhandled upper instruction");
+}
+
 /// floating-point ADDition
 pub fn iAdd(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);

@@ -421,6 +421,17 @@ fn iMpg(code: u32) void {
     vifState = VifState.Mpg;
 }
 
+/// MicroSubroutine CALl
+fn iMscal(code: u32) void {
+    if (!cpu.vu[1].isIdle()) return;
+
+    const execAddr = @truncate(u16, code) << 3;
+
+    std.debug.print("[VIF1      ] MSCAL; EXECADDR = 0x{X:0>4}\n", .{execAddr});
+
+    cpu.vu[1].startMicro(execAddr);
+}
+
 /// MaSK PATH3
 fn iMskpath3(code: u32) void {
     const mask = (code & (1 << 15)) != 0;
