@@ -108,10 +108,47 @@ const VifCode = enum(u7) {
     Mskpath3 = 0x06,
     Mark     = 0x07,
     Flushe   = 0x10,
+    Flush    = 0x11,
+    Mscal    = 0x14,
     Stmask   = 0x20,
     Strow    = 0x30,
     Stcol    = 0x31,
     Mpg      = 0x4A,
+    Unpack   = 0x60,
+};
+
+const VifState = enum {
+    Mpg,
+    Unpack,
+    Idle,
+};
+
+const MpgInfo = struct {
+        size: u9  = 0,
+    loadAddr: u16 = 0,
+};
+
+const UnpackMode = enum(u4) {
+    S32   = 0x0,
+    S16   = 0x1,
+    S8    = 0x2,
+    V2_32 = 0x4,
+    V2_16 = 0x5,
+    V2_8  = 0x6,
+    V3_32 = 0x8,
+    V3_16 = 0x9,
+    V3_8  = 0xA,
+    V4_32 = 0xC,
+    V4_16 = 0xD,
+    V4_8  = 0xE,
+    V4_5  = 0xF,
+};
+
+const UnpackInfo = struct {
+    size: u8   = 0,
+    addr: u16  = 0,
+     usn: bool = false,
+    mode: UnpackMode = UnpackMode.S32,
 };
 
 const VifFifo = LinearFifo(u32, LinearFifoBufferType{.Static = 64});
@@ -125,17 +162,24 @@ var vif1Stat = VifStat{};
 /// VIF1_ERR
 var vif1Err = VifErr{};
 
+/// VIF address registers
+var vif1Ofst: u10 = 0;
+var vif1Base: u10 = 0;
+var vif1Tops: u10 = 0;
+
 /// Current VIFcode
 var vifCode: u32  = undefined;
 var hasCode: bool = false;
 
 var isCmdDone = false;
 
-/// MPG
-var isMpg = false;
+var vifState = VifState.Idle;
 
-var     size: u9  = 0;
-var loadAddr: u16 = 0;
+/// MPG
+var mpgInfo = MpgInfo{};
+
+/// UNPACK
+var unpackInfo = UnpackInfo{};
 
 // Stall control
 var isStall = false;
@@ -244,12 +288,16 @@ pub fn write(addr: u32, data: u32) void {
 }
 
 /// Writes data to VIF1 FIFO
-pub fn writeFifo(data: u128) void {
-    std.debug.print("[VIF1      ] Write @ FIFO = 0x{X:0>32}\n", .{data});
+pub fn writeFifo(comptime T: type, data: T) void {
+    assert(T == u128 or T == u64);
+
+    std.debug.print("[VIF1      ] Write ({s}) @ FIFO = 0x{X:0>32}\n", .{@typeName(T), data});
+
+    const cnt: u7 = if (T == u128) 4 else 2;
 
     var i: u7 = 0;
-    while (i < 4) : (i += 1) {
-        vif1Fifo.writeItem(@truncate(u32, data >> (32 * i))) catch {
+    while (i < cnt) : (i += 1) {
+        vif1Fifo.writeItem(@truncate(u32, @as(u128, data) >> (32 * i))) catch {
             std.debug.print("[VIF1      ] VIF1 FIFO is full\n", .{});
             
             @panic("VIF FIFO is full");
@@ -280,10 +328,13 @@ fn doCmd() void {
         @enumToInt(VifCode.Mskpath3) => iMskpath3(vifCode),
         @enumToInt(VifCode.Mark    ) => iMark(vifCode),
         @enumToInt(VifCode.Flushe  ) => iFlushe(),
+        @enumToInt(VifCode.Flush   ) => iFlush(),
+        @enumToInt(VifCode.Mscal   ) => iMscal(vifCode),
         @enumToInt(VifCode.Stmask  ) => iStmask(),
         @enumToInt(VifCode.Strow   ) => iStrow(),
         @enumToInt(VifCode.Stcol   ) => iStcol(),
         @enumToInt(VifCode.Mpg     ) => iMpg(vifCode),
+        @enumToInt(VifCode.Unpack  ) ... @enumToInt(VifCode.Unpack) + 0x1F => iUnpack(vifCode),
         else => {
             std.debug.print("[VIF1      ] Unhandled VIFcode 0x{X:0>2} (0x{X:0>8})\n", .{cmd, vifCode});
 
@@ -315,13 +366,22 @@ fn cmdDone() void {
     }
 
     isCmdDone = false;
+
+    vifState = VifState.Idle;
 }
 
 /// BASE
 fn iBase(code: u32) void {
-    const base = @truncate(u10, code);
+    vif1Base = @truncate(u10, code);
 
-    std.debug.print("[VIF1      ] BASE; BASE = 0x{X:0>3}\n", .{base});
+    std.debug.print("[VIF1      ] BASE; BASE = 0x{X:0>3}\n", .{vif1Base});
+
+    isCmdDone = true;
+}
+
+/// FLUSH
+fn iFlush() void {
+    std.debug.print("[VIF1      ] FLUSH\n", .{});
 
     isCmdDone = true;
 }
@@ -353,12 +413,12 @@ fn iMark(code: u32) void {
 
 /// upload MicroProGram
 fn iMpg(code: u32) void {
-        size = @as(u9, @truncate(u8, code >> 16)) << 1;
-    loadAddr = @truncate(u16, code) << 3;
+    mpgInfo.size     = @as(u9, @truncate(u8, code >> 16)) << 1;
+    mpgInfo.loadAddr = @truncate(u16, code) << 3;
 
-    std.debug.print("[VIF1      ] MPG; SIZE = {}, LOADADDR = 0x{X:0>4}\n", .{size >> 1, loadAddr});
+    std.debug.print("[VIF1      ] MPG; SIZE = {}, LOADADDR = 0x{X:0>4}\n", .{mpgInfo.size >> 1, mpgInfo.loadAddr});
 
-    isMpg = true;
+    vifState = VifState.Mpg;
 }
 
 /// MaSK PATH3
@@ -379,9 +439,13 @@ fn iNop() void {
 
 /// OFFSET
 fn iOffset(code: u32) void {
-    const offset = @truncate(u10, code);
+    vif1Ofst = @truncate(u10, code);
 
-    std.debug.print("[VIF1      ] OFFSET; OFFSET = 0x{X:0>3}\n", .{offset});
+    std.debug.print("[VIF1      ] OFFSET; OFFSET = 0x{X:0>3}\n", .{vif1Ofst});
+
+    vif1Base = vif1Tops;
+
+    vif1Stat.dbf = false;
 
     isCmdDone = true;
 }
@@ -410,6 +474,10 @@ fn iStcycl(code: u32) void {
     const wl = @truncate(u8, code >> 8);
 
     std.debug.print("[VIF1      ] STCYCL; CL = 0x{X:0>2}, WL = 0x{X:0>2}\n", .{cl, wl});
+
+    if (!(cl == 1 and wl == 1)) {
+        std.debug.print("[VIF1      ] Unhandled CL/WL setting\n", .{});
+    }
 
     isCmdDone = true;
 }
@@ -456,35 +524,71 @@ fn iStrow() void {
     isCmdDone = true;
 }
 
+/// UNPACK
+fn iUnpack(code: u32) void {
+    unpackInfo.size = @truncate(u8, code >> 16);
+    unpackInfo.addr = @as(u16, @truncate(u9, code)) << 4;
+    unpackInfo.usn  = (code & (1 << 14)) != 0;
+
+    unpackInfo.mode = @intToEnum(UnpackMode, @truncate(u4, code >> 24));
+
+    std.debug.print("[VIF1      ] UNPACK ({s}); SIZE = {}, ADDR = 0x{X:0>4}, USN = {}\n", .{@tagName(unpackInfo.mode), unpackInfo.size, unpackInfo.addr, unpackInfo.usn});
+
+    if ((code & (1 << 15)) != 0) {
+        unpackInfo.addr += @as(u16, vif1Tops) << 4;
+    }
+
+    vifState = VifState.Unpack;
+}
+
 /// Steps VIF1
 pub fn step() void {
     if (isStall or vif1Fifo.readableLength() == 0) {
         return;
     }
 
-    if (isMpg) {
-        const data = readFifo(u32);
+    switch (vifState) {
+        VifState.Mpg => {
+            const data = readFifo(u32);
 
-        std.debug.print("[VIF1      ] VU1 MPG write @ 0x{X:0>4} = 0x{X:0>8}\n", .{loadAddr, data});
+            std.debug.print("[VIF1      ] VU1 MPG write @ 0x{X:0>4} = 0x{X:0>8}\n", .{mpgInfo.loadAddr, data});
 
-        cpu.vu[1].writeCode(u32, loadAddr, data);
+            cpu.vu[1].writeCode(u32, mpgInfo.loadAddr, data);
 
-        loadAddr += 4;
+            mpgInfo.loadAddr += 4;
 
-        size -%= 1;
-        
-        if (size == 0) {
-            isMpg = false;
+            mpgInfo.size -%= 1;
+            
+            if (mpgInfo.size == 0) cmdDone();
+        },
+        VifState.Unpack => {
+            switch (unpackInfo.mode) {
+                UnpackMode.V4_32 => {
+                    if (vif1Fifo.readableLength() < 4) return;
 
-            cmdDone();
+                    const data = @as(u128, readFifo(u32)) | (@as(u128, readFifo(u32)) << 32) | (@as(u128, readFifo(u32)) << 64) | (@as(u128, readFifo(u32)) << 96);
+
+                    cpu.vu[1].writeData(u128, unpackInfo.addr, data);
+
+                    unpackInfo.addr += @sizeOf(u128);
+                },
+                else => {
+                    std.debug.print("Unhandled UNPACK\n", .{});
+
+                    @panic("Unhandled UNPACK");
+                }
+            }
+
+            unpackInfo.size -%= 1;
+                    
+            if (unpackInfo.size == 0) cmdDone();
+        },
+        VifState.Idle => {
+            if (!hasCode) {
+                vifCode = readFifo(u32);
+            }
+
+            doCmd();
         }
-
-        return;
     }
-
-    if (!hasCode) {
-        vifCode = readFifo(u32);
-    }
-
-    doCmd();
 }

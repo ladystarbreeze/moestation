@@ -613,7 +613,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                     @panic("Unhandled write @ VIF1 FIFO");
                 }
 
-                vif1.writeFifo(data);
+                vif1.writeFifo(u128, data);
             },
             0x1000_6000 => {
                 if (T != u128) {

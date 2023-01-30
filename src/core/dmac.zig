@@ -751,7 +751,7 @@ fn doVif1() void {
         channels[chnId].hasTag = true;
 
         if (channels[chnId].chcr.tte) {
-            vif1.writeFifo(dmaTag >> 64);
+            vif1.writeFifo(u64, @truncate(u64, dmaTag >> 64));
         }
 
         if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
@@ -766,7 +766,7 @@ fn doVif1() void {
 
         channels[chnId].qwc -= 1;
 
-        vif1.writeFifo(bus.readDmac(channels[chnId].madr));
+        vif1.writeFifo(u128, bus.readDmac(channels[chnId].madr));
         
         channels[chnId].madr += @sizeOf(u128);
 
