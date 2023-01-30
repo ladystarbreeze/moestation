@@ -628,6 +628,12 @@ fn doPath3() void {
             
             assert(false);
         }
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
     } else {
         if (!channels[chnId].hasTag) {
             //info("   [DMAC      ] Channel {} ({s}) transfer, no tag.", .{chnId, @tagName(Channel.Path3)});
@@ -664,6 +670,12 @@ fn doSif0() void {
             
             assert(false);
         }
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
     } else {
         channels[chnId].qwc -= 1;
 
@@ -698,6 +710,12 @@ fn doSif1() void {
             info("  [DMAC      ] Unhandled tag transfer.", .{});
             
             assert(false);
+        }
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
         }
     } else {
         if (!channels[chnId].hasTag) {
@@ -734,6 +752,12 @@ fn doVif1() void {
 
         if (channels[chnId].chcr.tte) {
             vif1.writeFifo(dmaTag >> 64);
+        }
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
         }
     } else {
         if (!channels[chnId].hasTag) {
