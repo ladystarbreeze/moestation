@@ -167,6 +167,7 @@ const Regimm = enum(u5) {
     Bgezal  = 0x11,
     Bltzall = 0x12,
     Bgezall = 0x13,
+    Mtsah   = 0x19,
 };
 
 /// COP instructions
@@ -614,6 +615,7 @@ fn decodeInstr(instr: u32) void {
                 @enumToInt(Regimm.Bgezal ) => iBgezal(instr),
                 @enumToInt(Regimm.Bltzall) => iBltzall(instr),
                 @enumToInt(Regimm.Bgezall) => iBgezall(instr),
+                @enumToInt(Regimm.Mtsah  ) => iMtsah(instr),
                 else => {
                     err("  [EE Core   ] Unhandled REGIMM instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
@@ -752,7 +754,7 @@ fn decodeInstr(instr: u32) void {
                     switch (f) {
                         0x08 ... 0x0B => vu_int.iMaddabc(&vu[0], instr),
                         0x18 ... 0x1B => vu_int.iMulabc(&vu[0], instr),
-                        0x1F => {},
+                        0x1F => vu_int.iClip(&vu[0], instr),
                         0x2E => vu_int.iOpmula(&vu[0], instr),
                         0x2F => vu_int.iNop(&vu[0]),
                         0x30 => vu_int.iMove(&vu[0], instr),
@@ -1856,7 +1858,7 @@ fn iEret() void {
 
     if (!fastBootDone and regFile.pc == 0x82000) {
         //bus.fastBoot();
-        //regFile.setPc(bus.loadElf());
+        regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
     }
@@ -2524,6 +2526,21 @@ fn iMtsa(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
         info("   [EE Core   ] MTSA ${s}; SA = 0x{X:0>2}", .{tagRs, regFile.sa});
+    }
+}
+
+/// Move To Shift Amount Halfword
+fn iMtsah(instr: u32) void {
+    const rs = getRs(instr);
+
+    const imm16 = getImm16(instr);
+
+    regFile.sa = @truncate(u8, ((regFile.get(u32, rs) ^ imm16) & 7) * 16);
+
+    if (doDisasm) {
+        const tagRs = @tagName(@intToEnum(CpuReg, rs));
+
+        info("   [EE Core   ] MTSAH ${s}, {}; SA = 0x{X:0>2}", .{tagRs, imm16, regFile.sa});
     }
 }
 
