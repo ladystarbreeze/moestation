@@ -60,6 +60,7 @@ const SCommand = enum(u8) {
     ForbidDvd         = 0x15,
     ReadILinkModel    = 0x17,
     BootCertify       = 0x1A,
+    CancelPwOffReady  = 0x1B,
     OpenConfig        = 0x40,
     ReadConfig        = 0x41,
     CloseConfig       = 0x43,
@@ -472,6 +473,7 @@ fn runSCmd(cmd: u8) void {
         @enumToInt(SCommand.ForbidDvd        ) => cmdForbidDvd(),
         @enumToInt(SCommand.ReadILinkModel   ) => cmdReadILinkModel(),
         @enumToInt(SCommand.BootCertify      ) => cmdBootCertify(),
+        @enumToInt(SCommand.CancelPwOffReady ) => cmdCancelPwOffReady(),
         @enumToInt(SCommand.OpenConfig       ) => cmdOpenConfig(),
         @enumToInt(SCommand.ReadConfig       ) => cmdReadConfig(),
         @enumToInt(SCommand.CloseConfig      ) => cmdCloseConfig(),
@@ -601,6 +603,17 @@ fn doReadDvd() void {
 /// BootCertify
 fn cmdBootCertify() void {
     info("   [CDVD      ] BootCertify", .{});
+
+    sCmdStat.noData = false;
+
+    sCmdData.write(1);
+
+    sCmdLen = 1;
+}
+
+/// CancelPwOffReady
+fn cmdCancelPwOffReady() void {
+    info("   [CDVD      ] CancelPwOffReady", .{});
 
     sCmdStat.noData = false;
 
