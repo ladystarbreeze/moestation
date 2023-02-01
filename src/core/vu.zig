@@ -99,6 +99,9 @@ pub const Vu = struct {
        cpc: u16 = 0,
        npc: u16 = 0,
 
+    // Clipping flags
+        cf: u24 = 0,
+
       idle: bool = true,
 
     /// Reset
@@ -144,7 +147,7 @@ pub const Vu = struct {
             @enumToInt(ControlReg.Cf) => {
                 std.debug.print("[COP2      ] Control register read ({s}) @ $CF\n", .{@typeName(T)});
 
-                data = 0;
+                data = @as(T, self.cf);
             },
             @enumToInt(ControlReg.Fbrst) => {
                 std.debug.print("[COP2      ] Control register read ({s}) @ $FBRST\n", .{@typeName(T)});
@@ -276,6 +279,8 @@ pub const Vu = struct {
             },
             @enumToInt(ControlReg.Cf) => {
                 std.debug.print("[COP2      ] Control register write ({s}) @ $CF = 0x{X:0>8}\n", .{@typeName(T), data});
+
+                self.cf = @truncate(u24, data);
             },
             @enumToInt(ControlReg.R) => {
                 std.debug.print("[COP2      ] Control register write ({s}) @ $R = 0x{X:0>8}\n", .{@typeName(T), data});
@@ -342,6 +347,12 @@ pub const Vu = struct {
 
         const data_ = if (T == f32) @bitCast(u32, data) else data;
 
+        if (data_ == 0x7F80_0000 or data_ == 0xFF80_0000 or data_ == 0x7FFF_FFFF) {
+            std.debug.print("Invalid floating-point value 0x{X:0>8}\n", .{data_});
+
+            @panic("Invalid floating-point number");
+        }
+
         switch (e) {
             Element.W => self.vf[idx].w = data_,
             Element.Z => self.vf[idx].z = data_,
@@ -378,6 +389,15 @@ pub const Vu = struct {
         std.debug.print("[VU{}       ] Data write ({s}) @ 0x{X:0>4} = 0x{X}\n", .{self.vuNum, @typeName(T), addr, data});
 
         @memcpy(@ptrCast([*]u8, &self.vuMem[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
+    }
+
+    /// Branch helper
+    pub fn doBranch(self: *Vu, target: u16, isCond: bool, id: u4) void {
+        self.setVi(id, self.pc);
+
+        if (isCond) {
+            self.npc = target;
+        }
     }
 
     /// Starts a VU microprogram
