@@ -245,8 +245,8 @@ pub const Vu = struct {
 
         const instr = self.readCode(u64, self.pc);
 
-        self.pc   = self.npc;
-        self.npc += 8;
+        self.pc  += 8;
+        //self.npc += 8;
 
         return instr;
     }
@@ -396,7 +396,7 @@ pub const Vu = struct {
         self.setVi(id, self.pc);
 
         if (isCond) {
-            self.npc = target;
+            self.pc = target;
         }
     }
 

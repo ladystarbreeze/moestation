@@ -21,6 +21,8 @@ const LowerOp = enum(u7) {
     Isw     = 0x05,
     Iaddiu  = 0x08,
     Isubiu  = 0x09,
+    Fcset   = 0x11,
+    Fcand   = 0x12,
     Ibne    = 0x29,
     Special = 0x40,
 };
@@ -105,8 +107,8 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.Isw    ) => iIsw(vu, instr),
         @enumToInt(LowerOp.Iaddiu ) => iIaddiu(vu, instr),
         @enumToInt(LowerOp.Isubiu ) => iIsubiu(vu, instr),
-        0x11 => {},
-        0x12 => {},
+        @enumToInt(LowerOp.Fcset  ) => iFcset(vu, instr),
+        @enumToInt(LowerOp.Fcand  ) => iFcand(vu, instr),
         @enumToInt(LowerOp.Ibne   ) => iIbne(vu, instr),
         @enumToInt(LowerOp.Special) => {
             const funct = @truncate(u6, instr);
@@ -268,8 +270,29 @@ pub fn iAddq(vu: *Vu, instr: u32) void {
 }
 
 /// CLIPping judgement
-pub fn iClip(vu: *vu, instr: u32) void {
+pub fn iClip(vu: *Vu, instr: u32) void {
+    const ft = getRt(instr);
+    const fs = getRs(instr);
 
+    const w = @fabs(vu.getVfElement(f32, ft, Element.W));
+
+    const x = vu.getVfElement(f32, fs, Element.X);
+    const y = vu.getVfElement(f32, fs, Element.Y);
+    const z = vu.getVfElement(f32, fs, Element.Z);
+
+    // Move previous judgements up
+    vu.cf <<= 6;
+
+    vu.cf |= @as(u24, @bitCast(u1, x >  w));
+    vu.cf |= @as(u24, @bitCast(u1, x < -w)) << 1;
+    vu.cf |= @as(u24, @bitCast(u1, y >  w)) << 2;
+    vu.cf |= @as(u24, @bitCast(u1, y < -w)) << 3;
+    vu.cf |= @as(u24, @bitCast(u1, z >  w)) << 4;
+    vu.cf |= @as(u24, @bitCast(u1, z < -w)) << 5;
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] CLIPw.xyz VF[{}].xyz, VF[{}].w; $CF = 0b{b:0>24}\n", .{vu.vuNum, fs, ft, vu.cf});
+    }
 }
 
 /// DIVide
@@ -291,10 +314,38 @@ pub fn iDiv(vu: *Vu, instr: u32) void {
     const fs = getRs(instr);
     const ft = getRt(instr);
 
+    if (vu.getVfElement(f32, ft, ftf) == 0.0) {
+        std.debug.print("[VU{}       ] DIV by 0\n", .{vu.vuNum});
+
+        @panic("DIV by 0");
+    }
+
     vu.q = vu.getVfElement(f32, fs, fsf) / vu.getVfElement(f32, ft, ftf);
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] DIV Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}\n", .{vu.vuNum, fs, @tagName(fsf), ft, @tagName(ftf), @bitCast(u32, vu.q)});
+    }
+}
+
+/// Flag (Clipping) AND
+pub fn iFcand(vu: *Vu, instr: u32) void {
+    const imm24 = @truncate(u24, instr);
+
+    vu.setVi(1, @as(u16, @bitCast(u1, (vu.cf & imm24) != 0)));
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] FCAND VI[1], 0x{X:0>6}; VI[1] = 0x{X:0>3}\n", .{vu.vuNum, imm24, vu.getVi(1)});
+    }
+}
+
+/// Flag (Clipping) SET
+pub fn iFcset(vu: *Vu, instr: u32) void {
+    const imm24 = @truncate(u24, instr);
+
+    vu.cf = imm24;
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] FCSET 0x{X:0>6}\n", .{vu.vuNum, imm24});
     }
 }
 
@@ -339,7 +390,7 @@ pub fn iIadd(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const res = vu.getVi(@truncate(u4, is)) +% vu.getVi(@truncate(u4, it));
+    const res = vu.getVi(@truncate(u4, is)) + vu.getVi(@truncate(u4, it));
 
     vu.setVi(@truncate(u4, id), res);
 
@@ -366,7 +417,7 @@ pub fn iIaddiu(vu: *Vu, instr: u32) void {
     vu.setVi(@truncate(u4, it), res);
 
     if (doDisasm) {
-        std.debug.print("[VU{}       ] IADDIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, imm, it, res});
+        std.debug.print("[VU{}       ] IADDIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, @bitCast(i15, imm), it, res});
     }
 }
 
@@ -383,10 +434,13 @@ pub fn iIbne(vu: *Vu, instr: u32) void {
 
     const target = vu.pc +% (@bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr)))) << 3);
 
-    vu.doBranch(target, vu.getVi(@truncate(u4, it)) != vu.getVi(@truncate(u4, is)), 0);
+    const t = vu.getVi(@truncate(u4, it));
+    const s = vu.getVi(@truncate(u4, is));
+
+    vu.doBranch(target, t != s, 0);
 
     if (doDisasm) {
-        std.debug.print("[VU{}       ] IBNE VI[{}], VI[{}], 0x{X:0>4}\n", .{vu.vuNum, it, is, target});
+        std.debug.print("[VU{}       ] IBNE VI[{}], VI[{}], 0x{X:0>4}; VI[{}] = 0x{X:0>3}, VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, target, it, t, is, s});
     }
 }
 
@@ -448,7 +502,7 @@ pub fn iIsubiu(vu: *Vu, instr: u32) void {
     vu.setVi(@truncate(u4, it), res);
 
     if (doDisasm) {
-        std.debug.print("[VU{}       ] ISUBIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, imm, it, res});
+        std.debug.print("[VU{}       ] ISUBIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, @bitCast(i15, imm), it, res});
     }
 }
 
@@ -469,6 +523,8 @@ pub fn iIsw(vu: *Vu, instr: u32) void {
 
     const addr = (vu.getVi(@truncate(u4, is)) +% imm) << 4;
     const data = @as(u32, vu.getVi(@truncate(u4, it)));
+
+    std.debug.print("ISW: VI[{}] = 0x{X:0>3}, imm = {}, addr = 0x{X:0>3}\n", .{is, vu.getVi(@truncate(u4, is)), @bitCast(i16, imm), addr});
 
     if (dest & (1 << 0) != 0) {
         vu.writeData(u32, addr + 12, data);
@@ -547,16 +603,16 @@ pub fn iLq(vu: *Vu, instr: u32) void {
     const data = vu.readData(u128, addr);
 
     if (dest & (1 << 0) != 0) {
-        vu.setVfElement(f32, ft, Element.W, @bitCast(f32, @truncate(u32, data >> 96)));
+        vu.setVfElement(u32, ft, Element.W, @truncate(u32, data >> 96));
     }
     if (dest & (1 << 1) != 0) {
-        vu.setVfElement(f32, ft, Element.Z, @bitCast(f32, @truncate(u32, data >> 64)));
+        vu.setVfElement(u32, ft, Element.Z, @truncate(u32, data >> 64));
     }
     if (dest & (1 << 2) != 0) {
-        vu.setVfElement(f32, ft, Element.Y, @bitCast(f32, @truncate(u32, data >> 32)));
+        vu.setVfElement(u32, ft, Element.Y, @truncate(u32, data >> 32));
     }
     if (dest & (1 << 3) != 0) {
-        vu.setVfElement(f32, ft, Element.X, @bitCast(f32, @truncate(u32, data >> 0)));
+        vu.setVfElement(u32, ft, Element.X, @truncate(u32, data >> 0));
     }
 
     if (doDisasm) {
@@ -830,9 +886,9 @@ pub fn iOpmsub(vu: *Vu, instr: u32) void {
     const ft = getRt(instr);
     const fs = getRs(instr);
 
-    vu.setVfElement(f32, fd, Element.X, (vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.Z)) - (vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.Y)));
-    vu.setVfElement(f32, fd, Element.Y, (vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.X)) - (vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Z)));
-    vu.setVfElement(f32, fd, Element.Z, (vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Y)) - (vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.X)));
+    vu.setVfElement(f32, fd, Element.X, vu.acc.getElement(Element.X) - vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.Z));
+    vu.setVfElement(f32, fd, Element.Y, vu.acc.getElement(Element.Y) - vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.X));
+    vu.setVfElement(f32, fd, Element.Z, vu.acc.getElement(Element.Z) - vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Y));
 
     if (doDisasm) {
         const destStr = getDestStr(dest);
@@ -850,9 +906,9 @@ pub fn iOpmula(vu: *Vu, instr: u32) void {
     const ft = getRt(instr);
     const fs = getRs(instr);
 
-    vu.acc.setElement(Element.X, (vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.Z)) + (vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.Y)));
-    vu.acc.setElement(Element.Y, (vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.X)) + (vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Z)));
-    vu.acc.setElement(Element.Z, (vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Y)) + (vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.X)));
+    vu.acc.setElement(Element.X, (vu.getVfElement(f32, fs, Element.Y) * vu.getVfElement(f32, ft, Element.Z)));
+    vu.acc.setElement(Element.Y, (vu.getVfElement(f32, fs, Element.Z) * vu.getVfElement(f32, ft, Element.X)));
+    vu.acc.setElement(Element.Z, (vu.getVfElement(f32, fs, Element.X) * vu.getVfElement(f32, ft, Element.Y)));
 
     if (doDisasm) {
         const destStr = getDestStr(dest);
@@ -867,34 +923,38 @@ pub fn iOpmula(vu: *Vu, instr: u32) void {
 pub fn iSq(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
 
-    const ft = getRt(instr);
-    const is = getRs(instr);
+    const it = getRt(instr);
+    const fs = getRs(instr);
     
-    if (is >= 16) {
+    if (it >= 16) {
         std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
         
         @panic("Index out of bounds");
     }
 
-    const addr = vu.getVi(@truncate(u4, is)) << 4;
+    const imm = @bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr))));
+
+    const addr = (vu.getVi(@truncate(u4, it)) +% imm) << 4;
+
+    std.debug.print("SQ: VI[{}] = 0x{X:0>3}, imm = {}, addr = 0x{X:0>3}\n", .{it, vu.getVi(@truncate(u4, it)), @bitCast(i16, imm), addr});
 
     if (dest & (1 << 0) != 0) {
-        vu.writeData(u32, addr + 12, vu.getVfElement(u32, ft, Element.W));
+        vu.writeData(u32, addr + 12, vu.getVfElement(u32, fs, Element.W));
     }
     if (dest & (1 << 1) != 0) {
-        vu.writeData(u32, addr + 8, vu.getVfElement(u32, ft, Element.Z));
+        vu.writeData(u32, addr + 8, vu.getVfElement(u32, fs, Element.Z));
     }
     if (dest & (1 << 2) != 0) {
-        vu.writeData(u32, addr + 4, vu.getVfElement(u32, ft, Element.Y));
+        vu.writeData(u32, addr + 4, vu.getVfElement(u32, fs, Element.Y));
     }
     if (dest & (1 << 3) != 0) {
-        vu.writeData(u32, addr + 0, vu.getVfElement(u32, ft, Element.X));
+        vu.writeData(u32, addr + 0, vu.getVfElement(u32, fs, Element.X));
     }
 
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        std.debug.print("[VU{}       ] SQ.{s} VF[{}]{s}, (VI[{}])\n", .{vu.vuNum, destStr, ft, destStr, is});
+        std.debug.print("[VU{}       ] SQ.{s} VF[{}]{s}, {}(VI[{}])\n", .{vu.vuNum, destStr, fs, destStr, @bitCast(i16, imm), it});
     }
 }
 
@@ -902,36 +962,36 @@ pub fn iSq(vu: *Vu, instr: u32) void {
 pub fn iSqi(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
 
-    const ft = getRt(instr);
-    const is = getRs(instr);
+    const it = getRt(instr);
+    const fs = getRs(instr);
     
-    if (is >= 16) {
+    if (it >= 16) {
         std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
         
         @panic("Index out of bounds");
     }
 
-    const addr = vu.getVi(@truncate(u4, is)) << 4;
+    const addr = vu.getVi(@truncate(u4, it)) << 4;
 
     if (dest & (1 << 0) != 0) {
-        vu.writeData(u32, addr + 12, vu.getVfElement(u32, ft, Element.W));
+        vu.writeData(u32, addr + 12, vu.getVfElement(u32, fs, Element.W));
     }
     if (dest & (1 << 1) != 0) {
-        vu.writeData(u32, addr + 8, vu.getVfElement(u32, ft, Element.Z));
+        vu.writeData(u32, addr + 8, vu.getVfElement(u32, fs, Element.Z));
     }
     if (dest & (1 << 2) != 0) {
-        vu.writeData(u32, addr + 4, vu.getVfElement(u32, ft, Element.Y));
+        vu.writeData(u32, addr + 4, vu.getVfElement(u32, fs, Element.Y));
     }
     if (dest & (1 << 3) != 0) {
-        vu.writeData(u32, addr + 0, vu.getVfElement(u32, ft, Element.X));
+        vu.writeData(u32, addr + 0, vu.getVfElement(u32, fs, Element.X));
     }
 
-    vu.setVi(@truncate(u4, is), (addr >> 4) + 1);
+    vu.setVi(@truncate(u4, it), vu.getVi(@truncate(u4, it)) + 1);
 
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        std.debug.print("[VU{}       ] SQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, ft, destStr, is});
+        std.debug.print("[VU{}       ] SQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, fs, destStr, it});
     }
 }
 
