@@ -347,7 +347,7 @@ fn doReglist() void {
 
     nregs += 1;
 
-    if (nregs != gifTag.nregs or nregs != 16) {
+    if ((gifTag.nregs != 0 and nregs < gifTag.nregs) or (gifTag.nregs == 0 and nregs < 16)) {
         reg = @truncate(u4, gifTag.regs >> (4 * nregs));
 
         gs.write(reg, @truncate(u64, data >> 64));
@@ -355,7 +355,7 @@ fn doReglist() void {
         nregs += 1;
     }
 
-    if (nregs == gifTag.nregs or nregs == 16) {
+    if ((gifTag.nregs != 0 and nregs == gifTag.nregs) or (gifTag.nregs == 0 and nregs == 16)) {
         nregs = 0;
 
         nloop -= 1;
