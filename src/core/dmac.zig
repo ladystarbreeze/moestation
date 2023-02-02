@@ -213,7 +213,7 @@ pub fn init() void {
     channels[@enumToInt(Channel.Vif0)   ].chcr.req = true;
     channels[@enumToInt(Channel.Vif1)   ].chcr.req = true;
     channels[@enumToInt(Channel.IpuTo)  ].chcr.req = true;
-    channels[@enumToInt(Channel.IpuTo)  ].chcr.req = true;
+    channels[@enumToInt(Channel.IpuFrom)].chcr.req = true;
     channels[@enumToInt(Channel.Sif1)   ].chcr.req = true;
     channels[@enumToInt(Channel.SprFrom)].chcr.req = true;
     channels[@enumToInt(Channel.SprTo)  ].chcr.req = true;
