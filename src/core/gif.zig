@@ -395,7 +395,10 @@ pub fn step() void {
     } else {
         switch (gifTag.fmt) {
             Format.Packed  => doPacked(data),
-            Format.Reglist => doReglist(data),
+            Format.Reglist => {
+                doReglist(@truncate(u64, data));
+                doReglist(@truncate(u64, data >> 64));
+            },
             Format.Image   => doImage(data),
         }
     }
@@ -453,24 +456,16 @@ fn doPacked(data: u128) void {
 }
 
 /// Processes a REGLIST primitive
-fn doReglist(data: u128) void {
+fn doReglist(data: u64) void {
     if (nregs == 0 and nloop == gifTag.nloop) {
         info("   [GIF       ] REGLIST mode. NREGS = {}, NLOOP = {}", .{gifTag.nregs, gifTag.nloop});
     }
 
     var reg = @truncate(u4, gifTag.regs >> (4 * nregs));
 
-    gs.write(reg, @truncate(u64, data));
+    gs.write(reg, data);
 
     nregs += 1;
-
-    if ((gifTag.nregs != 0 and nregs < gifTag.nregs) or (gifTag.nregs == 0 and nregs < 16)) {
-        reg = @truncate(u4, gifTag.regs >> (4 * nregs));
-
-        gs.write(reg, @truncate(u64, data >> 64));
-
-        nregs += 1;
-    }
 
     if ((gifTag.nregs != 0 and nregs == gifTag.nregs) or (gifTag.nregs == 0 and nregs == 16)) {
         nregs = 0;
