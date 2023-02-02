@@ -184,6 +184,12 @@ const TrxParam = struct {
 };
 
 /// Texture coordinates
+const St = struct {
+    s: f32 = undefined,
+    t: f32 = undefined,
+};
+
+/// Texel coordinates
 const Uv = struct {
     u: u14 = undefined,
     v: u14 = undefined,
@@ -205,6 +211,11 @@ const Vertex = struct {
     // Texel coordinates
     u: u14 = undefined,
     v: u14 = undefined,
+
+    // Texture coordinates
+    s: f32 = undefined,
+    t: f32 = undefined,
+    q: f32 = undefined,
 };
 
 /// Depth test
@@ -317,7 +328,7 @@ const Rgbaq = struct {
     g:  u8 = 0,
     b:  u8 = 0,
     a:  u8 = 0,
-    q: u32 = 0,
+    q: f32 = 0,
 
     /// Sets RGBAQ
     pub fn set(self: *Rgbaq, data: u64) void {
@@ -325,7 +336,7 @@ const Rgbaq = struct {
         self.g = @truncate(u8 , data >>  8);
         self.b = @truncate(u8 , data >> 16);
         self.a = @truncate(u8 , data >> 24);
-        self.q = @truncate(u32, data >> 32);
+        self.q = @bitCast(f32, @truncate(u32, data >> 32) & 0xFFFF_FF00);
     }
 };
 
@@ -550,6 +561,7 @@ var prmodecont: bool = false;
 
 var rgbaq: Rgbaq = Rgbaq{};
 
+var st: St = St{};
 var uv: Uv = Uv{};
 
 var  tex: [2]Tex = undefined;
@@ -691,6 +703,10 @@ pub fn write(addr: u8, data: u64) void {
             }
         },
         @enumToInt(GsReg.Rgbaq     ) => rgbaq.set(data),
+        @enumToInt(GsReg.St        ) => {
+            st.s = @bitCast(f32, @truncate(u32, data >>  0) & 0xFFFF_FF00);
+            st.t = @bitCast(f32, @truncate(u32, data >> 32) & 0xFFFF_FF00);
+        },
         @enumToInt(GsReg.Uv        ) => {
             uv.u = @truncate(u14, data >>  0);
             uv.v = @truncate(u14, data >> 16);
@@ -717,6 +733,10 @@ pub fn write(addr: u8, data: u64) void {
 
             vtx.u = uv.u;
             vtx.v = uv.v;
+
+            vtx.s = st.s;
+            vtx.t = st.t;
+            vtx.q = rgbaq.q;
 
             vtxQueue.writeItem(vtx) catch {
                 err("  [GS        ] Vertex queue is full.", .{});
@@ -797,18 +817,20 @@ pub fn writePacked(addr: u4, data: u128) void {
             write(@enumToInt(GsReg.Prim), @truncate(u64, data));
         },
         @enumToInt(GsReg.Rgbaq) => {
-            var rgbaq_: u64 = 0;
+            std.debug.print("Write @ Rgba = 0x{X:0>32}\n", .{data});
 
-            // TODO: add Q!
-            rgbaq_ |= @as(u64, @truncate(u8, data));
-            rgbaq_ |= @as(u64, @truncate(u8, data >> 32)) <<  8;
-            rgbaq_ |= @as(u64, @truncate(u8, data >> 64)) << 16;
-            rgbaq_ |= @as(u64, @truncate(u8, data >> 96)) << 24;
-
-            write(@enumToInt(GsReg.Rgbaq), rgbaq_);
+            rgbaq.r = @truncate(u8, data);
+            rgbaq.g = @truncate(u8, data >> 32);
+            rgbaq.b = @truncate(u8, data >> 64);
+            rgbaq.a = @truncate(u8, data >> 96);
         },
         @enumToInt(GsReg.St) => {
-            write(@enumToInt(GsReg.St), @truncate(u64, data));
+            std.debug.print("Write @ Stq = 0x{X:0>32}\n", .{data});
+
+            st.s = @bitCast(f32, @truncate(u32, data >>  0) & 0xFFFF_FF00);
+            st.t = @bitCast(f32, @truncate(u32, data >> 32) & 0xFFFF_FF00);
+
+            rgbaq.q = @bitCast(f32, @truncate(u32, data >> 64) & 0xFFFF_FF00);
         },
         @enumToInt(GsReg.Uv) => {
             const uv_ = @truncate(u64, ((data >> 16) & 0x3FFF_0000) | (data & 0x3FFF));
@@ -993,15 +1015,19 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             3 => @panic("Reserved alpha blending setting"),
         };
 
-        var cv = (((@as(u32, A) - @as(u32, B)) * @as(u32, C)) >> 7) + @as(u32, D);
+        var Cv = (((@as(i10, @bitCast(i8, A)) - @as(i10, @bitCast(i8, B))) * @as(i10, @bitCast(i8, C))) >> 7) + @as(i10, @bitCast(i8, D));
 
-        if (colclamp and cv > 0xFF) {
-            cv = 0xFF;
+        if (colclamp) {
+            if (Cv > 0xFF) {
+                Cv = 0xFF;
+            } else if (Cv < 0) {
+                Cv = 0;
+            }
         } else {
-            cv &= 0xFF;
+            Cv &= 0xFF;
         }
 
-        newColor |= cv << (8 * i);
+        newColor |= @as(u32, @truncate(u8, @bitCast(u10, Cv))) << (8 * i);
     }
 
     return newColor;
@@ -1103,6 +1129,18 @@ fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i64, w1: i64, w2: i64) u32 {
     return @bitCast(u32, @truncate(i32, color));
 }
 
+/// Interpolate STQ
+fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64, area: i64) f32 {
+    //std.debug.print("W0 = {}, W1 = {}, W2 = {}\n", .{@intToFloat(f32, w0), @intToFloat(f32, w1), @intToFloat(f32, w2)});
+    //std.debug.print("Area = {}\n", .{@intToFloat(f32, area)});
+
+    const texCoord = (@intToFloat(f32, w0) * a + @intToFloat(f32, w1) * b + @intToFloat(f32, w2) * c) / @intToFloat(f32, area);
+
+    //std.debug.print("Tex coord = {}\n", .{texCoord});
+
+    return texCoord;
+}
+
 /// Returns a texture pixel (UV coordinates)
 fn getTex(u: u14, v: u14) u32 {
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
@@ -1117,6 +1155,9 @@ fn getTex(u: u14, v: u14) u32 {
     var color: u32 = 0;
 
     switch (tex[ctxt].psm) {
+        PixelFormat.Psmct24 => {
+            color = (@as(u32, texa.ta0) << 24) | (readVram(u32, PixelFormat.Psmct32, texAddr, u, v) & 0xFF_FFFF);
+        },
         PixelFormat.Psmct4hl, PixelFormat.Psmct4hh => {
             var idtex4 = @truncate(u23, readVram(u32, PixelFormat.Psmct32, texAddr, u, v) >> 24);
 
@@ -1177,11 +1218,30 @@ fn getTex(u: u14, v: u14) u32 {
 fn texMul(Cv: u8, Ct: u8) u8 {
     if (Cv == 0x80) return Ct;
 
-    var res = (@as(u9, Cv) * @as(u9, Ct)) >> 7;
+    var res = (@as(i10, @bitCast(i8, Cv)) * @as(i10, @bitCast(i8, Ct))) >> 7;
 
-    if (res >= 0xFF) res = 0xFF;
+    if (res >= 0xFF) {
+        res = 0xFF;
+    } else if (res < 0) {
+        res = 0;
+    }
 
-    return @truncate(u8, res);
+    return @truncate(u8, @bitCast(u10, res));
+}
+
+/// Texture-vertex color multiply-add
+fn texMulAdd(Cv: u8, Ct: u8, Av: u8) u8 {
+    if (Cv == 0x80) return Ct;
+
+    var res = ((@as(i10, @bitCast(i8, Cv)) * @as(i10, @bitCast(i8, Ct))) >> 7) + @as(i10, @bitCast(i8, Av));
+
+    if (res >= 0xFF) {
+        res = 0xFF;
+    } else if (res < 0) {
+        res = 0;
+    }
+
+    return @truncate(u8, @bitCast(u10, res));
 }
 
 /// Draws a sprite
@@ -1307,9 +1367,9 @@ fn drawSprite() void {
                     },
                     2 => {
                         // Highlight
-                        color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
-                        color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
-                        color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+                        color |= @as(u32, texMulAdd(a.r, @truncate(u8, texColor >>  0), a.a));
+                        color |= @as(u32, texMulAdd(a.g, @truncate(u8, texColor >>  8), a.a)) <<  8;
+                        color |= @as(u32, texMulAdd(a.b, @truncate(u8, texColor >> 16), a.a)) << 16;
 
                         if (tex[ctxt].tcc) {
                             color |= @as(u32, a.a +| @truncate(u8, texColor >> 24)) << 24;
@@ -1319,9 +1379,9 @@ fn drawSprite() void {
                     },
                     3 => {
                         // Highlight2
-                        color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
-                        color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
-                        color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+                        color |= @as(u32, texMulAdd(a.r, @truncate(u8, texColor >>  0), a.a));
+                        color |= @as(u32, texMulAdd(a.g, @truncate(u8, texColor >>  8), a.a)) <<  8;
+                        color |= @as(u32, texMulAdd(a.b, @truncate(u8, texColor >> 16), a.a)) << 16;
 
                         if (tex[ctxt].tcc) {
                             color |= texColor & 0xFF00_0000;
@@ -1411,22 +1471,14 @@ fn drawTriangle() void {
     if (tme) {
         const fst = if (prmodecont) prim.fst else prmode.fst;
 
-        if (!fst) {
-            std.debug.print("Unhandled STQ coordinates\n", .{});
+        if (fst) {
+            std.debug.print("Unhandled UV coordinates\n", .{});
 
             @panic("Unhandled texture coordinates");
         }
-
-        std.debug.print("Unhandled texture mapping\n", .{});
-
-        @panic("Unhandled texture mapping");
     }
-
-    if (abe) {
-        std.debug.print("Unhandled alpha blending\n", .{});
-
-        @panic("Unhandled alpha blending");
-    }
+    
+    const area = edgeFunction(a , b_, c_);
 
     // Calculate bounding box
     var xMin = min(i23, min(i23, a.x, b.x), c.x);
@@ -1453,8 +1505,92 @@ fn drawTriangle() void {
                 p.z = getDepth(a, b_, c_, w0, w1, w2);
 
                 if (!depthTest(p.x, p.y, p.z)) continue;
-                
-                const color = getColor(a, b_, c_, w0, w1, w2);
+
+                var color: u32 = 0;
+
+                if (tme) {
+                    //std.debug.print("S1 = {}, S2 = {}, S3 = {}\n", .{a.s, b_.s, c_.s});
+                    //std.debug.print("T1 = {}, T2 = {}, T3 = {}\n", .{a.t, b_.t, c_.t});
+                    //std.debug.print("Q1 = {}, Q2 = {}, Q3 = {}\n", .{a.q, b_.q, c_.q});
+
+                    var s = getTexCoord(a.s, b_.s, c_.s, w0, w1, w2, 1);
+                    var t = getTexCoord(a.t, b_.t, c_.t, w0, w1, w2, 1);
+
+                    const q = getTexCoord(a.q, b_.q, c_.q, w0, w1, w2, area);
+
+                    //std.debug.print("S = {}, T = {}, Q = {}\n", .{s, t, q});
+
+                    s /= q;
+                    t /= q;
+
+                    //std.debug.print("S/Q = {}, T/Q = {}\n", .{s, t});
+
+                    const u = @truncate(u14, @bitCast(u32, @floatToInt(i32, @round((s * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0)))) >> 11;
+                    const v = @truncate(u14, @bitCast(u32, @floatToInt(i32, @round((t * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0)))) >> 11;
+
+                    //std.debug.print("U = {}, V = {}\n", .{u, v});
+
+                    const texColor = getTex(u, v);
+
+                    //std.debug.print("Ct = 0x{X:0>8}\n", .{texColor});
+
+                    switch (tex[ctxt].tfx) {
+                        0 => {
+                            // Modulate
+                            color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)));
+                            color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8))) <<  8;
+                            color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16))) << 16;
+
+                            if (tex[ctxt].tcc) {
+                                color |= @as(u32, texMul(a.a, @truncate(u8, texColor >> 24))) << 24;
+                            } else {
+                                color |= @as(u32, a.a) << 24;
+                            }
+                        },
+                        1 => {
+                            // Decal
+                            color = texColor & 0xFF_FFFF;
+
+                            if (tex[ctxt].tcc) {
+                                color |= texColor & 0xFF00_0000;
+                            } else {
+                                color |= @as(u32, a.a) << 24;
+                            }
+                        },
+                        2 => {
+                            // Highlight
+                            color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
+                            color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
+                            color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+
+                            if (tex[ctxt].tcc) {
+                                color |= @as(u32, a.a +| @truncate(u8, texColor >> 24)) << 24;
+                            } else {
+                                color |= @as(u32, a.a) << 24;
+                            }
+                        },
+                        3 => {
+                            // Highlight2
+                            color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
+                            color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
+                            color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+
+                            if (tex[ctxt].tcc) {
+                                color |= texColor & 0xFF00_0000;
+                            } else {
+                                color |= @as(u32, a.a) << 24;
+                            }
+                        }
+                    }
+
+                    //std.debug.print("Tex blending OK!!\n", .{});
+                } else {
+                    color = getColor(a, b_, c_, w0, w1, w2);
+                }
+
+                if (abe) color = alphaBlend(fbAddr, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
+
+                //std.debug.print("Alpha blending OK!!\n", .{});
 
                 switch (frame[ctxt].psm) {
                     PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
