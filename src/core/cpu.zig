@@ -227,20 +227,21 @@ const ControlOpcode = enum(u6) {
 
 /// MMI instructions
 const MmiOpcode = enum(u6) {
-    Madd  = 0x00,
-    Plzcw = 0x04,
-    Mmi0  = 0x08,
-    Mmi2  = 0x09,
-    Mfhi1 = 0x10,
-    Mthi1 = 0x11,
-    Mflo1 = 0x12,
-    Mtlo1 = 0x13,
-    Mult1 = 0x18,
-    Div1  = 0x1A,
-    Divu1 = 0x1B,
-    Mmi1  = 0x28,
-    Mmi3  = 0x29,
-    Pmfhl = 0x30,
+    Madd   = 0x00,
+    Plzcw  = 0x04,
+    Mmi0   = 0x08,
+    Mmi2   = 0x09,
+    Mfhi1  = 0x10,
+    Mthi1  = 0x11,
+    Mflo1  = 0x12,
+    Mtlo1  = 0x13,
+    Mult1  = 0x18,
+    Multu1 = 0x19,
+    Div1   = 0x1A,
+    Divu1  = 0x1B,
+    Mmi1   = 0x28,
+    Mmi3   = 0x29,
+    Pmfhl  = 0x30,
 };
 
 /// MMI0 instructions
@@ -847,14 +848,15 @@ fn decodeInstr(instr: u32) void {
                         }
                     }
                 },
-                @enumToInt(MmiOpcode.Mfhi1) => iMfhi(instr, true),
-                @enumToInt(MmiOpcode.Mthi1) => iMthi(instr, true),
-                @enumToInt(MmiOpcode.Mflo1) => iMflo(instr, true),
-                @enumToInt(MmiOpcode.Mtlo1) => iMtlo(instr, true),
-                @enumToInt(MmiOpcode.Mult1) => iMult(instr, 1),
-                @enumToInt(MmiOpcode.Div1 ) => iDiv(instr, 1),
-                @enumToInt(MmiOpcode.Divu1) => iDivu(instr, 1),
-                @enumToInt(MmiOpcode.Mmi1 ) => {
+                @enumToInt(MmiOpcode.Mfhi1 ) => iMfhi(instr, true),
+                @enumToInt(MmiOpcode.Mthi1 ) => iMthi(instr, true),
+                @enumToInt(MmiOpcode.Mflo1 ) => iMflo(instr, true),
+                @enumToInt(MmiOpcode.Mtlo1 ) => iMtlo(instr, true),
+                @enumToInt(MmiOpcode.Mult1 ) => iMult(instr, 1),
+                @enumToInt(MmiOpcode.Multu1) => iMultu(instr, 1),
+                @enumToInt(MmiOpcode.Div1  ) => iDiv(instr, 1),
+                @enumToInt(MmiOpcode.Divu1 ) => iDivu(instr, 1),
+                @enumToInt(MmiOpcode.Mmi1  ) => {
                     const sa = getSa(instr);
 
                     switch (sa) {
@@ -1857,8 +1859,8 @@ fn iEret() void {
     }
 
     if (!fastBootDone and regFile.pc == 0x82000) {
-        //bus.fastBoot();
-        regFile.setPc(bus.loadElf());
+        bus.fastBoot();
+        //regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
     }
