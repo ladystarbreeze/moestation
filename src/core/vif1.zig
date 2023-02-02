@@ -513,6 +513,12 @@ fn iStmask() void {
 
     std.debug.print("[VIF1      ] STMASK; MASK = 0x{X:0>8}\n", .{mask});
 
+    if (mask != 0) {
+        std.debug.print("[VIF1      ] Write mask is not 0\n", .{});
+
+        @panic("Write mask is not 0");
+    }
+
     isCmdDone = true;
 }
 
