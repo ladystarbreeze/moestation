@@ -1173,6 +1173,17 @@ fn getTex(u: u14, v: u14) u32 {
     return color;
 }
 
+/// Texture-vertex color multiplication
+fn texMul(Cv: u8, Ct: u8) u8 {
+    if (Cv == 0x80) return Ct;
+
+    var res = (@as(u9, Cv) * @as(u9, Ct)) >> 7;
+
+    if (res >= 0xFF) res = 0xFF;
+
+    return @truncate(u8, res);
+}
+
 /// Draws a sprite
 fn drawSprite() void {
     std.debug.print("Drawing sprite...\n", .{});
@@ -1266,7 +1277,62 @@ fn drawSprite() void {
                 continue;
             }
 
-            var color = if (tme) getTex(@floatToInt(u14, u), @floatToInt(u14, v)) else (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
+            var color: u32 = 0;
+
+            if (tme) {
+                const texColor = getTex(@floatToInt(u14, u), @floatToInt(u14, v));
+
+                switch (tex[ctxt].tfx) {
+                    0 => {
+                        // Modulate
+                        color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)));
+                        color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8))) <<  8;
+                        color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16))) << 16;
+
+                        if (tex[ctxt].tcc) {
+                            color |= @as(u32, texMul(a.a, @truncate(u8, texColor >> 24))) << 24;
+                        } else {
+                            color |= @as(u32, a.a) << 24;
+                        }
+                    },
+                    1 => {
+                        // Decal
+                        color = texColor & 0xFF_FFFF;
+
+                        if (tex[ctxt].tcc) {
+                            color |= texColor & 0xFF00_0000;
+                        } else {
+                            color |= @as(u32, a.a) << 24;
+                        }
+                    },
+                    2 => {
+                        // Highlight
+                        color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
+                        color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
+                        color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+
+                        if (tex[ctxt].tcc) {
+                            color |= @as(u32, a.a +| @truncate(u8, texColor >> 24)) << 24;
+                        } else {
+                            color |= @as(u32, a.a) << 24;
+                        }
+                    },
+                    3 => {
+                        // Highlight2
+                        color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
+                        color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
+                        color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+
+                        if (tex[ctxt].tcc) {
+                            color |= texColor & 0xFF00_0000;
+                        } else {
+                            color |= @as(u32, a.a) << 24;
+                        }
+                    }
+                }
+            } else {
+                color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
+            }
 
             if (abe) color = alphaBlend(fbAddr, @bitCast(u23, x), @bitCast(u23, y), color);
 
