@@ -9,10 +9,15 @@ const std = @import("std");
 
 const assert = std.debug.assert;
 
+const gif = @import("gif.zig");
+
+const ActivePath = gif.ActivePath;
+
 const vif1 = @import("vif1.zig");
 
 const Element = @import("vu.zig").Element;
-const Vu = @import("vu.zig").Vu;
+const Vu      = @import("vu.zig").Vu;
+const VuState = @import("vu.zig").VuState;
 
 const LowerOp = enum(u7) {
     Lq      = 0x00,
@@ -32,10 +37,11 @@ const LowerOpSpecial = enum(u6) {
 };
 
 const LowerOpSpecial2 = enum(u7) {
-    Xtop = 0x28,
-    Move = 0x30,
-    Sqi  = 0x35,
-    Div  = 0x38,
+    Xtop   = 0x28,
+    Xgkick = 0x2C,
+    Move   = 0x30,
+    Sqi    = 0x35,
+    Div    = 0x38,
 };
 
 const UpperOp = enum(u7) {
@@ -117,10 +123,11 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                 const funct2 = (@truncate(u6, instr >> 6) << 2) | (funct & 3);
 
                 switch (funct2) {
-                    @enumToInt(LowerOpSpecial2.Xtop) => iXtop(vu, instr),
-                    @enumToInt(LowerOpSpecial2.Move) => iMove(vu, instr),
-                    @enumToInt(LowerOpSpecial2.Sqi ) => iSqi(vu, instr),
-                    @enumToInt(LowerOpSpecial2.Div ) => iDiv(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Xtop  ) => iXtop(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Xgkick) => iXgkick(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Move  ) => iMove(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Sqi   ) => iSqi(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Div   ) => iDiv(vu, instr),
                     else => {
                         std.debug.print("[VU{}       ] Unhandled 11-bit lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct2, instr});
 
@@ -1044,6 +1051,33 @@ pub fn iSub(vu: *Vu, instr: u32) void {
 pub fn iWaitq(vu: *Vu) void {
     if (doDisasm) {
         std.debug.print("[VU{}       ] VWAITQ\n", .{vu.vuNum});
+    }
+}
+
+/// Xfer GIF KICK
+pub fn iXgkick(vu: *Vu, instr: u32) void {
+    assert(vu.vuNum == 1);
+
+    if (gif.getActivePath() == ActivePath.Path1) {
+        std.debug.print("[VU1       ] PATH1 still running\n", .{});
+
+        @panic("PATH1 still running");
+    }
+
+    const is = getRs(instr);
+
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+        
+        @panic("Index out of bounds");
+    }
+
+    gif.setPath1Addr(vu.getVi(@truncate(u4, is)));
+
+    vu.state = VuState.Xgkick;
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] XGKICK VI[{}]; P1ADDR = 0x{X:0>3}\n", .{vu.vuNum, is, vu.getVi(@truncate(u4, is))});
     }
 }
 

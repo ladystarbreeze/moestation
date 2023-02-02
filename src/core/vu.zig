@@ -9,7 +9,16 @@ const std = @import("std");
 
 const assert = std.debug.assert;
 
+const gif  = @import("gif.zig");
+
 const vu_int = @import("vu_int.zig");
+
+/// VU state
+pub const VuState = enum {
+    Idle, 
+    Xgkick,
+    ExecMs,
+};
 
 /// Macro mode control registers
 const ControlReg = enum(u5) {
@@ -102,7 +111,7 @@ pub const Vu = struct {
     // Clipping flags
         cf: u24 = 0,
 
-      idle: bool = true,
+     state: VuState = VuState.Idle,
 
     /// Reset
     pub fn reset(self: *Vu) void {
@@ -116,7 +125,7 @@ pub const Vu = struct {
 
     /// Returns true if VU1 is executing a microprogram
     pub fn isIdle(self: *Vu) bool {
-        return self.idle;
+        return self.state == VuState.Idle;
     }
 
     /// Returns an integer register (macro mode)
@@ -245,8 +254,8 @@ pub const Vu = struct {
 
         const instr = self.readCode(u64, self.pc);
 
-        self.pc  += 8;
-        //self.npc += 8;
+        self.pc   = self.npc;
+        self.npc += 8;
 
         return instr;
     }
@@ -396,7 +405,7 @@ pub const Vu = struct {
         self.setVi(id, self.pc);
 
         if (isCond) {
-            self.pc = target;
+            self.npc = target;
         }
     }
 
@@ -405,12 +414,20 @@ pub const Vu = struct {
         self.pc  = pc;
         self.npc = pc + 8;
 
-        self.idle = false;
+        self.state = VuState.ExecMs;
     }
 
     /// Steps the VU
     pub fn step(self: *Vu) void {
-        if (self.idle) return;
+        switch (self.state) {
+            VuState.Idle   => return,
+            VuState.Xgkick => {
+                if (!gif.startPath1()) return;
+
+                self.state = VuState.ExecMs;
+            },
+            VuState.ExecMs => {}
+        }
 
         self.cpc = self.pc;
 
@@ -423,7 +440,9 @@ pub const Vu = struct {
             @panic("VU debug break");
         }
         if ((instr & (1 << 62)) != 0) {
-            @panic("Microprogram end");
+            std.debug.print("[VU{}       ] MS end\n", .{self.vuNum});
+
+            self.state = VuState.Idle;
         }
 
         if ((instr & (1 << 63)) != 0) {

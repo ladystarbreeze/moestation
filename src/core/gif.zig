@@ -16,6 +16,7 @@ const err  = std.log.err;
 const info = std.log.info;
 const warn = std.log.warn;
 
+const cpu  = @import("cpu.zig");
 const dmac = @import("dmac.zig");
 
 const Channel = dmac.Channel;
@@ -73,7 +74,7 @@ const GifStat = struct {
 };
 
 /// Active PATH
-const ActivePath = enum(u2) {
+pub const ActivePath = enum(u2) {
     Idle,
     Path1,
     Path2,
@@ -114,6 +115,9 @@ var gifStat = GifStat{};
 /// Current GIF tag
 var gifTag = GifTag{};
 
+/// PATH1 address
+var p1Addr: u16 = 0;
+
 /// Current NREGS and NLOOP
 var nloop: u15 = 0;
 var nregs: u6  = 0;
@@ -129,6 +133,8 @@ pub fn read(addr: u32) u32 {
             //info("   [GIF       ] Read @ 0x{X:0>8} (GIF_STAT).", .{addr});
 
             data = gifStat.get() | (@truncate(u32, gifFifo.readableLength()) << 24);
+
+            //info("GIF_STAT = 0x{X:0>8}", .{data});
         },
         else => {
             err("  [GIF       ] Unhandled read @ 0x{X:0>8}.", .{addr});
@@ -164,6 +170,8 @@ pub fn write(addr: u32, data: u32) void {
 
                 gifFifo = GifFifo.init();
 
+                dmac.setRequest(Channel.Path3, true);
+
                 gifTag.hasTag = false;
 
                 nregs = 0;
@@ -182,6 +190,9 @@ pub fn write(addr: u32, data: u32) void {
 pub fn writeFifo(data: u128) void {
     //info("   [GIF       ] Write @ FIFO = 0x{X:0>32}.", .{data});
 
+    // Attempt to make PATH3 the new active path
+    setActivePath(ActivePath.Path3);
+
     gifFifo.writeItem(data) catch {
         err("  [GIF       ] GIF FIFO is full.", .{});
         
@@ -191,14 +202,6 @@ pub fn writeFifo(data: u128) void {
     if (gifFifo.readableLength() == 16) {
         dmac.setRequest(Channel.Path3, false);
     }
-
-    if (gifStat.apath == @enumToInt(ActivePath.Idle)) {
-        info("   [GIF       ] PATH3 active.", .{});
-
-        gifStat.apath = @enumToInt(ActivePath.Path3);
-
-        gifStat.oph = true;
-    }
 }
 
 /// Sets FINISH signal after DMA finishes
@@ -206,15 +209,132 @@ pub fn scheduleFinish() void {
     setFinish = true;
 }
 
+/// Returns active PATH
+pub fn getActivePath() ActivePath {
+    return @intToEnum(ActivePath, gifStat.apath);
+}
+
+/// Returns queued PATH
+pub fn getNextPath() ActivePath {
+    if (gifStat.p1q) {
+        gifStat.p1q = false;
+
+        return ActivePath.Path1;
+    }
+
+    if (gifStat.p2q) {
+        gifStat.p2q = false;
+
+        return ActivePath.Path2;
+    }
+
+    if (gifStat.p3q) {
+        gifStat.p3q = false;
+
+        return ActivePath.Path1;
+    }
+
+    return ActivePath.Idle;
+}
+
+/// Sets new active GIF PATH (queues PATH if GIF is active)
+pub fn setActivePath(path: ActivePath) void {
+    switch (@intToEnum(ActivePath, gifStat.apath)) {
+        ActivePath.Idle  => {},
+        ActivePath.Path1 => {
+            switch (path) {
+                ActivePath.Path2 => {
+                    gifStat.p2q = true;
+                },
+                ActivePath.Path3 => {
+                    gifStat.p3q = true;
+                },
+                else => {}
+            }
+
+            return;
+        },
+        ActivePath.Path2 => {
+            switch (path) {
+                ActivePath.Path1 => {
+                    gifStat.p1q = true;
+                },
+                ActivePath.Path3 => {
+                    gifStat.p3q = true;
+                },
+                else => {}
+            }
+
+            return;
+        },
+        ActivePath.Path3 => {
+            switch (path) {
+                ActivePath.Path1 => {
+                    gifStat.p1q = true;
+                },
+                ActivePath.Path2 => {
+                    gifStat.p2q = true;
+                },
+                else => {}
+            }
+
+            return;
+        }
+    }
+
+    if (path == ActivePath.Idle) return;
+
+    std.debug.print("[GIF       ] PATH{} active\n", .{@enumToInt(path)});
+
+    gifStat.apath = @enumToInt(path);
+    gifStat.oph   = true;
+}
+
+/// Sets VU mem address for PATH1
+pub fn setPath1Addr(addr: u16) void {
+    p1Addr = addr;
+}
+
+/// Starts GIF PATH1 (VU1/XGKICK), returns false if GIF is busy
+pub fn startPath1() bool {
+    setActivePath(ActivePath.Path1);
+
+    if (@intToEnum(ActivePath, gifStat.apath) != ActivePath.Path1) return false;
+
+    return true;
+}
+
+/// Reads data from PATH1
+pub fn readPath1() u128 {
+    const data = cpu.vu[1].readData(u128, p1Addr << 4);
+
+    p1Addr += 1;
+
+    return data;
+}
+
 /// Writes data to GIF FIFO via PATH3
 pub fn writePath3(data: u128) void {
     writeFifo(data);
 }
 
-/// Decodes a GIFtag
-fn decodeGifTag() void {
-    const tag = readFifo();
+/// Returns GIF to idle state or selects new PATH
+pub fn pathEnd() void {
+    gifStat.apath = @enumToInt(ActivePath.Idle);
 
+    gifStat.oph = false;
+
+    if (setFinish) {
+        gs.setFinish();
+
+        setFinish = false;
+    }
+
+    setActivePath(getNextPath());
+}
+
+/// Decodes a GIFtag
+fn decodeGifTag(tag: u128) void {
     info("   [GIF       ] New GIFtag = 0x{X:0>32}.", .{tag});
 
     gifTag.tag = tag;
@@ -235,31 +355,33 @@ fn decodeGifTag() void {
     gifTag.hasTag = true;
 }
 
-/// Returns GIF to idle state
-pub fn pathEnd() void {
-    gifStat.apath = @enumToInt(ActivePath.Idle);
-
-    gifStat.oph = false;
-
-    if (setFinish) {
-        gs.setFinish();
-
-        setFinish = false;
-    }
-}
-
 /// Steps the GIF
 pub fn step() void {
-    if (gifFifo.readableLength() == 0) {
-        return;
+    var data: u128 = undefined;
+
+    switch (@intToEnum(ActivePath, gifStat.apath)) {
+        ActivePath.Idle  => return,
+        ActivePath.Path1 => data = readPath1(),
+        ActivePath.Path3 => {
+            if (gifFifo.readableLength() == 0) return;
+
+            data = readFifo();
+        },
+        else => {
+            std.debug.print("[GIF       ] Unhandled PATH{} transfer\n", .{@enumToInt(ActivePath.Path3)});
+
+            @panic("Unhandled GIF PATH");
+        }
     }
 
     if (!gifTag.hasTag) {
-        decodeGifTag();
+        decodeGifTag(data);
 
         if (gifTag.nloop == 0) {
             if (gifTag.eop) {
                 info("   [GIF       ] End of packet.", .{});
+
+                pathEnd();
             }
 
             gifTag.hasTag = false;
@@ -272,20 +394,18 @@ pub fn step() void {
         }
     } else {
         switch (gifTag.fmt) {
-            Format.Packed  => doPacked(),
-            Format.Reglist => doReglist(),
-            Format.Image   => doImage(),
+            Format.Packed  => doPacked(data),
+            Format.Reglist => doReglist(data),
+            Format.Image   => doImage(data),
         }
     }
 }
 
 /// Processes an IMAGE primitive
-fn doImage() void {
+fn doImage(data: u128) void {
     if (nloop == gifTag.nloop) {
         info("   [GIF       ] IMAGE mode. NLOOP = {}", .{gifTag.nloop});
     }
-
-    const data = readFifo();
 
     gs.writeHwreg(@truncate(u64, data));
     gs.writeHwreg(@truncate(u64, data >> 64));
@@ -304,12 +424,11 @@ fn doImage() void {
 }
 
 /// Processes a PACKED primitive
-fn doPacked() void {
+fn doPacked(data: u128) void {
     if (nregs == 0 and nloop == gifTag.nloop) {
         info("   [GIF       ] PACKED mode. NREGS = {}, NLOOP = {}", .{gifTag.nregs, gifTag.nloop});
     }
 
-    const data = readFifo();
     const reg  = @truncate(u4, gifTag.regs >> (4 * nregs));
 
     gs.writePacked(reg, data);
@@ -334,12 +453,10 @@ fn doPacked() void {
 }
 
 /// Processes a REGLIST primitive
-fn doReglist() void {
+fn doReglist(data: u128) void {
     if (nregs == 0 and nloop == gifTag.nloop) {
         info("   [GIF       ] REGLIST mode. NREGS = {}, NLOOP = {}", .{gifTag.nregs, gifTag.nloop});
     }
-
-    const data = readFifo();
 
     var reg = @truncate(u4, gifTag.regs >> (4 * nregs));
 
