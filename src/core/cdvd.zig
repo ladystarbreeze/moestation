@@ -652,6 +652,7 @@ fn cmdGetToc() void {
 
     setDriveStat(0x06);
 
+    seekParam.pos = 0;
     seekParam.num = 1;
 
     for (readBuf.buf[0..2064]) |*b| b.* = 0;
@@ -664,7 +665,7 @@ fn cmdGetToc() void {
     readBuf.buf[0x05] = 0x72;
     readBuf.buf[0x11] = 0x03;
 
-    cyclesToRead = 1;
+    cyclesToRead = 100_000;
 }
 
 /// MechaconVersion
