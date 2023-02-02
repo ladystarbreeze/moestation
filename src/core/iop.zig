@@ -422,6 +422,12 @@ fn raiseException(excode: ExCode) void {
 
 /// Branch helper
 fn doBranch(target: u32, isCond: bool, rd: u5) void {
+    if (target == 0) {
+        std.debug.print("[IOP       ] Jump to 0\n", .{});
+        
+        @panic("Jump to 0");
+    }
+
     regFile.set(rd, regFile.npc);
 
     inDelaySlot[1] = true;
