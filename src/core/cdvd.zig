@@ -48,8 +48,10 @@ const CdvdReg = enum(u32) {
 
 /// N commands
 const NCommand = enum(u8) {
+    Pause   = 0x04,
     ReadCd  = 0x06,
     ReadDvd = 0x08,
+    GetToc  = 0x09,
 };
 
 /// S commands
@@ -441,8 +443,10 @@ fn runNCmd(cmd: u8) void {
     nCmdStat = 0x80;
 
     switch (cmd) {
+        @enumToInt(NCommand.Pause  ) => cmdPause(),
         @enumToInt(NCommand.ReadCd ) => cmdReadCd(),
         @enumToInt(NCommand.ReadDvd) => cmdReadDvd(),
+        @enumToInt(NCommand.GetToc ) => cmdGetToc(),
         else => {
             err("  [CDVD      ] Unhandled N command 0x{X:0>2}.", .{cmd});
 
@@ -642,6 +646,27 @@ fn cmdForbidDvd() void {
     sCmdLen = 1;
 }
 
+/// Get TOC
+fn cmdGetToc() void {
+    info("   [CDVD      ] GetToc", .{});
+
+    setDriveStat(0x06);
+
+    seekParam.num = 1;
+
+    for (readBuf.buf[0..2064]) |*b| b.* = 0;
+
+    readBuf.buf[0x00] = 0x04;
+    readBuf.buf[0x01] = 0x02;
+    readBuf.buf[0x02] = 0xF2;
+    readBuf.buf[0x03] = 0x00;
+    readBuf.buf[0x04] = 0x86;
+    readBuf.buf[0x05] = 0x72;
+    readBuf.buf[0x11] = 0x03;
+
+    cyclesToRead = 1;
+}
+
 /// MechaconVersion
 fn cmdMechaconVersion() void {
     info("   [CDVD      ] MechaconVersion", .{});
@@ -665,6 +690,16 @@ fn cmdOpenConfig() void {
     sCmdData.write(0);
 
     sCmdLen = 1;
+}
+
+/// Pause
+pub fn cmdPause() void {
+    info("   [CDVD      ] Pause", .{});
+
+    // Paused
+    setDriveStat(8);
+
+    sendInterrupt();
 }
 
 /// ReadCd
