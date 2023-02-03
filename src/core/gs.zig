@@ -1015,7 +1015,7 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             3 => @panic("Reserved alpha blending setting"),
         };
 
-        var Cv = (((@as(i10, @bitCast(i8, A)) - @as(i10, @bitCast(i8, B))) * @as(i10, @bitCast(i8, C))) >> 7) + @as(i10, @bitCast(i8, D));
+        var Cv = (((@as(i16, @bitCast(i8, A)) - @as(i16, @bitCast(i8, B))) * @as(i16, @bitCast(i8, C))) >> 7) + @as(i16, @bitCast(i8, D));
 
         if (colclamp) {
             if (Cv > 0xFF) {
@@ -1027,7 +1027,7 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             Cv &= 0xFF;
         }
 
-        newColor |= @as(u32, @truncate(u8, @bitCast(u10, Cv))) << (8 * i);
+        newColor |= @as(u32, @truncate(u8, @bitCast(u16, Cv))) << (8 * i);
     }
 
     return newColor;
@@ -1513,8 +1513,8 @@ fn drawTriangle() void {
                     //std.debug.print("T1 = {}, T2 = {}, T3 = {}\n", .{a.t, b_.t, c_.t});
                     //std.debug.print("Q1 = {}, Q2 = {}, Q3 = {}\n", .{a.q, b_.q, c_.q});
 
-                    var s = getTexCoord(a.s, b_.s, c_.s, w0, w1, w2, 1);
-                    var t = getTexCoord(a.t, b_.t, c_.t, w0, w1, w2, 1);
+                    var s = (@intToFloat(f32, w0) * a.s + @intToFloat(f32, w1) * b_.s + @intToFloat(f32, w2) * c_.s);
+                    var t = (@intToFloat(f32, w0) * a.t + @intToFloat(f32, w1) * b_.t + @intToFloat(f32, w2) * c_.t);
 
                     const q = getTexCoord(a.q, b_.q, c_.q, w0, w1, w2, area);
 
@@ -1525,12 +1525,12 @@ fn drawTriangle() void {
 
                     //std.debug.print("S/Q = {}, T/Q = {}\n", .{s, t});
 
-                    const u = @truncate(u14, @bitCast(u32, @floatToInt(i32, @round((s * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0)))) >> 11;
-                    const v = @truncate(u14, @bitCast(u32, @floatToInt(i32, @round((t * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0)))) >> 11;
+                    const u = @truncate(u14, @floatToInt(u32, (s * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0));
+                    const v = @truncate(u14, @floatToInt(u32, (t * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0));
 
-                    //std.debug.print("U = {}, V = {}\n", .{u, v});
+                    //std.debug.print("U = {}, V = {}\n", .{(u >> 4) % (@as(u14, 1) << tex[ctxt].tw), (v >> 4) % (@as(u14, 1) << tex[ctxt].th)});
 
-                    const texColor = getTex(u, v);
+                    const texColor = getTex((u >> 4) % (@as(u14, 1) << tex[ctxt].tw), (v >> 4) % (@as(u14, 1) << tex[ctxt].th));
 
                     //std.debug.print("Ct = 0x{X:0>8}\n", .{texColor});
 
