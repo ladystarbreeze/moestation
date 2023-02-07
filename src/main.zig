@@ -27,7 +27,7 @@ const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/scph39001.bin";
-const cdvdPath = "moeFiles/planetarian.iso";
+const cdvdPath = "moeFiles/atelier_iris.iso";
 const elfPath  = "moeFiles/vu1_demo.elf";
 
 /// SDL screen
@@ -59,8 +59,8 @@ pub fn main() void {
     defer SDL.SDL_Quit();
 
     // Set up window
-    screen.width  = 1024;
-    screen.height = 1024;
+    screen.width  = 640;
+    screen.height = 480;
 
     screen.stride = 4;
 

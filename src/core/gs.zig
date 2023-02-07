@@ -36,8 +36,6 @@ const renderScreen = main.renderScreen;
 const max = @import("../common/min_max.zig").max;
 const min = @import("../common/min_max.zig").min;
 
-const fpToFloat = @import("../common/fp.zig").fpToFloat;
-
 /// GS registers
 pub const GsReg = enum(u8) {
     Prim       = 0x00,
@@ -317,6 +315,13 @@ const Test = struct {
 
     /// Sets TEST
     pub fn set(self: *Test, data: u64) void {
+        if ((data & 1) != 0) {
+            //@panic("Unhandled alpha testing");
+        }
+        if ((data & (1 << 14)) != 0) {
+            //@panic("Unhandled destination alpha testing");
+        }
+
         self.zte  = (data & (1 << 16)) != 0;
         self.ztst = @intToEnum(ZTest, @truncate(u2, data >> 17));
     }
@@ -651,10 +656,10 @@ pub fn readPriv(comptime T: type, addr: u32) T {
 }
 
 /// Reads data from local memory
-pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, x: u23, y: u23) T {
+pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23) T {
     const addr = switch (psm) {
-        PixelFormat.Psmct32, PixelFormat.Psmz32  => base + 1024 * y + x,
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + 1024 * y + (x >> 1),
+        PixelFormat.Psmct32, PixelFormat.Psmz32  => base + width * y + x,
+        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
@@ -900,6 +905,8 @@ pub fn writeHwreg(data: u64) void {
     }
 }
 
+var framePtr: u23 = 0;
+
 /// Writes data to privileged register
 pub fn writePriv(addr: u32, data: u64) void {
     switch (addr) {
@@ -913,6 +920,16 @@ pub fn writePriv(addr: u32, data: u64) void {
         @enumToInt(PrivReg.GsImr) => {
             imr.set(data);
         },
+        @enumToInt(PrivReg.Dispfb1 ) => {
+            std.debug.print("[GS        ] Write to Dispfb1 = 0x{X:0>16}\n", .{data});
+
+            framePtr = 2048 * @as(u23, @truncate(u9, data));
+        },
+        @enumToInt(PrivReg.Dispfb2 ) => {
+            std.debug.print("[GS        ] Write to Dispfb2 = 0x{X:0>16}\n", .{data});
+
+            framePtr = 2048 * @as(u23, @truncate(u9, data));
+        },
         @enumToInt(PrivReg.Pmode   ),
         @enumToInt(PrivReg.Smode1  ),
         @enumToInt(PrivReg.Smode2  ),
@@ -920,9 +937,7 @@ pub fn writePriv(addr: u32, data: u64) void {
         @enumToInt(PrivReg.Synch1  ),
         @enumToInt(PrivReg.Synch2  ),
         @enumToInt(PrivReg.Syncv   ),
-        @enumToInt(PrivReg.Dispfb1 ),
         @enumToInt(PrivReg.Display1),
-        @enumToInt(PrivReg.Dispfb2 ),
         @enumToInt(PrivReg.Display2),
         @enumToInt(PrivReg.Bgcolor ) => {},
         else => {
@@ -936,11 +951,13 @@ pub fn writePriv(addr: u32, data: u64) void {
 }
 
 /// Writes data to local memory
-pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, x: u23, y: u23, data: T) void {
+pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23, data: T) void {
+    //std.debug.print("Width = {}\n", .{width});
+
     const addr = switch (psm) {
-        PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + 1024 * y + x,
-        PixelFormat.Psmct24 => base + 1024 * y + x,
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + 1024 * y + (x >> 1),
+        PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + width * y + x,
+        PixelFormat.Psmct24 => base + width * y + x,
+        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
@@ -977,10 +994,12 @@ fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i64 {
 fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
-    // Get current color from frame buffer
-    const oldColor = readVram(u32, PixelFormat.Psmct32, base, x, y);
+    const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
 
-    var newColor: u32 = 0;
+    // Get current color from frame buffer
+    const oldColor = readVram(u32, PixelFormat.Psmct32, base, fbWidth, x, y);
+
+    var newColor: u32 = color & 0xFF00_0000;
 
     var i: u5 = 0;
     while (i < 3) : (i += 1) {
@@ -1015,7 +1034,7 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             3 => @panic("Reserved alpha blending setting"),
         };
 
-        var Cv = (((@as(i16, @bitCast(i8, A)) - @as(i16, @bitCast(i8, B))) * @as(i16, @bitCast(i8, C))) >> 7) + @as(i16, @bitCast(i8, D));
+        var Cv = (((@bitCast(i16, @as(u16, A)) - @bitCast(i16, @as(u16, B))) * @bitCast(i16, @as(u16, C))) >> 7) + @bitCast(i16, @as(u16, D));
 
         if (colclamp) {
             if (Cv > 0xFF) {
@@ -1041,11 +1060,13 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
 
     const zAddr = 2048 * @as(u23, zbuf[ctxt].zbp);
 
+    const zbWidth = 64 * @as(u23, frame[ctxt].fbw);
+
     var depth_ = depth;
 
     const oldDepth = switch (zbuf[ctxt].psm) {
-        PixelFormat.Psmct32 , PixelFormat.Psmz32  => readVram(u32, PixelFormat.Psmz32 , zAddr, @bitCast(u23, x), @bitCast(u23, y)),
-        PixelFormat.Psmct16s, PixelFormat.Psmz16s => readVram(u16, PixelFormat.Psmz16s, zAddr, @bitCast(u23, x), @bitCast(u23, y)),
+        PixelFormat.Psmct32 , PixelFormat.Psmz32  => readVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
+        PixelFormat.Psmct16s, PixelFormat.Psmz16s => readVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         else => {
             std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
 
@@ -1090,8 +1111,8 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
 
     if (!zbuf[ctxt].zmsk) {
         switch (zbuf[ctxt].psm) {
-            PixelFormat.Psmct32 , PixelFormat.Psmz32  => writeVram(u32, PixelFormat.Psmz32 , zAddr, @bitCast(u23, x), @bitCast(u23, y), depth_),
-            PixelFormat.Psmct16s, PixelFormat.Psmz16s => writeVram(u16, PixelFormat.Psmz16s, zAddr, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, depth_)),
+            PixelFormat.Psmct32 , PixelFormat.Psmz32  => writeVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y), depth_),
+            PixelFormat.Psmct16s, PixelFormat.Psmz16s => writeVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, depth_)),
             else => {
                 std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
 
@@ -1130,11 +1151,11 @@ fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i64, w1: i64, w2: i64) u32 {
 }
 
 /// Interpolate STQ
-fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64, area: i64) f32 {
+fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64) f32 {
     //std.debug.print("W0 = {}, W1 = {}, W2 = {}\n", .{@intToFloat(f32, w0), @intToFloat(f32, w1), @intToFloat(f32, w2)});
     //std.debug.print("Area = {}\n", .{@intToFloat(f32, area)});
 
-    const texCoord = (@intToFloat(f32, w0) * a + @intToFloat(f32, w1) * b + @intToFloat(f32, w2) * c) / @intToFloat(f32, area);
+    const texCoord = @intToFloat(f32, w0) * a + @intToFloat(f32, w1) * b + @intToFloat(f32, w2) * c;
 
     //std.debug.print("Tex coord = {}\n", .{texCoord});
 
@@ -1148,6 +1169,8 @@ fn getTex(u: u14, v: u14) u32 {
     const texAddr  = 64 * @as(u23, tex[ctxt].tbp0);
     const clutAddr = 64 * @as(u23, tex[ctxt].cbp );
 
+    const tbWidth = 64 * @as(u23, tex[ctxt].tbw);
+
     const csa = tex[ctxt].csa;
 
     if (csa != 0) @panic("Unhandled CLUT offset");
@@ -1156,10 +1179,10 @@ fn getTex(u: u14, v: u14) u32 {
 
     switch (tex[ctxt].psm) {
         PixelFormat.Psmct24 => {
-            color = (@as(u32, texa.ta0) << 24) | (readVram(u32, PixelFormat.Psmct32, texAddr, u, v) & 0xFF_FFFF);
+            color = (@as(u32, texa.ta0) << 24) | (readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) & 0xFF_FFFF);
         },
         PixelFormat.Psmct4hl, PixelFormat.Psmct4hh => {
-            var idtex4 = @truncate(u23, readVram(u32, PixelFormat.Psmct32, texAddr, u, v) >> 24);
+            var idtex4 = @truncate(u23, readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) >> 24);
 
             if (tex[ctxt].psm == PixelFormat.Psmct4hl) {
                 idtex4 &= 0xF;
@@ -1175,12 +1198,12 @@ fn getTex(u: u14, v: u14) u32 {
                         @panic("Invalid CLUT CSM2 pixel format");
                     }
 
-                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, idtex4 >> 3, idtex4 & 7);
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 1024, idtex4 >> 3, idtex4 & 7);
                 },
                 PixelFormat.Psmct16 => {
                     const texColor = switch (tex[ctxt].csm) {
-                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex4),
-                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, idtex4 >> 3, idtex4 & 7),
+                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 1024, 0, idtex4),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 1024, idtex4 >> 3, idtex4 & 7),
                     };
 
                     const r = @truncate(u5, texColor >>  0);
@@ -1214,34 +1237,49 @@ fn getTex(u: u14, v: u14) u32 {
     return color;
 }
 
-/// Texture-vertex color multiplication
-fn texMul(Cv: u8, Ct: u8) u8 {
-    if (Cv == 0x80) return Ct;
+/// Texture-vertex alpha addition
+fn texAdd(Av: u8, At: u8) u8 {
+    if (Av == 0x80) return At;
 
-    var res = (@as(i10, @bitCast(i8, Cv)) * @as(i10, @bitCast(i8, Ct))) >> 7;
+    var res = @bitCast(i16, @as(u16, Av)) + @bitCast(i16, @as(u16, At));
 
-    if (res >= 0xFF) {
+    if (res > 0xFF) {
         res = 0xFF;
     } else if (res < 0) {
         res = 0;
     }
 
-    return @truncate(u8, @bitCast(u10, res));
+    return @truncate(u8, @bitCast(u16, res));
+}
+
+/// Texture-vertex color multiplication
+fn texMul(Cv: u8, Ct: u8) u8 {
+    if (Cv == 0x80) return Ct;
+
+    var res = (@bitCast(i16, @as(u16, Cv)) * @bitCast(i16, @as(u16, Ct))) >> 7;
+
+    if (res > 0xFF) {
+        res = 0xFF;
+    } else if (res < 0) {
+        res = 0;
+    }
+
+    return @truncate(u8, @bitCast(u16, res));
 }
 
 /// Texture-vertex color multiply-add
 fn texMulAdd(Cv: u8, Ct: u8, Av: u8) u8 {
     if (Cv == 0x80) return Ct;
 
-    var res = ((@as(i10, @bitCast(i8, Cv)) * @as(i10, @bitCast(i8, Ct))) >> 7) + @as(i10, @bitCast(i8, Av));
+    var res = ((@bitCast(i16, @as(u16, Cv)) * @bitCast(i16, @as(u16, Ct))) >> 7) + @bitCast(i16, @as(u16, Av));
 
-    if (res >= 0xFF) {
+    if (res > 0xFF) {
         res = 0xFF;
     } else if (res < 0) {
         res = 0;
     }
 
-    return @truncate(u8, @bitCast(u10, res));
+    return @truncate(u8, @bitCast(u16, res));
 }
 
 /// Draws a sprite
@@ -1289,6 +1327,8 @@ fn drawSprite() void {
 
     const fbAddr = 2048 * @as(u23, frame[ctxt].fbp);
 
+    const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
+
     const scax0 = scissor[ctxt].scax0;
     const scax1 = scissor[ctxt].scax1;
     const scay0 = scissor[ctxt].scay0;
@@ -1317,10 +1357,10 @@ fn drawSprite() void {
         }
     }
 
-    const uMin = min(u14, a.u, b.u) >> 4;
-    const uMax = max(u14, a.u, b.u) >> 4;
-    const vMin = min(u14, a.v, b.v) >> 4;
-    const vMax = max(u14, a.v, b.v) >> 4;
+    const uMin = min(u14, a.u >> 4, b.u >> 4);
+    const uMax = max(u14, a.u >> 4, b.u >> 4);
+    const vMin = min(u14, a.v >> 4, b.v >> 4);
+    const vMax = max(u14, a.v >> 4, b.v >> 4);
 
     const uStep = @intToFloat(f64, uMax - uMin) / @intToFloat(f64, b_.x - a_.x);
     const vStep = @intToFloat(f64, vMax - vMin) / @intToFloat(f64, b_.y - a_.y);
@@ -1331,18 +1371,13 @@ fn drawSprite() void {
         var x = a_.x;
         var u = @intToFloat(f64, uMin);
         while (x < b_.x) : (x += 1) {
-            if (!depthTest(x, y, a.z)) {
-                u += uStep;
-
-                continue;
-            }
-
             var color: u32 = 0;
 
             if (tme) {
                 const texColor = getTex(@floatToInt(u14, u), @floatToInt(u14, v));
 
                 switch (tex[ctxt].tfx) {
+                //switch (@as(u2, 1)) {
                     0 => {
                         // Modulate
                         color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)));
@@ -1372,7 +1407,7 @@ fn drawSprite() void {
                         color |= @as(u32, texMulAdd(a.b, @truncate(u8, texColor >> 16), a.a)) << 16;
 
                         if (tex[ctxt].tcc) {
-                            color |= @as(u32, a.a +| @truncate(u8, texColor >> 24)) << 24;
+                            color |= @as(u32, texAdd(a.a, @truncate(u8, texColor >> 24))) << 24;
                         } else {
                             color |= @as(u32, a.a) << 24;
                         }
@@ -1396,9 +1431,15 @@ fn drawSprite() void {
 
             if (abe) color = alphaBlend(fbAddr, @bitCast(u23, x), @bitCast(u23, y), color);
 
+            if (!depthTest(x, y, a.z)) {
+                u += uStep;
+
+                continue;
+            }
+
             switch (frame[ctxt].psm) {
-                PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, @bitCast(u23, x), @bitCast(u23, y), color),
-                PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, @bitCast(u23, x), @bitCast(u23, y), color),
+                PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color),
+                PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color),
                 else => {
                     std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
 
@@ -1457,6 +1498,8 @@ fn drawTriangle() void {
 
     const fbAddr = 2048 * @as(u23, frame[ctxt].fbp);
 
+    const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
+
     const scax0 = scissor[ctxt].scax0;
     const scax1 = scissor[ctxt].scax1;
     const scay0 = scissor[ctxt].scay0;
@@ -1477,8 +1520,6 @@ fn drawTriangle() void {
             @panic("Unhandled texture coordinates");
         }
     }
-    
-    const area = edgeFunction(a , b_, c_);
 
     // Calculate bounding box
     var xMin = min(i23, min(i23, a.x, b.x), c.x);
@@ -1513,10 +1554,10 @@ fn drawTriangle() void {
                     //std.debug.print("T1 = {}, T2 = {}, T3 = {}\n", .{a.t, b_.t, c_.t});
                     //std.debug.print("Q1 = {}, Q2 = {}, Q3 = {}\n", .{a.q, b_.q, c_.q});
 
-                    var s = (@intToFloat(f32, w0) * a.s + @intToFloat(f32, w1) * b_.s + @intToFloat(f32, w2) * c_.s);
-                    var t = (@intToFloat(f32, w0) * a.t + @intToFloat(f32, w1) * b_.t + @intToFloat(f32, w2) * c_.t);
+                    var s = getTexCoord(a.s, b_.s, c_.s, w0, w1, w2);
+                    var t = getTexCoord(a.t, b_.t, c_.t, w0, w1, w2);
 
-                    const q = getTexCoord(a.q, b_.q, c_.q, w0, w1, w2, area);
+                    const q = getTexCoord(a.q, b_.q, c_.q, w0, w1, w2);
 
                     //std.debug.print("S = {}, T = {}, Q = {}\n", .{s, t, q});
 
@@ -1593,8 +1634,8 @@ fn drawTriangle() void {
                 //std.debug.print("Alpha blending OK!!\n", .{});
 
                 switch (frame[ctxt].psm) {
-                    PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
-                    PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
+                    PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
+                    PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
                     else => {
                         std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
 
@@ -1701,11 +1742,13 @@ fn transmissionGifToVram(data: u64) void {
     const x = trxpos.dstX + trxParam.dstX;
     const y = trxpos.dstY + trxParam.dstY;
 
+    const trxWidth = trxParam.dstWidth;
+
     // Write data according to pixel format
     switch (bitbltbuf.dstFmt) {
         PixelFormat.Psmct32 => {
-            writeVram(u32, PixelFormat.Psmct32, base, x + 0, y, @truncate(u32, data >>  0));
-            writeVram(u32, PixelFormat.Psmct32, base, x + 1, y, @truncate(u32, data >> 32));
+            writeVram(u32, PixelFormat.Psmct32, base, trxWidth, x + 0, y, @truncate(u32, data >>  0));
+            writeVram(u32, PixelFormat.Psmct32, base, trxWidth, x + 1, y, @truncate(u32, data >> 32));
 
             trxParam.dstX += 2;
         },
@@ -1714,30 +1757,30 @@ fn transmissionGifToVram(data: u64) void {
                 0 => {
                     rgb24Rem = @truncate(u32, data >> 48);
 
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, @truncate(u32, data >>  0));
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >> 24));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, @truncate(u32, data >>  0));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >> 24));
 
                     trxParam.dstX += 2;
                 },
                 1 => {
                     rgb24Rem |= @truncate(u32, data & 0xFF) << 16;
 
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, rgb24Rem);
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem);
 
                     rgb24Rem = @truncate(u32, data >> 56);
 
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >>  8));
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 2, y, @truncate(u32, data >> 32));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >>  8));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y, @truncate(u32, data >> 32));
 
                     trxParam.dstX += 3;
                 },
                 2 => {
                     rgb24Rem |= @truncate(u32, data & 0xFFFF) << 8;
 
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 0, y, rgb24Rem);
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem);
 
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 1, y, @truncate(u32, data >> 16));
-                    writeVram(u32, PixelFormat.Psmct24, base, x + 2, y, @truncate(u32, data >> 40));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >> 16));
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y, @truncate(u32, data >> 40));
 
                     trxParam.dstX += 3;
                 },
@@ -1749,7 +1792,7 @@ fn transmissionGifToVram(data: u64) void {
         PixelFormat.Psmct16 => {
             var i: u23 = 0;
             while (i < 4) : (i += 1) {
-                writeVram(u16, PixelFormat.Psmct16, base, x + i, y, @truncate(u16, data >> @truncate(u6, 16 * i)));
+                writeVram(u16, PixelFormat.Psmct16, base, trxWidth, x + i, y, @truncate(u16, data >> @truncate(u6, 16 * i)));
             }
 
             trxParam.dstX += 4;
@@ -1757,7 +1800,7 @@ fn transmissionGifToVram(data: u64) void {
         PixelFormat.Psmct4hh => {
             var i: u23 = 0;
             while (i < 16) : (i += 1) {
-                writeVram(u4, PixelFormat.Psmct4hh, base, x + i, y, @truncate(u4, data >> @truncate(u6, 4 * i)));
+                writeVram(u4, PixelFormat.Psmct4hh, base, trxWidth, x + i, y, @truncate(u4, data >> @truncate(u6, 4 * i)));
             }
 
             trxParam.dstX += 16;
@@ -1765,7 +1808,7 @@ fn transmissionGifToVram(data: u64) void {
         PixelFormat.Psmct4hl => {
             var i: u23 = 0;
             while (i < 16) : (i += 1) {
-                writeVram(u4, PixelFormat.Psmct4hl, base, x + i, y, @truncate(u4, data >> @truncate(u6, 4 * i)));
+                writeVram(u4, PixelFormat.Psmct4hl, base, trxWidth, x + i, y, @truncate(u4, data >> @truncate(u6, 4 * i)));
             }
 
             trxParam.dstX += 16;
@@ -1795,8 +1838,8 @@ pub fn transmissionVramToVram() void {
     if (trxpos.dir != 0) @panic("Unhandled transmission direction");
 
     transLoop: while (true) {
-        const srcAddr = trxParam.srcBase + 1024 * (trxpos.srcY + trxParam.srcY) + trxpos.srcX + trxParam.srcX;
-        const dstAddr = trxParam.dstBase + 1024 * (trxpos.dstY + trxParam.dstY) + trxpos.dstX + trxParam.dstX;
+        const srcAddr = trxParam.srcBase + trxParam.srcWidth * (trxpos.srcY + trxParam.srcY) + trxpos.srcX + trxParam.srcX;
+        const dstAddr = trxParam.dstBase + trxParam.dstWidth * (trxpos.dstY + trxParam.dstY) + trxpos.dstX + trxParam.dstX;
 
         vram[dstAddr] = vram[srcAddr];
 
@@ -1843,7 +1886,7 @@ pub fn step(cyclesElapsed: i64) void {
 
             csr.vsint = true;
 
-            renderScreen(@ptrCast(*u8, vram));
+            renderScreen(@ptrCast(*u8, &vram[framePtr]));
 
             main.shouldRun = poll();
         } else if (lines == 544) {
