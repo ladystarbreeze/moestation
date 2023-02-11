@@ -28,10 +28,13 @@ const IntSourceIop = intc.IntSourceIop;
 const timer = @import("timer.zig");
 const timerIop = @import("timer_iop.zig");
 
+const setButtonState = @import("sio2.zig").setButtonState;
+
 const main = @import("../main.zig");
 
 const poll = main.poll;
-const renderScreen = main.renderScreen;
+const renderScreen  = main.renderScreen;
+const getController = main.getController;
 
 const max = @import("../common/min_max.zig").max;
 const min = @import("../common/min_max.zig").min;
@@ -157,6 +160,16 @@ const Primitive = enum(u3) {
     TriangleFan,
     Sprite,
     Reserved,
+
+    /// Returns number of vertices required to draw the primitive
+    pub fn getVtxCount(p: Primitive) usize {
+        return switch (p) {
+            Primitive.Point => 1,
+            Primitive.Line, Primitive.LineStrip, Primitive.Sprite => 2,
+            Primitive.Triangle, Primitive.TriangleStrip, Primitive.TriangleFan => 3,
+            else => @panic("Reserved primitive"),
+        };
+    }
 };
 
 /// GS transmission direction
@@ -354,10 +367,10 @@ const Scissor = struct {
 
     /// Sets SCISSOR
     pub fn set(self: *Scissor, data: u64) void {
-        self.scax0 = @as(i23, @bitCast(i11, @truncate(u11, data >>  0)));
-        self.scax1 = @as(i23, @bitCast(i11, @truncate(u11, data >> 16)));
-        self.scay0 = @as(i23, @bitCast(i11, @truncate(u11, data >> 32)));
-        self.scay1 = @as(i23, @bitCast(i11, @truncate(u11, data >> 48)));
+        self.scax0 = @bitCast(i23, @as(u23, @truncate(u11, data >>  0))) << 4;
+        self.scax1 = @bitCast(i23, @as(u23, @truncate(u11, data >> 16))) << 4;
+        self.scay0 = @bitCast(i23, @as(u23, @truncate(u11, data >> 32))) << 4;
+        self.scay1 = @bitCast(i23, @as(u23, @truncate(u11, data >> 48))) << 4;
     }
 };
 
@@ -454,8 +467,8 @@ const Xyoffset = struct {
 
     /// Sets XYOFFSET
     pub fn set(self: *Xyoffset, data: u64) void {
-        self.ofx = @as(i23, @bitCast(i16, @truncate(u16, data >>  0)));
-        self.ofy = @as(i23, @bitCast(i16, @truncate(u16, data >> 32)));
+        self.ofx = @bitCast(i23, @as(u23, @truncate(u16, data >>  0)));
+        self.ofy = @bitCast(i23, @as(u23, @truncate(u16, data >> 32)));
     }
 };
 
@@ -550,12 +563,10 @@ const cyclesFrame: i64 = cyclesLine * 60;
 var cyclesToNextLine: i64 = 0;
 var lines: i64 = 0;
 
-const VertexQueue = LinearFifo(Vertex, LinearFifoBufferType{.Static = 16});
+const VertexQueue = LinearFifo(Vertex, LinearFifoBufferType{.Static = 3});
 
 /// Vertex queue
 var vtxQueue = VertexQueue.init();
-
-var vtxCount: i32 = 0;
 
 // GS registers
 var gsRegs: [0x63]u64 = undefined;
@@ -626,9 +637,8 @@ pub fn setFinish() void {
 }
 
 /// Clears vertex queue, sets primitive vertex number
-fn clearVtxQueue(n: i32) void {
+fn clearVtxQueue() void {
     vtxQueue = VertexQueue.init();
-    vtxCount = n;
 }
 
 /// Reads data from a GS privileged register
@@ -657,7 +667,7 @@ pub fn readPriv(comptime T: type, addr: u32) T {
 
 /// Reads data from local memory
 pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23) T {
-    const addr = switch (psm) {
+    var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         else => {
@@ -666,6 +676,8 @@ pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u
             @panic("Unhandled pixel format");
         }
     };
+
+    addr &= 0xFF_FFF;
 
     return switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr],
@@ -696,16 +708,7 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.Prim      ) => {
             prim.set(data);
 
-            switch (prim.prim) {
-                Primitive.Line     => clearVtxQueue(2),
-                Primitive.Triangle => clearVtxQueue(3),
-                Primitive.Sprite   => clearVtxQueue(2),
-                else => {
-                    std.debug.print("Unhandled primitive: {s}\n", .{@tagName(prim.prim)});
-
-                    @panic("Unhandled primitive");
-                }
-            }
+            clearVtxQueue();
         },
         @enumToInt(GsReg.Rgbaq     ) => rgbaq.set(data),
         @enumToInt(GsReg.St        ) => {
@@ -720,8 +723,8 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.Xyz2      ), => {
             var vtx = Vertex{};
 
-            vtx.x = @as(i23, @bitCast(i16, @truncate(u16, data >>  0)));
-            vtx.y = @as(i23, @bitCast(i16, @truncate(u16, data >> 16)));
+            vtx.x = @bitCast(i23, @as(u23, @truncate(u16, data >>  0)));
+            vtx.y = @bitCast(i23, @as(u23, @truncate(u16, data >> 16)));
 
             if (addr == @enumToInt(GsReg.Xyzf2)) {
                 vtx.z = @as(u32, @truncate(u24, data >> 32));
@@ -749,26 +752,24 @@ pub fn write(addr: u8, data: u64) void {
                 assert(false);
             };
 
-            vtxCount -= 1;
+            const vtxCount = vtxQueue.readableLength();
 
-            if (vtxCount == 0) {
+            if (vtxCount == Primitive.getVtxCount(prim.prim)) {
                 switch (prim.prim) {
-                    Primitive.Triangle => drawTriangle(),
-                    Primitive.Sprite   => drawSprite(),
+                    Primitive.Point  => drawPoint(),
+                    Primitive.Triangle, Primitive.TriangleStrip => drawTriangle(),
+                    Primitive.Sprite => drawSprite(),
                     else => {
                         std.debug.print("Unsupported primitive: {s}\n", .{@tagName(prim.prim)});
+
+                        @panic("Unsupported primitive");
                     }
                 }
 
-                switch (prim.prim) {
-                    Primitive.Line     => clearVtxQueue(2),
-                    Primitive.Triangle => clearVtxQueue(3),
-                    Primitive.Sprite   => clearVtxQueue(2),
-                    else => {
-                        std.debug.print("Unhandled primitive: {s}\n", .{@tagName(prim.prim)});
-
-                        @panic("Unhandled primitive");
-                    }
+                if (prim.prim == Primitive.TriangleStrip) {
+                    vtxQueue.discard(1);
+                } else {
+                    clearVtxQueue();
                 }
             }
         },
@@ -954,16 +955,19 @@ pub fn writePriv(addr: u32, data: u64) void {
 pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23, data: T) void {
     //std.debug.print("Width = {}\n", .{width});
 
-    const addr = switch (psm) {
+    var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + width * y + x,
         PixelFormat.Psmct24 => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
+        PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
             @panic("Unhandled pixel format");
         }
     };
+
+    addr &= 0xFF_FFF;
 
     switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr] = data,
@@ -974,6 +978,14 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
             } else {
                 vram[addr] = (vram[addr] & 0xFFFF_0000) | (@as(u32, data) <<  0);
             }
+        },
+        PixelFormat.Psmct8 => {
+            const vramData = vram[addr];
+
+            const shift = 8 * @truncate(u5, x & 3);
+            const mask  = ~(@as(u32, 0xFF) << shift);
+
+            vram[addr] = (vramData & mask) | (@as(u32, data) << shift);
         },
         PixelFormat.Psmct4hh => vram[addr] = (vram[addr] & 0x0FFF_FFFF) | (@as(u32, data) << 28),
         PixelFormat.Psmct4hl => vram[addr] = (vram[addr] & 0xF0FF_FFFF) | (@as(u32, data) << 24),
@@ -992,6 +1004,8 @@ fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i64 {
 
 /// Performs alpha blending
 fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
+    //std.debug.print("Alpha blend!\n", .{});
+
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
     const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
@@ -999,7 +1013,7 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
     // Get current color from frame buffer
     const oldColor = readVram(u32, PixelFormat.Psmct32, base, fbWidth, x, y);
 
-    var newColor: u32 = color & 0xFF00_0000;
+    var newColor: u32 = 0;
 
     var i: u5 = 0;
     while (i < 3) : (i += 1) {
@@ -1034,7 +1048,7 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             3 => @panic("Reserved alpha blending setting"),
         };
 
-        var Cv = (((@bitCast(i16, @as(u16, A)) - @bitCast(i16, @as(u16, B))) * @bitCast(i16, @as(u16, C))) >> 7) + @bitCast(i16, @as(u16, D));
+        var Cv = (((@bitCast(i32, @as(u32, A)) - @bitCast(i32, @as(u32, B))) * @bitCast(i32, @as(u32, C))) >> 7) + @bitCast(i32, @as(u32, D));
 
         if (colclamp) {
             if (Cv > 0xFF) {
@@ -1046,10 +1060,12 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
             Cv &= 0xFF;
         }
 
-        newColor |= @as(u32, @truncate(u8, @bitCast(u16, Cv))) << (8 * i);
+        newColor |= @as(u32, @truncate(u8, @bitCast(u32, Cv))) << (8 * i);
     }
 
-    return newColor;
+    //std.debug.print("Alpha blending OK!\n", .{});
+
+    return newColor | (color & 0xFF00_0000);
 }
 
 /// Performs a depth test
@@ -1162,6 +1178,48 @@ fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64) f32 {
     return texCoord;
 }
 
+/// Taken from https://github.com/PSI-Rockin/DobieStation
+/// Interpolate UV
+fn getUv(x: i64, u1_: u14, x1: i64, u2_: u14, x2: i64) i64 {
+    var temp = @bitCast(i64, @as(u64, u1_)) * (x2 - x);
+
+    temp += @bitCast(i64, @as(u64, u2_)) * (x - x1);
+
+    if ((x2 - x1) == 0) return @bitCast(i64, @as(u64, u1_));
+
+    return @divTrunc(temp, x2 - x1);
+}
+
+/// Interpolate ST
+fn getSt(x: i32, s1: f32, x1: i32, s2: f32, x2: i32) f32 {
+    var temp = s1 * @intToFloat(f32, x2 - x);
+
+    temp += s2 * @intToFloat(f32, x - x1);
+
+    if ((x2 - x1) == 0) return s1;
+
+    return temp / @intToFloat(f32, x2 - x1);
+}
+
+/// Taken from https://github.com/PSI-Rockin/DobieStation
+/// Returns UV step
+fn getUvStep(u1_: u14, x1: i64, u2_: u14, x2: i64, m: i64) i64 {
+    if ((x2 - x1) == 0) return (@bitCast(i64, @as(u64, u2_)) - @bitCast(i64, @as(u64, u1_))) * m;
+
+    std.debug.print("UV step OK!\n", .{});
+
+    return @divTrunc((@bitCast(i64, @as(u64, u2_)) - @bitCast(i64, @as(u64, u1_))) * m, x2 - x1);
+}
+
+/// Returns ST step
+fn getStStep(s1: f32, x1: i32, s2: f32, x2: i32, m: i32) f32 {
+    if ((x2 - x1) == 0) return (s2 - s1) * @intToFloat(f32, m);
+
+    std.debug.print("ST step OK!\n", .{});
+
+    return ((s2 - s1) * @intToFloat(f32, m)) / @intToFloat(f32, x2 - x1);
+}
+
 /// Returns a texture pixel (UV coordinates)
 fn getTex(u: u14, v: u14) u32 {
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
@@ -1178,6 +1236,9 @@ fn getTex(u: u14, v: u14) u32 {
     var color: u32 = 0;
 
     switch (tex[ctxt].psm) {
+        PixelFormat.Psmct32 => {
+            color = readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v);
+        },
         PixelFormat.Psmct24 => {
             color = (@as(u32, texa.ta0) << 24) | (readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) & 0xFF_FFFF);
         },
@@ -1282,12 +1343,11 @@ fn texMulAdd(Cv: u8, Ct: u8, Av: u8) u8 {
     return @truncate(u8, @bitCast(u16, res));
 }
 
-/// Draws a sprite
-fn drawSprite() void {
-    std.debug.print("Drawing sprite...\n", .{});
+/// Draws a point
+fn drawPoint() void {
+    std.debug.print("Drawing point...\n", .{});
 
-    var a = vtxQueue.readItem().?;
-    var b = vtxQueue.readItem().?;
+    var a = vtxQueue.peekItem(0);
 
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
@@ -1296,53 +1356,26 @@ fn drawSprite() void {
 
     // Offset coordinates
     a.x -= ofx;
-    b.x -= ofx;
     a.y -= ofy;
-    b.y -= ofy;
 
-    a.x = @as(i23, @truncate(i12, a.x >> 4));
-    b.x = @as(i23, @truncate(i12, b.x >> 4));
-    a.y = @as(i23, @truncate(i12, a.y >> 4));
-    b.y = @as(i23, @truncate(i12, b.y >> 4));
+    a.x >>= 4;
+    a.y >>= 4;
 
-    var a_ = Vertex{};
-    var b_ = Vertex{};
-
-    // Sort vertices from left to right
-    if (a.x < b.x) {
-        a_ = a;
-        b_ = b;
-    } else {
-        a_ = b;
-        b_ = a;
-    }
-
-    // Swap Y coordinates to draw from top-left to bottom-right
-    if (a_.y > b_.y) {
-        const temp = b_.y;
-
-        b_.y = a_.y;
-        a_.y = temp;
-    }
+    const scax0 = scissor[ctxt].scax0 >> 4;
+    const scax1 = (scissor[ctxt].scax1 >> 4) + 1;
+    const scay0 = scissor[ctxt].scay0 >> 4;
+    const scay1 = (scissor[ctxt].scay1 >> 4) + 1;
 
     const fbAddr = 2048 * @as(u23, frame[ctxt].fbp);
 
     const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
-
-    const scax0 = scissor[ctxt].scax0;
-    const scax1 = scissor[ctxt].scax1;
-    const scay0 = scissor[ctxt].scay0;
-    const scay1 = scissor[ctxt].scay1;
-
-    a_.x = max(i23, a_.x, scax0);
-    a_.y = max(i23, a_.y, scay0);
-    b_.x = min(i23, b_.x, scax1);
-    b_.y = min(i23, b_.y, scay1);
     
-    std.debug.print("a = [{};{}], b = [{};{}]\n", .{a_.x, a_.y, b_.x, b_.y});
+    std.debug.print("a = [{};{}]\n", .{a.x, a.y});
 
     std.debug.print("Frame buffer address = 0x{X:0>6}, OFX = {}, OFY = {}\n", .{fbAddr, ofx >> 4, ofy >> 4});
     std.debug.print("SCAX0 = {}, SCAX1 = {}, SCAY0 = {}, SCAY1 = {}\n", .{scax0, scax1, scay0, scay1});
+
+    if ((a.x < scax0) or (a.x > scax1) or (a.y < scay0) or (a.y > scay1)) return;
 
     const tme = if (prmodecont) prim.tme else prmode.tme;
     const abe = if (prmodecont) prim.abe else prmode.abe;
@@ -1355,26 +1388,101 @@ fn drawSprite() void {
 
             @panic("Unhandled texture coordinates");
         }
+
+        std.debug.print("Unhandled texturing\n", .{});
+
+        @panic("Unhandled texturing");
     }
 
-    const uMin = min(u14, a.u >> 4, b.u >> 4);
-    const uMax = max(u14, a.u >> 4, b.u >> 4);
-    const vMin = min(u14, a.v >> 4, b.v >> 4);
-    const vMax = max(u14, a.v >> 4, b.v >> 4);
+    var color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
 
-    const uStep = @intToFloat(f64, uMax - uMin) / @intToFloat(f64, b_.x - a_.x);
-    const vStep = @intToFloat(f64, vMax - vMin) / @intToFloat(f64, b_.y - a_.y);
+    if (abe) color = alphaBlend(fbAddr, @bitCast(u23, a.x), @bitCast(u23, a.y), color);
 
-    var y = a_.y;
-    var v = @intToFloat(f64, vMin);
-    while (y < b_.y) : (y += 1) {
-        var x = a_.x;
-        var u = @intToFloat(f64, uMin);
-        while (x < b_.x) : (x += 1) {
+    if (!depthTest(a.x, a.y, a.z)) return;
+
+    switch (frame[ctxt].psm) {
+        PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, a.x), @bitCast(u23, a.y), color),
+        PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, a.x), @bitCast(u23, a.y), color),
+        else => {
+            std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
+
+            @panic("Unhandled pixel storage mode");
+        }
+    }
+}
+
+/// Draws a sprite
+fn drawSprite() void {
+    std.debug.print("Drawing sprite...\n", .{});
+
+    var a = vtxQueue.peekItem(0);
+    var b = vtxQueue.peekItem(1);
+
+    const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    const ofx = xyoffset[ctxt].ofx;
+    const ofy = xyoffset[ctxt].ofy;
+
+    // Offset coordinates
+    a.x -= ofx;
+    b.x -= ofx;
+    a.y -= ofy;
+    b.y -= ofy;
+
+    const fbAddr = 2048 * @as(u23, frame[ctxt].fbp);
+
+    const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
+
+    const scax0 = scissor[ctxt].scax0;
+    const scax1 = scissor[ctxt].scax1;
+    const scay0 = scissor[ctxt].scay0;
+    const scay1 = scissor[ctxt].scay1;
+
+    const xMin = (max(i23, min(i23, a.x, b.x), scax0) >> 4) << 4;
+    const xMax = (min(i23, max(i23, a.x, b.x), (scax1 + 0x10)) >> 4) << 4;
+    const yMin = (max(i23, min(i23, a.y, b.y), scay0) >> 4) << 4;
+    const yMax = (min(i23, max(i23, a.y, b.y), (scay1 + 0x10)) >> 4) << 4;
+    
+    std.debug.print("a = [{};{}], b = [{};{}]\n", .{xMin >> 4, yMin >> 4, xMax >> 4, yMax >> 4});
+
+    std.debug.print("Frame buffer address = 0x{X:0>6}, OFX = {}, OFY = {}\n", .{fbAddr, ofx >> 4, ofy >> 4});
+    std.debug.print("SCAX0 = {}, SCAX1 = {}, SCAY0 = {}, SCAY1 = {}\n", .{scax0 >> 4, (scax1 >> 4) + 1, scay0 >> 4, (scay1 >> 4) + 1});
+
+    const tme = if (prmodecont) prim.tme else prmode.tme;
+    const abe = if (prmodecont) prim.abe else prmode.abe;
+    const fst = if (prmodecont) prim.fst else prmode.fst;
+
+    const uStart = getUv(xMin, a.u, a.x, b.u, b.x) << 16;
+    const vStart = getUv(yMin, a.v, a.y, b.v, b.y) << 16;
+
+    const sStart = getSt(xMin, a.s, a.x, b.s, b.x);
+    const tStart = getSt(xMin, a.t, a.y, b.t, b.y);
+
+    std.debug.print("U = {}, V = {}, S = {}, T = {}\n", .{uStart >> 20, vStart >> 20, sStart, tStart});
+
+    const uStep = getUvStep(a.u, a.x, b.u, b.x, 0x100000);
+    const vStep = getUvStep(a.v, a.y, b.v, b.y, 0x100000);
+
+    const sStep = getStStep(a.s, a.x, b.s, b.x, 0x10);
+    const tStep = getStStep(a.t, a.y, b.t, b.y, 0x10);
+
+    std.debug.print("Ustep = {}, Vstep = {}\n", .{uStep >> 20, vStep >> 20});
+
+    var y = yMin >> 4;
+    var v = vStart;
+    var t = tStart;
+    while (y < (yMax >> 4)) : (y += 1) {
+        var x = xMin >> 4;
+        var u = uStart;
+        var s = sStart;
+        while (x < (xMax >> 4)) : (x += 1) {
             var color: u32 = 0;
 
             if (tme) {
-                const texColor = getTex(@floatToInt(u14, u), @floatToInt(u14, v));
+                const texU = if (fst) @truncate(u14, @bitCast(u64, u >> 16)) else @truncate(u14, @floatToInt(u32, ((s / a.q) * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0));
+                const texV = if (fst) @truncate(u14, @bitCast(u64, v >> 16)) else @truncate(u14, @floatToInt(u32, ((t / a.q) * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0));
+
+                const texColor = getTex(texU >> 4, texV >> 4);
 
                 switch (tex[ctxt].tfx) {
                 //switch (@as(u2, 1)) {
@@ -1433,6 +1541,7 @@ fn drawSprite() void {
 
             if (!depthTest(x, y, a.z)) {
                 u += uStep;
+                s += sStep;
 
                 continue;
             }
@@ -1448,9 +1557,11 @@ fn drawSprite() void {
             }
 
             u += uStep;
+            s += sStep;
         }
 
         v += vStep;
+        t += tStep;
     }
 }
 
@@ -1458,9 +1569,9 @@ fn drawSprite() void {
 fn drawTriangle() void {
     std.debug.print("Drawing triangle...\n", .{});
 
-    var a = vtxQueue.readItem().?;
-    var b = vtxQueue.readItem().?;
-    var c = vtxQueue.readItem().?;
+    var a = vtxQueue.peekItem(0);
+    var b = vtxQueue.peekItem(1);
+    var c = vtxQueue.peekItem(2);
 
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
 
@@ -1500,10 +1611,10 @@ fn drawTriangle() void {
 
     const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
 
-    const scax0 = scissor[ctxt].scax0;
-    const scax1 = scissor[ctxt].scax1;
-    const scay0 = scissor[ctxt].scay0;
-    const scay1 = scissor[ctxt].scay1;
+    const scax0 = scissor[ctxt].scax0 >> 4;
+    const scax1 = (scissor[ctxt].scax1 >> 4) + 1;
+    const scay0 = scissor[ctxt].scay0 >> 4;
+    const scay1 = (scissor[ctxt].scay1 >> 4) + 1;
 
     std.debug.print("Frame buffer address = 0x{X:0>6}, OFX = {}, OFY = {}\n", .{fbAddr, ofx >> 4, ofy >> 4});
     std.debug.print("SCAX0 = {}, SCAX1 = {}, SCAY0 = {}, SCAY1 = {}\n", .{scax0, scax1, scay0, scay1});
@@ -1797,6 +1908,14 @@ fn transmissionGifToVram(data: u64) void {
 
             trxParam.dstX += 4;
         },
+        PixelFormat.Psmct8 => {
+            var i: u23 = 0;
+            while (i < 8) : (i += 1) {
+                writeVram(u8, PixelFormat.Psmct8, base, trxWidth, x + i, y, @truncate(u8, data >> @truncate(u6, 8 * i)));
+            }
+
+            trxParam.dstX += 8;
+        },
         PixelFormat.Psmct4hh => {
             var i: u23 = 0;
             while (i < 16) : (i += 1) {
@@ -1889,6 +2008,8 @@ pub fn step(cyclesElapsed: i64) void {
             renderScreen(@ptrCast(*u8, &vram[framePtr]));
 
             main.shouldRun = poll();
+
+            setButtonState(getController());
         } else if (lines == 544) {
             lines = 0;
 
