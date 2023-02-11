@@ -623,10 +623,9 @@ fn doPath3() void {
 
         channels[chnId].hasTag = true;
 
+        // Not valid?
         if (channels[chnId].chcr.tte) {
-            info("  [DMAC      ] Unhandled tag transfer.", .{});
-            
-            assert(false);
+            std.debug.print("[DMAC       ] PATH3 TTE\n", .{});
         }
 
         if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
