@@ -377,7 +377,7 @@ const RegFile = struct {
 
         //const tag = @tagName(@intToEnum(CpuReg, idx));
 
-        //info("   [EE Core   ] ${s} = 0x{X:0>8}", .{tag, data});
+        //err("  [EE Core   ] ${s} = 0x{X:0>8}", .{tag, data});
 
         self.regs[0].set(u128, 0);
     }
@@ -428,7 +428,7 @@ pub fn init() void {
     vu[0].setOther(&vu[1]);
     vu[1].setOther(&vu[0]);
 
-    info("   [EE Core   ] Successfully initialized.", .{});
+    err("  [EE Core   ] Successfully initialized.", .{});
 }
 
 /// Translates virtual address to physical address. Returns true if scratchpad access
@@ -754,6 +754,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (f) {
                         0x08 ... 0x0B => vu_int.iMaddabc(&vu[0], instr),
+                        0x15 => vu_int.iFtoi4(&vu[0], instr),
                         0x18 ... 0x1B => vu_int.iMulabc(&vu[0], instr),
                         0x1F => vu_int.iClip(&vu[0], instr),
                         0x2E => vu_int.iOpmula(&vu[0], instr),
@@ -936,15 +937,15 @@ pub fn setIntPending(irq: bool) void {
 pub fn checkIntPending() void {
     const intEnabled = cop0.isIe() and cop0.isEie() and !cop0.isErl() and !cop0.isExl();
 
-    // info("   [EE Core   ] IE = {}, EIE = {}, ERL = {}, EXL = {}", .{cop0.isIe(), cop0.isEie(), cop0.isErl(), cop0.isExl()});
-    // info("   [EE Core   ] IM = 0b{b:0>3}, IP = 0b{b:0>3}", .{cop0.getIm(), cop0.getIp()});
+    // err("  [EE Core   ] IE = {}, EIE = {}, ERL = {}, EXL = {}", .{cop0.isIe(), cop0.isEie(), cop0.isErl(), cop0.isExl()});
+    // err("  [EE Core   ] IM = 0b{b:0>3}, IP = 0b{b:0>3}", .{cop0.getIm(), cop0.getIp()});
 
     intPending = intEnabled and (cop0.getIm() & cop0.getIp()) != 0;
 }
 
 /// Raises a generic Level 1 CPU exception
 fn raiseExceptionL1(excode: ExCode) void {
-    //info("   [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
+    //err("  [EE Core   ] {s} exception @ 0x{X:0>8}.", .{@tagName(excode), regFile.cpc});
 
     cop0.setExCode(excode);
 
@@ -976,6 +977,12 @@ fn raiseExceptionL1(excode: ExCode) void {
 
 /// Branch helper
 fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
+    if (target == 0) {
+        std.debug.print("[EE Core   ] Jump to 0\n", .{});
+        
+        @panic("Jump to 0");
+    }
+
     regFile.set(u64, rd, @as(u64, regFile.npc));
 
     inDelaySlot[1] = true;
@@ -1010,7 +1017,7 @@ fn iAdd(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ADD ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] ADD ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1035,7 +1042,7 @@ fn iAddi(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ADDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] ADDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1052,7 +1059,7 @@ fn iAddiu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] ADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1069,7 +1076,7 @@ fn iAddu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] ADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1088,7 +1095,7 @@ fn iAnd(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] AND ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] AND ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -1105,7 +1112,7 @@ fn iAndi(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] ANDI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1128,7 +1135,7 @@ fn iBcf(instr: u32, comptime n: u2) void {
     doBranch(target, !cpcond, @enumToInt(CpuReg.R0), false);
 
     if (doDisasm) {
-        info("   [EE Core   ] BC{}F 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
+        err("  [EE Core   ] BC{}F 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
     }
 }
 
@@ -1151,7 +1158,7 @@ fn iBct(instr: u32, comptime n: u2) void {
     doBranch(target, cpcond, @enumToInt(CpuReg.R0), false);
 
     if (doDisasm) {
-        info("   [EE Core   ] BC{}T 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
+        err("  [EE Core   ] BC{}T 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
     }
 }
 
@@ -1170,7 +1177,7 @@ fn iBeq(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
-        info("   [EE Core   ] BEQ ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] BEQ ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1189,7 +1196,7 @@ fn iBeql(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
-        info("   [EE Core   ] BEQL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] BEQL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1206,7 +1213,7 @@ fn iBgez(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1223,7 +1230,7 @@ fn iBgezal(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGEZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGEZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1240,7 +1247,7 @@ fn iBgezall(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGEZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGEZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1257,7 +1264,7 @@ fn iBgezl(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1274,7 +1281,7 @@ fn iBgtz(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1291,7 +1298,7 @@ fn iBgtzl(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BGTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BGTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1308,7 +1315,7 @@ fn iBlez(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLEZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1325,7 +1332,7 @@ fn iBlezl(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLEZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1342,7 +1349,7 @@ fn iBltz(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLTZ ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1359,7 +1366,7 @@ fn iBltzal(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLTZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLTZAL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1376,7 +1383,7 @@ fn iBltzall(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLTZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLTZALL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1393,7 +1400,7 @@ fn iBltzl(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         
-        info("   [EE Core   ] BLTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
+        err("  [EE Core   ] BLTZL ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}", .{tagRs, target, tagRs, regFile.get(u64, rs)});
     }
 }
 
@@ -1412,7 +1419,7 @@ fn iBne(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
-        info("   [EE Core   ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] BNE ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1431,7 +1438,7 @@ fn iBnel(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
         
-        info("   [EE Core   ] BNEL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] BNEL ${s}, ${s}, 0x{X:0>8}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, target, tagRs, regFile.get(u64, rs), tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1447,7 +1454,7 @@ fn iCache(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] CACHE 0x{X:0>2}, 0x{X}(${s}); ADDR = 0x{X:0>8}", .{rt, imm16s, tagRs, addr});
+        err("  [EE Core   ] CACHE 0x{X:0>2}, 0x{X}(${s}); ADDR = 0x{X:0>8}", .{rt, imm16s, tagRs, addr});
     }
 }
 
@@ -1473,7 +1480,7 @@ fn iCfc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] CFC{} ${s}, ${}; ${s} = 0x{X:0>16}", .{n, tagRt, rd, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] CFC{} ${s}, ${}; ${s} = 0x{X:0>16}", .{n, tagRt, rd, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1497,7 +1504,7 @@ fn iCtc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] CTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, data});
+        err("  [EE Core   ] CTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, data});
     }
 }
 
@@ -1514,7 +1521,7 @@ fn iDaddiu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] DADDIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -1533,14 +1540,14 @@ fn iDaddu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] DADDU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
 /// Disable Interrupts
 fn iDi() void {
     if (doDisasm) {
-        info("   [EE Core   ] DI", .{});
+        err("  [EE Core   ] DI", .{});
     }
 
     if (cop0.isEdiEnabled()) {
@@ -1612,7 +1619,7 @@ fn iDiv(instr: u32, comptime pipeline: u1) void {
 
         const isPipe1 = if (pipeline == 1) "1" else "";
 
-        info("   [EE Core   ] DIV{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        err("  [EE Core   ] DIV{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -1653,7 +1660,7 @@ fn iDivu(instr: u32, comptime pipeline: u1) void {
 
         const isPipe1 = if (pipeline == 1) "1" else "";
 
-        info("   [EE Core   ] DIVU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+        err("  [EE Core   ] DIVU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
     }
 }
 
@@ -1670,7 +1677,7 @@ fn iDsll(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1687,7 +1694,7 @@ fn iDsll32(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSLL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSLL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1704,7 +1711,7 @@ fn iDsllv(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1721,7 +1728,7 @@ fn iDsra(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1738,7 +1745,7 @@ fn iDsrav(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1755,7 +1762,7 @@ fn iDsra32(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRA32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRA32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1772,7 +1779,7 @@ fn iDsrl(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1789,7 +1796,7 @@ fn iDsrlv(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1806,7 +1813,7 @@ fn iDsrl32(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] DSRL32 ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -1825,14 +1832,14 @@ fn iDsubu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] DSUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] DSUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
 /// Enable Interrupts
 fn iEi() void {
     if (doDisasm) {
-        info("   [EE Core   ] EI", .{});
+        err("  [EE Core   ] EI", .{});
     }
 
     if (cop0.isEdiEnabled()) {
@@ -1873,7 +1880,7 @@ fn iJ(instr: u32) void {
     doBranch(target, true, @enumToInt(CpuReg.R0), false);
 
     if (doDisasm) {
-        info("   [EE Core   ] J 0x{X:0>8}; PC = {X:0>8}h", .{target, target});
+        err("  [EE Core   ] J 0x{X:0>8}; PC = {X:0>8}h", .{target, target});
     }
 }
 
@@ -1883,8 +1890,10 @@ fn iJal(instr: u32) void {
 
     doBranch(target, true, @enumToInt(CpuReg.RA), false);
 
+    //std.debug.print("[EE Core   ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}\n", .{target, regFile.get(u64, @enumToInt(CpuReg.RA))});
+
     if (doDisasm) {
-        info("   [EE Core   ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}, PC = {X:0>8}h", .{target, regFile.get(u64, @enumToInt(CpuReg.RA)), target});
+        err("  [EE Core   ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}, PC = {X:0>8}h", .{target, regFile.get(u64, @enumToInt(CpuReg.RA)), target});
     }
 }
 
@@ -1901,7 +1910,7 @@ fn iJalr(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
     
-        info("   [EE Core   ] JALR ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(u64, rd), target});
+        err("  [EE Core   ] JALR ${s}, ${s}; ${s} = 0x{X:0>8}, PC = {X:0>8}h", .{tagRd, tagRs, tagRd, regFile.get(u64, rd), target});
     }
 }
 
@@ -1916,7 +1925,7 @@ fn iJr(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
     
-        info("   [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
+        err("  [EE Core   ] JR ${s}; PC = {X:0>8}h", .{tagRs, target});
     }
 }
 
@@ -1934,7 +1943,7 @@ fn iLb(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LB ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -1954,7 +1963,7 @@ fn iLbu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LBU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LBU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -1970,9 +1979,9 @@ fn iLd(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
 
     if ((addr & 7) != 0) {
-        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LD (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        @panic("Unaligned load");
     }
 
     const data = read(u64, addr);
@@ -1981,7 +1990,7 @@ fn iLd(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LD ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LD ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2006,7 +2015,7 @@ fn iLdl(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LDL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LDL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2031,7 +2040,7 @@ fn iLdr(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LDR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LDR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2047,9 +2056,9 @@ fn iLh(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
 
     if ((addr & 1) != 0) {
-        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LH (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        @panic("Unaligned load");
     }
 
     const data = exts(u64, u16, read(u16, addr));
@@ -2058,7 +2067,7 @@ fn iLh(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LH ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LH ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2074,9 +2083,9 @@ fn iLhu(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
 
     if ((addr & 1) != 0) {
-        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LHU (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        @panic("Unaligned load");
     }
 
     const data = @as(u64, read(u16, addr));
@@ -2085,7 +2094,7 @@ fn iLhu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LHU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LHU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2106,7 +2115,7 @@ fn iLq(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LQ ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LQ ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u128, rt, data);
@@ -2125,7 +2134,7 @@ fn iLqc2(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] LQC2 ${}, 0x{X}(${s}); ${} = [0x{X:0>8}] = 0x{X:0>32}", .{rt, imm16s, tagRs, rt, addr, data});
+        err("  [EE Core   ] LQC2 ${}, 0x{X}(${s}); ${} = [0x{X:0>8}] = 0x{X:0>32}", .{rt, imm16s, tagRs, rt, addr, data});
     }
 
     vu[0].set(u128, rt, data);
@@ -2142,7 +2151,7 @@ fn iLui(instr: u32) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] LUI ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -2156,9 +2165,9 @@ fn iLw(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
 
     if ((addr & 3) != 0) {
-        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LW (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        @panic("Unaligned load");
     }
 
     const data = exts(u64, u32, read(u32, addr));
@@ -2167,7 +2176,7 @@ fn iLw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LW ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LW ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2189,9 +2198,11 @@ fn iLwc(instr: u32, comptime n: u2) void {
     }
 
     if ((addr & 3) != 0) {
-        err("  [EE Core   ] Unhandled AdES @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LWC (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        bus.dumpRam();
+
+        @panic("Unaligned load");
     }
 
     const data = read(u32, addr);
@@ -2199,7 +2210,7 @@ fn iLwc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] LWC{} ${}, 0x{X}(${s}); ${}, [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, rt, addr, data});
+        err("  [EE Core   ] LWC{} ${}, 0x{X}(${s}); ${}, [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, rt, addr, data});
     }
 
     switch (n) {
@@ -2231,7 +2242,7 @@ fn iLwl(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LWL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LWL ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u32, rt, data);
@@ -2256,7 +2267,7 @@ fn iLwr(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LWR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LWR ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u32, rt, data);
@@ -2272,9 +2283,9 @@ fn iLwu(instr: u32) void {
     const addr = regFile.get(u32, rs) +% imm16s;
 
     if ((addr & 3) != 0) {
-        err("  [EE Core   ] Unhandled AdEL @ 0x{X:0>8}.", .{addr});
+        std.debug.print("[EE Core   ] Unaligned LWU (0x{X:0>8}) @ 0x{X:0>8}\n", .{addr, regFile.cpc});
 
-        assert(false);
+        @panic("Unaligned load");
     }
 
     const data = @as(u64, read(u32, addr));
@@ -2283,7 +2294,7 @@ fn iLwu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] LWU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
+        err("  [EE Core   ] LWU ${s}, 0x{X}(${s}); ${s} = [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, tagRt, addr, data});
     }
 
     regFile.set(u64, rt, data);
@@ -2310,9 +2321,9 @@ fn iMadd(instr: u32) void {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
         if (rd == 0) {
-            info("   [EE Core   ] MADD ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MADD ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
         } else {
-            info("   [EE Core   ] MADD ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MADD ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
         }
     }
 }
@@ -2345,7 +2356,7 @@ fn iMfc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(u32, rt)});
+        err("  [EE Core   ] MFC{} ${s}, ${}; ${s} = 0x{X:0>8}", .{n, tagRt, rd, tagRt, regFile.get(u32, rt)});
     }
 }
 
@@ -2368,7 +2379,7 @@ fn iMfhi(instr: u32, isHi: bool) void {
 
         const is1 = if (isHi) "1" else "";
 
-        info("   [EE Core   ] MFHI{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
+        err("  [EE Core   ] MFHI{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
     }
 }
 
@@ -2391,7 +2402,7 @@ fn iMflo(instr: u32, isHi: bool) void {
 
         const is1 = if (isHi) "1" else "";
 
-        info("   [EE Core   ] MFLO{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
+        err("  [EE Core   ] MFLO{s} ${s}; ${s} = 0x{X:0>16}", .{is1, tagRd, tagRd, data});
     }
 }
 
@@ -2404,7 +2415,7 @@ fn iMfsa(instr: u32) void {
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] MFSA ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, regFile.sa});
+        err("  [EE Core   ] MFSA ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRd, regFile.sa});
     }
 }
 
@@ -2423,7 +2434,7 @@ fn iMovn(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] MOVN ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRt, regFile.get(u64, rd)});
+        err("  [EE Core   ] MOVN ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRt, regFile.get(u64, rd)});
     }
 }
 
@@ -2442,7 +2453,7 @@ fn iMovz(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] MOVZ ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] MOVZ ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -2472,7 +2483,7 @@ fn iMtc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] MTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, regFile.get(u32, rt)});
+        err("  [EE Core   ] MTC{} ${s}, ${}; ${} = 0x{X:0>8}", .{n, tagRt, rd, rd, regFile.get(u32, rt)});
     }
 }
 
@@ -2493,7 +2504,7 @@ fn iMthi(instr: u32, isHi: bool) void {
 
         const is1 = if (isHi) "1" else "";
 
-        info("   [EE Core   ] MTHI{s} ${s}; HI{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
+        err("  [EE Core   ] MTHI{s} ${s}; HI{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
     }
 }
 
@@ -2514,7 +2525,7 @@ fn iMtlo(instr: u32, isHi: bool) void {
 
         const is1 = if (isHi) "1" else "";
 
-        info("   [EE Core   ] MTLO{s} ${s}; LO{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
+        err("  [EE Core   ] MTLO{s} ${s}; LO{s} = 0x{X:0>16}", .{is1, tagRs, is1, data});
     }
 }
 
@@ -2527,7 +2538,7 @@ fn iMtsa(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] MTSA ${s}; SA = 0x{X:0>2}", .{tagRs, regFile.sa});
+        err("  [EE Core   ] MTSA ${s}; SA = 0x{X:0>2}", .{tagRs, regFile.sa});
     }
 }
 
@@ -2542,7 +2553,7 @@ fn iMtsah(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] MTSAH ${s}, {}; SA = 0x{X:0>2}", .{tagRs, imm16, regFile.sa});
+        err("  [EE Core   ] MTSAH ${s}, {}; SA = 0x{X:0>2}", .{tagRs, imm16, regFile.sa});
     }
 }
 
@@ -2557,12 +2568,14 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
     if (pipeline == 1) {
         regFile.lo.setHi(u32, @truncate(u32, @bitCast(u64, res)));
         regFile.hi.setHi(u32, @truncate(u32, @bitCast(u64, res) >> 32));
+
+        regFile.set(u64, rd, regFile.lo.getHi(u64));
     } else {
         regFile.lo.set(u32, @truncate(u32, @bitCast(u64, res)));
         regFile.hi.set(u32, @truncate(u32, @bitCast(u64, res) >> 32));
-    }
 
-    regFile.set(u64, rd, regFile.lo.get(u64));
+        regFile.set(u64, rd, regFile.lo.get(u64));
+    }
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2572,9 +2585,9 @@ fn iMult(instr: u32, comptime pipeline: u1) void {
         const isPipe1 = if (pipeline == 1) "1" else "";
 
         if (rd == 0) {
-            info("   [EE Core   ] MULT{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MULT{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
         } else {
-            info("   [EE Core   ] MULT{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MULT{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
         }
     }
 }
@@ -2590,12 +2603,14 @@ fn iMultu(instr: u32, comptime pipeline: u1) void {
     if (pipeline == 1) {
         regFile.lo.setHi(u32, @truncate(u32, res));
         regFile.hi.setHi(u32, @truncate(u32, res >> 32));
+
+        regFile.set(u64, rd, regFile.lo.getHi(u64));
     } else {
         regFile.lo.set(u32, @truncate(u32, res));
         regFile.hi.set(u32, @truncate(u32, res >> 32));
-    }
 
-    regFile.set(u64, rd, regFile.lo.get(u64));
+        regFile.set(u64, rd, regFile.lo.get(u64));
+    }
 
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
@@ -2605,9 +2620,9 @@ fn iMultu(instr: u32, comptime pipeline: u1) void {
         const isPipe1 = if (pipeline == 1) "1" else "";
 
         if (rd == 0) {
-            info("   [EE Core   ] MULTU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MULTU{s} ${s}, ${s}; LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRs, tagRt, regFile.lo.get(u64), regFile.hi.get(u64)});
         } else {
-            info("   [EE Core   ] MULTU{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
+            err("  [EE Core   ] MULTU{s} ${s}, ${s}, ${s}; ${s}/LO = 0x{X:0>16}, HI = 0x{X:0>16}", .{isPipe1, tagRd, tagRs, tagRt, tagRd, regFile.lo.get(u64), regFile.hi.get(u64)});
         }
     }
 }
@@ -2627,7 +2642,7 @@ fn iNor(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] NOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] NOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2646,7 +2661,7 @@ fn iOr(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] OR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] OR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2663,7 +2678,7 @@ fn iOri(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] ORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -2690,7 +2705,7 @@ fn iPadduw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PADDUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PADDUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2709,7 +2724,7 @@ fn iPand(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PAND ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PAND ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2729,7 +2744,7 @@ fn iPcpyh(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PCPYH ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
+        err("  [EE Core   ] PCPYH ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
     }
 }
 
@@ -2748,7 +2763,7 @@ fn iPcpyld(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PCPYLD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PCPYLD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2770,7 +2785,7 @@ fn iPcpyud(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PCPYUD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PCPYUD ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2799,7 +2814,7 @@ fn iPext5(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PEXT5 ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
+        err("  [EE Core   ] PEXT5 ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRt, tagRd, res});
     }
 }
 
@@ -2831,7 +2846,7 @@ fn iPextlh(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PEXTLH ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PEXTLH ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2855,7 +2870,7 @@ fn iPextlw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PEXTLW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PEXTLW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2879,7 +2894,7 @@ fn iPextuw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PEXTUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PEXTUW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -2911,7 +2926,7 @@ fn iPlzcw(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] PLZCW ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRd, res});
+        err("  [EE Core   ] PLZCW ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRd, res});
     }
 }
 
@@ -2926,7 +2941,7 @@ fn iPmfhi(instr: u32) void {
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] PMFHI ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
+        err("  [EE Core   ] PMFHI ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
     }
 }
 
@@ -2958,7 +2973,7 @@ fn iPmfhl(instr: u32) void {
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] PMFHL.{s} ${s}; ${s} = 0x{X:0>32}", .{@tagName(fmt), tagRd, tagRd, data});
+        err("  [EE Core   ] PMFHL.{s} ${s}; ${s} = 0x{X:0>32}", .{@tagName(fmt), tagRd, tagRd, data});
     }
 }
 
@@ -2973,7 +2988,7 @@ fn iPmflo(instr: u32) void {
     if (doDisasm) {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
 
-        info("   [EE Core   ] PMFLO ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
+        err("  [EE Core   ] PMFLO ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRd, data});
     }
 }
 
@@ -2988,7 +3003,7 @@ fn iPmthi(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] PMFHI ${s}; HI = 0x{X:0>32}", .{tagRs, data});
+        err("  [EE Core   ] PMFHI ${s}; HI = 0x{X:0>32}", .{tagRs, data});
     }
 }
 
@@ -3003,7 +3018,7 @@ fn iPmtlo(instr: u32) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] PMFLO ${s}; HI = 0x{X:0>32}", .{tagRs, data});
+        err("  [EE Core   ] PMFLO ${s}; HI = 0x{X:0>32}", .{tagRs, data});
     }
 }
 
@@ -3022,7 +3037,7 @@ fn iPnor(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PNOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PNOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3041,7 +3056,7 @@ fn iPor(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] POR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] POR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3068,7 +3083,7 @@ fn iPsubb(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PSUBB ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PSUBB ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3095,7 +3110,7 @@ fn iPsubw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PSUBW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PSUBW ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3114,7 +3129,7 @@ fn iPxor(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] PXOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] PXOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>32}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3136,7 +3151,7 @@ fn iQmfc2(instr: u32) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] QMFC2 ${s}, ${}; ${s} = 0x{X:0>32}", .{tagRt, rd, tagRt, regFile.get(u128, rt)});
+        err("  [EE Core   ] QMFC2 ${s}, ${}; ${s} = 0x{X:0>32}", .{tagRt, rd, tagRt, regFile.get(u128, rt)});
     }
 }
 
@@ -3158,7 +3173,7 @@ fn iQmtc2(instr: u32) void {
     if (doDisasm) {
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
     
-        info("   [EE Core   ] QMTC2 ${s}, ${}; ${} = 0x{X:0>32}", .{tagRt, rd, rd, data});
+        err("  [EE Core   ] QMTC2 ${s}, ${}; ${} = 0x{X:0>32}", .{tagRt, rd, rd, data});
     }
 }
 
@@ -3176,7 +3191,7 @@ fn iSb(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SB ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SB ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>2}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     write(u8, addr, data);
@@ -3196,7 +3211,7 @@ fn iSd(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SD ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SD ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 7) != 0) {
@@ -3229,7 +3244,7 @@ fn iSdl(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SDL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SDL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
     }
 }
 
@@ -3254,7 +3269,7 @@ fn iSdr(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SDR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SDR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>16}", .{tagRt, imm16s, tagRs, addr, data});
     }
 }
 
@@ -3272,7 +3287,7 @@ fn iSh(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SH ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>4}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SH ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>4}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 1) != 0) {
@@ -3295,12 +3310,12 @@ fn iSll(instr: u32) void {
 
     if (doDisasm) {
         if (@intToEnum(CpuReg, rd) == CpuReg.R0) {
-            info("   [EE Core   ] NOP", .{});
+            err("  [EE Core   ] NOP", .{});
         } else {
             const tagRd = @tagName(@intToEnum(CpuReg, rd));
             const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-            info("   [EE Core   ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+            err("  [EE Core   ] SLL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
         }
     }
 }
@@ -3318,7 +3333,7 @@ fn iSllv(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SLLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3337,7 +3352,7 @@ fn iSlt(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SLT ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3354,7 +3369,7 @@ fn iSlti(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] SLTI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -3371,7 +3386,7 @@ fn iSltiu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] SLTIU ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16s, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -3388,7 +3403,7 @@ fn iSltu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SLTU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3406,7 +3421,7 @@ fn iSq(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SQ ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SQ ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     write(u128, addr, data);
@@ -3426,7 +3441,7 @@ fn iSqc2(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SQC2 ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SQC2 ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>32}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     write(u128, addr, data);
@@ -3445,7 +3460,7 @@ fn iSra(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SRA ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3462,7 +3477,7 @@ fn iSrav(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SRAV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3479,7 +3494,7 @@ fn iSrl(instr: u32) void {
         const tagRd = @tagName(@intToEnum(CpuReg, rd));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SRL ${s}, ${s}, {}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, sa, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3496,7 +3511,7 @@ fn iSrlv(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SRLV ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRt, tagRs, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3521,7 +3536,7 @@ fn iSub(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SUB ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SUB ${s}, ${s}, ${s}; ${s} = 0x{X:0>8}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3538,7 +3553,7 @@ fn iSubu(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
+        err("  [EE Core   ] SUBU ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, regFile.get(u64, rd)});
     }
 }
 
@@ -3556,7 +3571,7 @@ fn iSw(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SW ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 3) != 0) {
@@ -3597,7 +3612,7 @@ fn iSwc(instr: u32, comptime n: u2) void {
     if (doDisasm) {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
 
-        info("   [EE Core   ] SWC{} ${}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SWC{} ${}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{n, rt, imm16s, tagRs, addr, data});
     }
 
     if ((addr & 3) != 0) {
@@ -3630,7 +3645,7 @@ fn iSwl(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SWL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SWL ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
     }
 }
 
@@ -3655,14 +3670,14 @@ fn iSwr(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] SWR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
+        err("  [EE Core   ] SWR ${s}, 0x{X}(${s}); [0x{X:0>8}] = 0x{X:0>8}", .{tagRt, imm16s, tagRs, addr, data});
     }
 }
 
 /// SYStem CALL
 fn iSyscall() void {
     if (doDisasm) {
-        info("   [EE Core   ] SYSCALL 0x{X}", .{regFile.get(u64, @enumToInt(CpuReg.V1))});
+        err("  [EE Core   ] SYSCALL 0x{X}", .{regFile.get(u64, @enumToInt(CpuReg.V1))});
     }
 
     raiseExceptionL1(ExCode.Syscall);
@@ -3675,7 +3690,7 @@ fn iSync(instr: u32) void {
     if (doDisasm) {
         const syncType = if ((stype >> 4) != 0) "P" else "L";
 
-        info("   [EE Core   ] SYNC.{s}", .{syncType});
+        err("  [EE Core   ] SYNC.{s}", .{syncType});
     }
 }
 
@@ -3693,14 +3708,14 @@ fn iTeq(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] TEQ ${s}, ${s}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, tagRs, s, tagRt, t});
+        err("  [EE Core   ] TEQ ${s}, ${s}; ${s} = 0x{X:0>16}, ${s} = 0x{X:0>16}", .{tagRs, tagRt, tagRs, s, tagRt, t});
     }
 }
 
 /// TLB Write Indexed
 fn iTlbwi() void {
     if (doDisasm) {
-        info("   [EE Core   ] TLBWI", .{});
+        err("  [EE Core   ] TLBWI", .{});
     }
 
     cop0.setEntryIndexed();
@@ -3721,7 +3736,7 @@ fn iXor(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] XOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
+        err("  [EE Core   ] XOR ${s}, ${s}, ${s}; ${s} = 0x{X:0>16}", .{tagRd, tagRs, tagRt, tagRd, res});
     }
 }
 
@@ -3738,7 +3753,7 @@ fn iXori(instr: u32) void {
         const tagRs = @tagName(@intToEnum(CpuReg, rs));
         const tagRt = @tagName(@intToEnum(CpuReg, rt));
 
-        info("   [EE Core   ] XORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
+        err("  [EE Core   ] XORI ${s}, ${s}, 0x{X}; ${s} = 0x{X:0>16}", .{tagRt, tagRs, imm16, tagRt, regFile.get(u64, rt)});
     }
 }
 
@@ -3757,6 +3772,8 @@ pub fn step() void {
         inBifco = true;
 
         std.debug.print("Entering BIFCO loop\n", .{});
+
+        //bus.dumpRam();
     }
 
     cop0.incrementCount();
