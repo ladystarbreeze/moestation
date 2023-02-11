@@ -110,6 +110,7 @@ const VifCode = enum(u7) {
     Flushe   = 0x10,
     Flush    = 0x11,
     Mscal    = 0x14,
+    Mscnt    = 0x17,
     Stmask   = 0x20,
     Strow    = 0x30,
     Stcol    = 0x31,
@@ -332,6 +333,7 @@ fn doCmd() void {
         @enumToInt(VifCode.Flushe  ) => iFlushe(),
         @enumToInt(VifCode.Flush   ) => iFlush(),
         @enumToInt(VifCode.Mscal   ) => iMscal(vifCode),
+        @enumToInt(VifCode.Mscnt   ) => iMscnt(),
         @enumToInt(VifCode.Stmask  ) => iStmask(),
         @enumToInt(VifCode.Strow   ) => iStrow(),
         @enumToInt(VifCode.Stcol   ) => iStcol(),
@@ -438,6 +440,25 @@ fn iMscal(code: u32) void {
     vif1Tops = if (vif1Stat.dbf) vif1Base else vif1Base + vif1Ofst;
 
     vif1Stat.dbf = !vif1Stat.dbf;
+
+    isCmdDone = true;
+}
+
+/// MicroSubroutine CoNTinue
+fn iMscnt() void {
+    if (!cpu.vu[1].isIdle()) return;
+
+    std.debug.print("[VIF1      ] MSCNT\n", .{});
+
+    cpu.vu[1].continueMicro();
+
+    vif1Top = vif1Tops;
+
+    vif1Tops = if (vif1Stat.dbf) vif1Base else vif1Base + vif1Ofst;
+
+    vif1Stat.dbf = !vif1Stat.dbf;
+
+    isCmdDone = true;
 }
 
 /// MaSK PATH3
@@ -494,8 +515,10 @@ fn iStcycl(code: u32) void {
 
     std.debug.print("[VIF1      ] STCYCL; CL = 0x{X:0>2}, WL = 0x{X:0>2}\n", .{cl, wl});
 
-    if (!(cl == 1 and wl == 1)) {
+    if (cl != wl) {
         std.debug.print("[VIF1      ] Unhandled CL/WL setting\n", .{});
+
+        @panic("Unhandled VIF CYCLE setting");
     }
 
     isCmdDone = true;
@@ -611,6 +634,8 @@ pub fn step() void {
         VifState.Idle => {
             if (!hasCode) {
                 vifCode = readFifo(u32);
+
+                hasCode = true;
             }
 
             doCmd();
