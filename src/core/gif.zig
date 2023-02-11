@@ -438,7 +438,7 @@ fn doPacked(data: u128) void {
 
     nregs += 1;
 
-    if (nregs == gifTag.nregs or nregs == 16) {
+    if ((gifTag.nregs != 0 and nregs == gifTag.nregs) or (gifTag.nregs == 0 and nregs == 16)) {
         nregs = 0;
 
         nloop -= 1;
