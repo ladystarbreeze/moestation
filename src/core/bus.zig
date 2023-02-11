@@ -172,7 +172,9 @@ pub fn deinit(allocator: Allocator) void {
 // Taken from DobieStation. Replace "rom0:OSDSYS" with "cdrom0:[game executable]"
 pub fn fastBoot() void {
     const osdsysPath = "rom0:OSDSYS";
-    const dvdPath    = "cdrom0:\\\\SLUS_211.13;1"; // Atelier Iris
+    //const dvdPath    = "cdrom0:\\\\SLUS_211.13;1"; // Atelier Iris
+    const dvdPath    = "cdrom0:\\\\SLPM_664.72;1"; // Planetarian
+    //const dvdPath    = "cdrom0:\\\\SLPS_251.27;1"; // Air
 
     var i = @enumToInt(MemBase.EeLoad);
     while (i < (@enumToInt(MemBase.EeLoad) + @enumToInt(MemSize.EeLoad))) : (i += 1) {
@@ -242,7 +244,7 @@ pub fn read(comptime T: type, addr: u32) T {
             @panic("Unhandled read @ IPU I/O");
         }
         
-        warn("[Bus       ] Read ({s}) @ 0x{X:0>8} (IPU).", .{@typeName(T), addr});
+        std.debug.print("[IPU       ] Read ({s}) @ 0x{X:0>8}\n", .{@typeName(T), addr});
 
         data = 0;
     } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
@@ -498,6 +500,11 @@ pub fn readIop(comptime T: type, addr: u32) T {
 
                 data = 0;
             },
+            0x1F80_1600 ... 0x1F80_16FC => {
+                std.debug.print("[USB       ] Read ({s}) @ 0x{X:0>8}\n", .{@typeName(T), addr});
+
+                data = 0;
+            },
             else => {
                 err("  [Bus (IOP) ] Unhandled read ({s}) @ 0x{X:0>8}.", .{@typeName(T), addr});
 
@@ -548,7 +555,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
             @panic("Unhandled write @ IPU I/O");
         }
 
-        warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IPU) = 0x{X}.", .{@typeName(T), addr, data});
+        std.debug.print("[IPU       ] Write ({s}) @ 0x{X:0>8} = 0x{X}\n", .{@typeName(T), addr, data});
     } else if (addr >= @enumToInt(MemBase.Gif) and addr < (@enumToInt(MemBase.Gif) + @enumToInt(MemSize.Gif))) {
         if (T != u32) {
             @panic("Unhandled write @ GIF I/O");
@@ -627,7 +634,7 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                     @panic("Unhandled write @ IPU In FIFO");
                 }
 
-                warn("[Bus       ] Write ({s}) @ 0x{X:0>8} (IPU In FIFO) = 0x{X}.", .{@typeName(T), addr, data});
+                std.debug.print("[IPU       ] Write ({s}) @ 0x{X:0>8} (In FIFO) = 0x{X}\n", .{@typeName(T), addr, data});
             },
             0x1000_F000 => {
                 if (T != u32) {
@@ -642,8 +649,6 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 if (T != u32) {
                     @panic("Unhandled write @ INTC_MASK");
                 }
-
-                info("   [Bus       ] Write ({s}) @ 0x{X:0>8} (INTC_MASK) = 0x{X}.", .{@typeName(T), addr, data});
 
                 intc.setMask(data);
             },
@@ -790,6 +795,9 @@ pub fn writeIop(comptime T: type, addr: u32, data: T) void {
             0x1F80_15F0,
             0x1F80_2070 => {
                 warn("[Bus (IOP) ] Write ({s}) @ 0x{X:0>8} (Unknown) = 0x{X}.", .{@typeName(T), addr, data});
+            },
+            0x1F80_1600 ... 0x1F80_16FC => {
+                std.debug.print("[USB       ] Write ({s}) @ 0x{X:0>8} = 0x{X}\n", .{@typeName(T), addr, data});
             },
             else => {
                 err("  [Bus (IOP) ] Unhandled write ({s}) @ 0x{X:0>8} = 0x{X}.", .{@typeName(T), addr, data});
