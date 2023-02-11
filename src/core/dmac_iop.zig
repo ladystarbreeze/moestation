@@ -648,6 +648,7 @@ fn doSif0() void {
 
     if (channels[chnId].bcr.len == 0) {
         info("   [DMAC (IOP)] Channel {} ({s}) transfer, Chain mode.", .{chnId, @tagName(Channel.Sif0)});
+        //std.debug.print("IOP SIF0 start\n", .{});
 
         // Read new tag
         const tag = @as(u64, bus.readDmacIop(channels[chnId].tadr)) | (@as(u64, bus.readDmacIop(channels[chnId].tadr + 4)) << 32);
@@ -668,7 +669,7 @@ fn doSif0() void {
         channels[chnId].madr = @truncate(u24, tag);
         channels[chnId].bcr.len = @truncate(u32, tag >> 32) & 0xFFFFF;
 
-        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.count});
+        info("   [DMAC (IOP)] MADR = 0x{X:0>6}, WC = {}", .{channels[chnId].madr, channels[chnId].bcr.len});
 
         if ((channels[chnId].bcr.len & 3) != 0) {
             channels[chnId].bcr.len = (channels[chnId].bcr.len | 3) + 1;
