@@ -62,6 +62,7 @@ const PadCommand = enum(u8) {
     QueryMaskedMode = 0x41,
     ReadData        = 0x42,
     ConfigMode      = 0x43,
+    SetModeAndLock  = 0x44,
     QueryModel      = 0x45,
     QueryAct        = 0x46,
     QueryComb       = 0x47,
@@ -109,8 +110,10 @@ var activeDev: Device = undefined;
 /// Pad state
 var padState = PadState.Digital;
 
+var buttonState: u16 = 0xFFFF;
+
 /// Rumble values (stub)
-var rumble = [_]u8 {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+var rumble = [_]u8 {0x5A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /// Terminator byte
 var terminator: u8 = 0x55;
@@ -328,6 +331,13 @@ fn writeFifoOut(data: u8) void {
     }
 }
 
+/// Sets button state
+pub fn setButtonState(newState: u16) void {
+    buttonState = newState;
+
+    //std.debug.print("[SIO2      ] New button state: 0b{b:0>16}\n", .{buttonState});
+}
+
 /// Returns an SIO2 device
 fn getDevice(data: u8) Device {
     var dev: Device = undefined;
@@ -360,7 +370,7 @@ fn updateDevStatus() void {
     // sio2Recv1 = @enumToInt(DeviceStatus.NoDevice);
 
     sio2Recv1 = switch (activeDev) {
-        //Device.Controller, Device.MemoryCard => @enumToInt(DeviceStatus.Connected),
+        Device.Controller => @enumToInt(DeviceStatus.Connected),
         else => @enumToInt(DeviceStatus.NoDevice),
     };
 }
@@ -422,6 +432,7 @@ fn doPadCmd() void {
         @enumToInt(PadCommand.QueryMaskedMode) => cmdPadQueryMaskedMode(),
         @enumToInt(PadCommand.ReadData       ) => cmdPadReadData(),
         @enumToInt(PadCommand.ConfigMode     ) => cmdPadConfigMode(),
+        @enumToInt(PadCommand.SetModeAndLock ) => cmdSetModeAndLock(),
         @enumToInt(PadCommand.QueryModel     ) => cmdPadQueryModel(),
         @enumToInt(PadCommand.QueryAct       ) => cmdPadQueryAct(),
         @enumToInt(PadCommand.QueryComb      ) => cmdPadQueryComb(),
@@ -518,8 +529,8 @@ fn cmdPadConfigMode() void {
 
     if (isEnter) {
         // Send button state
-        writeFifoOut(0xFF);
-        writeFifoOut(0xFF);
+        writeFifoOut(@truncate(u8, buttonState));
+        writeFifoOut(@truncate(u8, buttonState >> 8));
     } else {
         // Send six 0 bytes
         writeFifoOut(0);
@@ -670,8 +681,31 @@ fn cmdPadReadData() void {
     writeFifoOut(0x5A);
 
     // Send button state
+    writeFifoOut(@truncate(u8, buttonState));
+    writeFifoOut(@truncate(u8, buttonState >> 8));
+}
+
+/// Pad Set Mode and Lock
+fn cmdSetModeAndLock() void {
+    info("   [SIO2 (Pad)] Set Mode and Lock", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
     writeFifoOut(0xFF);
-    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    // Send 0 bytes
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+
+    rumble = [_]u8 {0x5A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 }
 
 /// Pad Vibration Toggle
