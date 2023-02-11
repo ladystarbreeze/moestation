@@ -107,11 +107,14 @@ pub const Vu = struct {
         pc: u16 = 0,
        cpc: u16 = 0,
        npc: u16 = 0,
+       tpc: u16 = 0,
 
     // Clipping flags
         cf: u24 = 0,
 
      state: VuState = VuState.Idle,
+    
+    eDelay: [2]bool = [2]bool {false, false},
 
     /// Reset
     pub fn reset(self: *Vu) void {
@@ -402,7 +405,7 @@ pub const Vu = struct {
 
     /// Branch helper
     pub fn doBranch(self: *Vu, target: u16, isCond: bool, id: u4) void {
-        self.setVi(id, self.pc);
+        self.setVi(id, self.npc);
 
         if (isCond) {
             self.npc = target;
@@ -415,6 +418,24 @@ pub const Vu = struct {
         self.npc = pc + 8;
 
         self.state = VuState.ExecMs;
+    }
+
+    /// Continue a VU microprogram
+    pub fn continueMicro(self: *Vu) void {
+        std.debug.print("[VU{}       ] MS continue @ 0x{X:0>4}\n", .{self.vuNum, self.tpc});
+
+        self.startMicro(self.tpc);
+    }
+
+    /// Stops a VU microprogram
+    pub fn terminateMicro(self: *Vu) void {
+        std.debug.print("[VU{}       ] MS end\n", .{self.vuNum});
+
+        self.tpc = self.npc;
+
+        self.state = VuState.Idle;
+
+        self.eDelay[0] = false;
     }
 
     /// Steps the VU
@@ -431,6 +452,9 @@ pub const Vu = struct {
 
         self.cpc = self.pc;
 
+        self.eDelay[0] = self.eDelay[1];
+        self.eDelay[1] = false;
+
         const instr = self.fetchInstr();
 
         if ((instr & (1 << 59)) != 0) {
@@ -440,9 +464,7 @@ pub const Vu = struct {
             @panic("VU debug break");
         }
         if ((instr & (1 << 62)) != 0) {
-            std.debug.print("[VU{}       ] MS end\n", .{self.vuNum});
-
-            self.state = VuState.Idle;
+            self.eDelay[1] = true;
         }
 
         if ((instr & (1 << 63)) != 0) {
@@ -454,5 +476,9 @@ pub const Vu = struct {
         }
 
         vu_int.executeUpper(self, @truncate(u32, instr >> 32) & 0x7FF_FFFF);
+
+        if (self.eDelay[0]) {
+            self.terminateMicro();
+        }
     }
 };
