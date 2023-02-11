@@ -22,13 +22,33 @@ const gif      = @import("core/gif.zig");
 const gs       = @import("core/gs.zig");
 const iop      = @import("core/iop.zig");
 const spu2     = @import("core/spu2.zig");
+const timer    = @import("core/timer.zig");
 const timerIop = @import("core/timer_iop.zig");
 const vif1     = @import("core/vif1.zig");
 
 /// BIOS path
 const biosPath = "moeFiles/scph39001.bin";
-const cdvdPath = "moeFiles/atelier_iris.iso";
+const cdvdPath = "moeFiles/planetarian.iso";
 const elfPath  = "moeFiles/vu1_demo.elf";
+
+const Controller = struct {
+    nSelect: u1 = 1,
+        nL3: u1 = 1,
+        nR3: u1 = 1,
+     nStart: u1 = 1,
+        nUp: u1 = 1,
+     nRight: u1 = 1,
+      nDown: u1 = 1,
+      nLeft: u1 = 1,
+        nL2: u1 = 1,
+        nR2: u1 = 1,
+        nL1: u1 = 1,
+        nR1: u1 = 1,
+       nTri: u1 = 1,
+    nCircle: u1 = 1,
+     nCross: u1 = 1,
+    nSquare: u1 = 1,
+};
 
 /// SDL screen
 const Screen = struct {
@@ -41,6 +61,8 @@ const Screen = struct {
 };
 
 var screen: Screen = Screen{};
+
+var controller: Controller = Controller{};
 
 pub var shouldRun = true;
 
@@ -134,6 +156,8 @@ pub fn main() void {
 
             gif.step();
             vif1.step();
+
+            timer.step();
         }
 
         gs.step(4);
@@ -148,13 +172,29 @@ pub fn main() void {
 
 /// Polls input
 pub fn poll() bool {
-    //const keyState = SDL.SDL_GetKeyboardState(null);
+    const keyState = SDL.SDL_GetKeyboardState(null);
 
     var e: SDL.SDL_Event = undefined;
 
     if (SDL.SDL_PollEvent(&e) != 0) {
         switch (e.type) {
             SDL.SDL_QUIT => return false,
+            SDL.SDL_KEYDOWN, SDL.SDL_KEYUP => {
+                controller.nSelect = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_c)] == 0);
+                controller.nStart  = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_v)] == 0);
+                controller.nUp     = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_w)] == 0);
+                controller.nRight  = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_d)] == 0);
+                controller.nDown   = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_s)] == 0);
+                controller.nLeft   = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_a)] == 0);
+                controller.nL1     = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_q)] == 0);
+                controller.nR1     = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_e)] == 0);
+                controller.nL2     = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_1)] == 0);
+                controller.nR2     = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_2)] == 0);
+                controller.nTri    = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_i)] == 0);
+                controller.nCircle = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_l)] == 0);
+                controller.nCross  = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_k)] == 0);
+                controller.nSquare = @bitCast(u1, keyState[SDL.SDL_GetScancodeFromKey(SDL.SDLK_j)] == 0);
+            },
             else => {},
         }
     }
@@ -173,4 +213,27 @@ pub fn renderScreen(fb: *u8) void {
     }
 
     SDL.SDL_RenderPresent(screen.renderer);
+}
+
+pub fn getController() u16 {
+    var data: u16 = 0;
+
+    data |= @as(u16, controller.nSelect);
+    data |= @as(u16, controller.nL3    ) <<  1;
+    data |= @as(u16, controller.nR3    ) <<  2;
+    data |= @as(u16, controller.nStart ) <<  3;
+    data |= @as(u16, controller.nUp    ) <<  4;
+    data |= @as(u16, controller.nRight ) <<  5;
+    data |= @as(u16, controller.nDown  ) <<  6;
+    data |= @as(u16, controller.nLeft  ) <<  7;
+    data |= @as(u16, controller.nL2    ) <<  8;
+    data |= @as(u16, controller.nR2    ) <<  9;
+    data |= @as(u16, controller.nL1    ) << 10;
+    data |= @as(u16, controller.nR1    ) << 11;
+    data |= @as(u16, controller.nTri   ) << 12;
+    data |= @as(u16, controller.nCircle) << 13;
+    data |= @as(u16, controller.nCross ) << 14;
+    data |= @as(u16, controller.nSquare) << 15;
+
+    return data;
 }
