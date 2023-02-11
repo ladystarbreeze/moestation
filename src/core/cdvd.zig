@@ -243,8 +243,8 @@ var oldSectorNum: u32 = 0;
 
 var sCmdParam: u8 = undefined;
 
-var cyclesToRead: i64 = 0;
-var cyclesToSeek: i64 = 0;
+var cyclesToRead: i64 = -1;
+var cyclesToSeek: i64 = -1;
 
 /// CDVD read buffer
 var readBuf: ReadBuffer = ReadBuffer{};
@@ -256,7 +256,7 @@ var cdvdFile: File = undefined;
 pub fn init(cdvdPath: []const u8) !void {
     //sDriveStat = driveStat.get();
 
-    info("   [CDVD      ] Loading ISO {s}...", .{cdvdPath});
+    std.debug.print("[CDVD      ] Loading ISO {s}...\n", .{cdvdPath});
 
     // Open CDVD ISO
     cdvdFile = try openFile(cdvdPath, .{.mode = OpenMode.read_only});
@@ -276,58 +276,58 @@ pub fn read(addr: u32) u8 {
 
     switch (addr) {
         @enumToInt(CdvdReg.NCmd) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (N Command).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (N Command)\n", .{addr});
 
             data = nCmd;
         },
         @enumToInt(CdvdReg.NCmdStat) => {
-            //info("   [CDVD      ] Read @ 0x{X:0>8} (N Command Status).", .{addr});
+            //std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (N Command Status)\n", .{addr});
 
             data = nCmdStat;
         },
         @enumToInt(CdvdReg.CdvdError) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (CDVD Error).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (CDVD Error)\n", .{addr});
 
             data = 0;
         },
         @enumToInt(CdvdReg.IStat) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (CDVD I_STAT).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (CDVD I_STAT)\n", .{addr});
 
             data = iStat;
         },
         @enumToInt(CdvdReg.DriveStat) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (Drive Status).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (Drive Status)\n", .{addr});
 
             data = driveStat;
         },
         @enumToInt(CdvdReg.SDriveStat) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (Sticky Drive Status).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (Sticky Drive Status)\n", .{addr});
 
             data = sDriveStat;
         },
         @enumToInt(CdvdReg.DiscType) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (Disc Type).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (Disc Type)\n", .{addr});
 
             data = @enumToInt(DiscType.Ps2Dvd);
         },
         0x1F40_2013 => {
             // Not sure what this is, DobieStation returns 4 on reads from this register.
-            info("   [CDVD      ] Read @ 0x{X:0>8} (Unknown).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (Unknown)\n", .{addr});
 
             data = 4;
         },
         @enumToInt(CdvdReg.SCmd) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (S Command).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (S Command)\n", .{addr});
 
             data = sCmd;
         },
         @enumToInt(CdvdReg.SCmdStat) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (S Command Status).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (S Command Status)\n", .{addr});
 
             data = sCmdStat.get();
         },
         @enumToInt(CdvdReg.SCmdData) => {
-            info("   [CDVD      ] Read @ 0x{X:0>8} (S Command Data).", .{addr});
+            std.debug.print("[CDVD      ] Read @ 0x{X:0>8} (S Command Data)\n", .{addr});
 
             if (sCmdData.idx < sCmdLen) {
                 data = sCmdData.read();
@@ -343,7 +343,7 @@ pub fn read(addr: u32) u8 {
             }
         },
         else => {
-            err("  [CDVD      ] Unhandled read @ 0x{X:0>8}.", .{addr});
+            std.debug.print("[CDVD      ] Unhandled read @ 0x{X:0>8}\n", .{addr});
 
             assert(false);
         }
@@ -389,35 +389,35 @@ pub fn readDmac() u32 {
 pub fn write(addr: u32, data: u8) void {
     switch (addr) {
         @enumToInt(CdvdReg.NCmd) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (N Command) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (N Command) = 0x{X:0>2}\n", .{addr, data});
 
             runNCmd(data);
         },
         @enumToInt(CdvdReg.NCmdStat) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (N Command Parameter) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (N Command Parameter) = 0x{X:0>2}\n", .{addr, data});
 
             nCmdParam.write(data);
         },
         @enumToInt(CdvdReg.CdvdError) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (CDVD Mode) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (CDVD Mode) = 0x{X:0>2}\n", .{addr, data});
         },
         @enumToInt(CdvdReg.IStat) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (CDVD I_STAT) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (CDVD I_STAT) = 0x{X:0>2}\n", .{addr, data});
 
             iStat &= ~data;
         },
         @enumToInt(CdvdReg.SCmd) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (S Command) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (S Command) = 0x{X:0>2}\n", .{addr, data});
 
             runSCmd(data);
         },
         @enumToInt(CdvdReg.SCmdStat) => {
-            info("   [CDVD      ] Write @ 0x{X:0>8} (S Command Parameter) = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Write @ 0x{X:0>8} (S Command Parameter) = 0x{X:0>2}\n", .{addr, data});
 
             sCmdParam = data;
         },
         else => {
-            err("  [CDVD      ] Unhandled write @ 0x{X:0>8} = 0x{X:0>2}.", .{addr, data});
+            std.debug.print("[CDVD      ] Unhandled write @ 0x{X:0>8} = 0x{X:0>2}\n", .{addr, data});
 
             assert(false);
         }
@@ -448,7 +448,7 @@ fn runNCmd(cmd: u8) void {
         @enumToInt(NCommand.ReadDvd) => cmdReadDvd(),
         @enumToInt(NCommand.GetToc ) => cmdGetToc(),
         else => {
-            err("  [CDVD      ] Unhandled N command 0x{X:0>2}.", .{cmd});
+            std.debug.print("[CDVD      ] Unhandled N command 0x{X:0>2}.", .{cmd});
 
             assert(false);
         }
@@ -466,7 +466,7 @@ fn runSCmd(cmd: u8) void {
             switch (sCmdParam) {
                 @enumToInt(SSubcommand.MechaconVersion) => cmdMechaconVersion(),
                 else => {
-                    err("  [CDVD      ] Unhandled S subcommand 0x{X:0>2}.", .{sCmdParam});
+                    std.debug.print("[CDVD      ] Unhandled S subcommand 0x{X:0>2}.", .{sCmdParam});
 
                     assert(false);
                 }
@@ -482,7 +482,7 @@ fn runSCmd(cmd: u8) void {
         @enumToInt(SCommand.ReadConfig       ) => cmdReadConfig(),
         @enumToInt(SCommand.CloseConfig      ) => cmdCloseConfig(),
         else => {
-            err("  [CDVD      ] Unhandled S command 0x{X:0>2}.", .{cmd});
+            std.debug.print("[CDVD      ] Unhandled S command 0x{X:0>2}.", .{cmd});
 
             assert(false);
         }
@@ -504,10 +504,10 @@ pub fn sendInterrupt() void {
 
 /// Seeks to a CD/DVD sector
 fn doSeek() void {
-    info("   [CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}", .{seekParam.pos + sectorNum, seekParam.num, seekParam.size});
+    std.debug.print("[CDVD      ] Seek. POS = {}, NUM = {}, SIZE = {}\n", .{seekParam.pos + sectorNum, seekParam.num, seekParam.size});
 
     cdvdFile.seekTo(seekParam.pos * seekParam.size) catch {
-        err("   [CDVD      ] Unable to seek to sector.", .{});
+        std.debug.print("[CDVD      ] Unable to seek to sector\n", .{});
 
         assert(false);
     };
@@ -538,25 +538,25 @@ fn doSeek() void {
 
 /// Reads a CD sector
 fn doReadCd() void {
-    info("   [CDVD      ] Reading CD sector {}...", .{seekParam.pos + sectorNum});
+    std.debug.print("[CDVD      ] Reading CD sector {}...\n", .{seekParam.pos + sectorNum});
 
     setDriveStat(0x06);
 
     cdvdFile.seekTo(seekParam.pos * seekParam.size + sectorNum * seekParam.size) catch {
-        err("   [CDVD      ] Unable to seek to sector.", .{});
+        std.debug.print("[CDVD      ] Unable to seek to sector\n", .{});
 
         assert(false);
     };
 
     if (cdvdFile.reader().read(readBuf.buf[0..seekParam.size])) |bytesRead| {
         if (bytesRead != seekParam.size) {
-            err("  [CDVD      ] Read size mismatch.", .{});
+            std.debug.print("[CDVD      ] Read size mismatch.", .{});
 
             assert(false);
         }
     } else |e| switch (e) {
         else => {
-            err("  [moestation] Unhandled error {}.", .{e});
+            std.debug.print("[moestation] Unhandled error {}.", .{e});
 
             assert(false);
         }
@@ -565,19 +565,19 @@ fn doReadCd() void {
 
 /// Reads a DVD sector
 fn doReadDvd() void {
-    info("   [CDVD      ] Reading DVD sector {}...", .{seekParam.pos + sectorNum});
+    std.debug.print("[CDVD      ] Reading DVD sector {}...\n", .{seekParam.pos + sectorNum});
 
     setDriveStat(0x06);
 
     if (cdvdFile.reader().read(readBuf.buf[12..2060])) |bytesRead| {
         if (bytesRead != seekParam.size) {
-            err("  [CDVD      ] Read size mismatch.", .{});
+            std.debug.print("[CDVD      ] Read size mismatch\n", .{});
 
             assert(false);
         }
     } else |e| switch (e) {
         else => {
-            err("  [moestation] Unhandled error {}.", .{e});
+            std.debug.print("[moestation] Unhandled error {}.", .{e});
 
             assert(false);
         }
@@ -606,7 +606,7 @@ fn doReadDvd() void {
 
 /// BootCertify
 fn cmdBootCertify() void {
-    info("   [CDVD      ] BootCertify", .{});
+    std.debug.print("[CDVD      ] BootCertify\n", .{});
 
     sCmdStat.noData = false;
 
@@ -617,18 +617,18 @@ fn cmdBootCertify() void {
 
 /// CancelPwOffReady
 fn cmdCancelPwOffReady() void {
-    info("   [CDVD      ] CancelPwOffReady", .{});
+    std.debug.print("[CDVD      ] CancelPwOffReady\n", .{});
 
     sCmdStat.noData = false;
 
-    sCmdData.write(1);
+    sCmdData.write(0);
 
     sCmdLen = 1;
 }
 
 /// OpenConfig
 fn cmdCloseConfig() void {
-    info("   [CDVD      ] CloseConfig", .{});
+    std.debug.print("[CDVD      ] CloseConfig\n", .{});
 
     sCmdStat.noData = false;
     
@@ -639,7 +639,9 @@ fn cmdCloseConfig() void {
 
 /// Forbid DVD
 fn cmdForbidDvd() void {
-    info("   [CDVD      ] ForbidDvd", .{});
+    std.debug.print("[CDVD      ] ForbidDvd\n", .{});
+
+    sCmdStat.noData = false;
 
     sCmdData.write(5);
 
@@ -648,7 +650,7 @@ fn cmdForbidDvd() void {
 
 /// Get TOC
 fn cmdGetToc() void {
-    info("   [CDVD      ] GetToc", .{});
+    std.debug.print("[CDVD      ] GetToc\n", .{});
 
     setDriveStat(0x06);
 
@@ -665,12 +667,12 @@ fn cmdGetToc() void {
     readBuf.buf[0x05] = 0x72;
     readBuf.buf[0x11] = 0x03;
 
-    cyclesToRead = 100_000;
+    cyclesToRead = 1;
 }
 
 /// MechaconVersion
 fn cmdMechaconVersion() void {
-    info("   [CDVD      ] MechaconVersion", .{});
+    std.debug.print("[CDVD      ] MechaconVersion\n", .{});
 
     sCmdStat.noData = false;
 
@@ -684,7 +686,7 @@ fn cmdMechaconVersion() void {
 
 /// OpenConfig
 fn cmdOpenConfig() void {
-    info("   [CDVD      ] OpenConfig", .{});
+    std.debug.print("[CDVD      ] OpenConfig\n", .{});
 
     sCmdStat.noData = false;
 
@@ -695,29 +697,31 @@ fn cmdOpenConfig() void {
 
 /// Pause
 pub fn cmdPause() void {
-    info("   [CDVD      ] Pause", .{});
+    std.debug.print("[CDVD      ] Pause\n", .{});
 
     // Paused
     setDriveStat(8);
 
-    sendInterrupt();
+    nCmdStat = 0x40;
+
+    intc.sendInterruptIop(IntSource.Cdvd);
 }
 
 /// ReadCd
 fn cmdReadCd() void {
-    info("   [CDVD      ] ReadCd", .{});
+    std.debug.print("[CDVD      ] ReadCd\n", .{});
 
     seekParam.pos = @as(u32, nCmdParam.buf[0]) | (@as(u32, nCmdParam.buf[1]) << 8) | (@as(u32, nCmdParam.buf[2]) << 16) | (@as(u32, nCmdParam.buf[3]) << 24);
     seekParam.num = @as(u32, nCmdParam.buf[4]) | (@as(u32, nCmdParam.buf[5]) << 8) | (@as(u32, nCmdParam.buf[6]) << 16) | (@as(u32, nCmdParam.buf[7]) << 24);
 
     if (seekParam.num == 0) {
-        err("  [CDVD      ] No sectors to read.", .{});
+        std.debug.print("[CDVD      ] No sectors to read\n", .{});
 
         assert(false);
     }
 
     if (seekParam.pos >= 0x8000_0000) {
-        err("  [CDVD      ] Negative sector number.", .{});
+        std.debug.print("[CDVD      ] Negative sector number\n", .{});
 
         assert(false);
     }
@@ -727,14 +731,14 @@ fn cmdReadCd() void {
         1    => seekParam.size = 2328,
         2    => seekParam.size = 2340,
         else => {
-            err("  [CDVD      ] Unhandled sector size {}.", .{nCmdParam.buf[10]});
+            std.debug.print("[CDVD      ] Unhandled sector size {}.", .{nCmdParam.buf[10]});
 
             assert(false);
         },
     }
 
     if (nCmdParam.buf[10] != 0) {
-        err("  [CDVD      ] Unhanded non-2048 byte CD sector.", .{});
+        std.debug.print("[CDVD      ] Unhanded non-2048 byte CD sector.", .{});
 
         assert(false);
     }
@@ -744,7 +748,7 @@ fn cmdReadCd() void {
 
 /// ReadConfig
 fn cmdReadConfig() void {
-    info("   [CDVD      ] ReadConfig", .{});
+    std.debug.print("[CDVD      ] ReadConfig\n", .{});
 
     sCmdStat.noData = false;
     
@@ -773,20 +777,20 @@ fn cmdReadConfig() void {
 
 /// ReadDvd
 fn cmdReadDvd() void {
-    info("   [CDVD      ] ReadDvd", .{});
+    std.debug.print("[CDVD      ] ReadDvd\n", .{});
 
     seekParam.pos  = @as(u32, nCmdParam.buf[0]) | (@as(u32, nCmdParam.buf[1]) << 8) | (@as(u32, nCmdParam.buf[2]) << 16) | (@as(u32, nCmdParam.buf[3]) << 24);
     seekParam.num  = @as(u32, nCmdParam.buf[4]) | (@as(u32, nCmdParam.buf[5]) << 8) | (@as(u32, nCmdParam.buf[6]) << 16) | (@as(u32, nCmdParam.buf[7]) << 24);
     seekParam.size = 2048;
 
     if (seekParam.num == 0) {
-        err("  [CDVD      ] No sectors to read.", .{});
+        std.debug.print("[CDVD      ] No sectors to read\n", .{});
 
         assert(false);
     }
 
     if (seekParam.pos >= 0x8000_0000) {
-        err("  [CDVD      ] Negative sector number.", .{});
+        std.debug.print("[CDVD      ] Negative sector number.", .{});
 
         assert(false);
     }
@@ -796,7 +800,7 @@ fn cmdReadDvd() void {
 
 /// ReadiLinkModel
 fn cmdReadILinkModel() void {
-    info("   [CDVD      ] ReadiLinkModel", .{});
+    std.debug.print("[CDVD      ] ReadiLinkModel\n", .{});
 
     sCmdStat.noData = false;
     
@@ -815,7 +819,7 @@ fn cmdReadILinkModel() void {
 
 /// ReadRtc
 fn cmdReadRtc() void {
-    info("   [CDVD      ] ReadRtc", .{});
+    std.debug.print("[CDVD      ] ReadRtc\n", .{});
 
     sCmdStat.noData = false;
     
@@ -826,15 +830,15 @@ fn cmdReadRtc() void {
     
     sCmdData.write(0);
     sCmdData.write(1);
-    sCmdData.write(1);
-    sCmdData.write(100);
+    sCmdData.write(0);
+    sCmdData.write(0);
 
     sCmdLen = 8;
 }
 
 /// Update Sticky Flags
 fn cmdUpdateStickyFlags() void {
-    info("   [CDVD      ] UpdateStickyFlags", .{});
+    std.debug.print("[CDVD      ] UpdateStickyFlags\n", .{});
 
     sCmdStat.noData = false;
 
