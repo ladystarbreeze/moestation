@@ -28,6 +28,8 @@ const LowerOp = enum(u7) {
     Isubiu  = 0x09,
     Fcset   = 0x11,
     Fcand   = 0x12,
+    Bal     = 0x21,
+    Jr      = 0x24,
     Ibne    = 0x29,
     Special = 0x40,
 };
@@ -40,6 +42,7 @@ const LowerOpSpecial2 = enum(u7) {
     Xtop   = 0x28,
     Xgkick = 0x2C,
     Move   = 0x30,
+    Lqi    = 0x34,
     Sqi    = 0x35,
     Div    = 0x38,
 };
@@ -115,6 +118,8 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.Isubiu ) => iIsubiu(vu, instr),
         @enumToInt(LowerOp.Fcset  ) => iFcset(vu, instr),
         @enumToInt(LowerOp.Fcand  ) => iFcand(vu, instr),
+        @enumToInt(LowerOp.Bal    ) => iBal(vu, instr),
+        @enumToInt(LowerOp.Jr     ) => iJr(vu, instr),
         @enumToInt(LowerOp.Ibne   ) => iIbne(vu, instr),
         @enumToInt(LowerOp.Special) => {
             const funct = @truncate(u6, instr);
@@ -126,6 +131,7 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                     @enumToInt(LowerOpSpecial2.Xtop  ) => iXtop(vu, instr),
                     @enumToInt(LowerOpSpecial2.Xgkick) => iXgkick(vu, instr),
                     @enumToInt(LowerOpSpecial2.Move  ) => iMove(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Lqi   ) => iLqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Sqi   ) => iSqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Div   ) => iDiv(vu, instr),
                     else => {
@@ -273,6 +279,25 @@ pub fn iAddq(vu: *Vu, instr: u32) void {
         const vd = vu.getVf(fd);
 
         std.debug.print("[VU{}       ] ADDQ.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fd, destStr, fs, destStr, fd, vd});
+    }
+}
+
+/// Branch And Link
+pub fn iBal(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+
+    if (it >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const target = vu.pc +% (@bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr)))) << 3);
+
+    vu.doBranch(target, true, @truncate(u4, it));
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] BAL VI[{}], 0x{X:0>4}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, target, it, vu.npc});
     }
 }
 
@@ -591,6 +616,25 @@ pub fn iIswr(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Jump Register
+pub fn iJr(vu: *Vu, instr: u32) void {
+    const is = getRs(instr);
+
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const target = vu.getVi(@truncate(u4, is));
+
+    vu.doBranch(target, true, 0);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] JR VI[{}]; PC = 0x{X:0>3}\n", .{vu.vuNum, is, target});
+    }
+}
+
 /// Load Quadword
 pub fn iLq(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
@@ -628,6 +672,46 @@ pub fn iLq(vu: *Vu, instr: u32) void {
         const vt = vu.getVf(ft);
 
         std.debug.print("[VU{}       ] LQ.{s} VF[{}]{s}, {}(VI[{}]); VF[{}] = [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, @bitCast(i16, imm), is, ft, addr, vt});
+    }
+}
+
+/// Load Quadword Increment
+pub fn iLqi(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const is = getRs(instr);
+
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const addr = vu.getVi(@truncate(u4, is)) << 4;
+    const data = vu.readData(u128, addr);
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVfElement(u32, ft, Element.W, @truncate(u32, data >> 96));
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVfElement(u32, ft, Element.Z, @truncate(u32, data >> 64));
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVfElement(u32, ft, Element.Y, @truncate(u32, data >> 32));
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVfElement(u32, ft, Element.X, @truncate(u32, data >> 0));
+    }
+
+    vu.setVi(@truncate(u4, is), vu.getVi(@truncate(u4, is)) + 1);
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVf(ft);
+
+        std.debug.print("[VU{}       ] LQI.{s} VF[{}]{s}, (VI[{}]++); VF[{}] = [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, is, ft, addr, vt});
     }
 }
 
@@ -961,7 +1045,7 @@ pub fn iSq(vu: *Vu, instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        std.debug.print("[VU{}       ] SQ.{s} VF[{}]{s}, {}(VI[{}])\n", .{vu.vuNum, destStr, fs, destStr, @bitCast(i16, imm), it});
+        std.debug.print("[VU{}       ] SQ.{s} VF[{}]{s}, {}(VI[{}]); [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fs, destStr, @bitCast(i16, imm), it, addr, vu.getVf(fs)});
     }
 }
 
@@ -998,7 +1082,7 @@ pub fn iSqi(vu: *Vu, instr: u32) void {
     if (doDisasm) {
         const destStr = getDestStr(dest);
 
-        std.debug.print("[VU{}       ] SQI.{s} VF[{}]{s}, (VI[{}]++)\n", .{vu.vuNum, destStr, fs, destStr, it});
+        std.debug.print("[VU{}       ] SQI.{s} VF[{}]{s}, (VI[{}]++); [0x{X:0>4}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fs, destStr, it, addr, vu.getVf(fs)});
     }
 }
 
