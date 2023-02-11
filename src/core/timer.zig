@@ -82,6 +82,21 @@ const Timer = struct {
      mode: TimerMode = undefined,
      comp: u16 = 0,
      hold: u16 = 0,
+    
+     subCount: u16 = 0,
+    prescaler: u16 = 1,
+
+    /// Sets the timer prescaler, resets sub count
+    pub fn setPrescaler(self: *Timer) void {
+        switch (self.mode.clks) {
+            0 => self.prescaler =   1,
+            1 => self.prescaler =  16,
+            2 => self.prescaler = 256,
+            3 => {},
+        }
+
+        self.subCount = 0;
+    }
 };
 
 var timers: [4]Timer = undefined;
@@ -134,9 +149,11 @@ pub fn write(addr: u32, data: u32) void {
             timers[chn].count = @truncate(u16, data);
         },
         @enumToInt(TimerReg.TMode) => {
-            info("   [Timer     ] Write @ 0x{X:0>8} (T{}_MODE) = 0x{X:0>8}.", .{addr, chn, data});
+            std.debug.print("[Timer     ] Write @ T{}_MODE = 0x{X:0>8}\n", .{chn, data});
             
             timers[chn].mode.set(@truncate(u16, data));
+
+            timers[chn].setPrescaler();
         },
         @enumToInt(TimerReg.TComp) => {
             info("   [Timer     ] Write @ 0x{X:0>8} (T{}_COMP) = 0x{X:0>8}.", .{addr, chn, data});
@@ -158,7 +175,51 @@ pub fn write(addr: u32, data: u32) void {
 pub fn stepHblank() void {
     var i: u3 = 0;
     while (i < 4) : (i += 1) {
-        if (timers[i].mode.clks != 3) continue;
+        if (!timers[i].mode.cue or timers[i].mode.clks != 3) continue;
+
+        const oldCount = timers[i].count;
+
+        timers[i].count +%= 1;
+
+        if (timers[i].count == timers[i].comp) {
+            if (timers[i].mode.cmpe and !timers[i].mode.equf) {
+                timers[i].mode.equf = true;
+
+                sendInterrupt(i);
+            }
+
+            if (timers[i].mode.zret) {
+                timers[i].count = 0;
+            }
+        } else if (oldCount == 0xFFFF) {
+            if (timers[i].mode.ovfe and !timers[i].mode.ovff) {
+                timers[i].mode.ovff = true;
+
+                sendInterrupt(i);
+            }
+        }
+    }
+}
+
+/// Steps timers
+pub fn step() void {
+    var i: u3 = 0;
+    while (i < 4) : (i += 1) {
+        if (!timers[i].mode.cue or timers[i].mode.clks == 3) continue;
+
+        if (timers[i].mode.gate) {
+            std.debug.print("Unhandled Timer {} gate\n", .{i});
+
+            @panic("Unhandled timer gate");
+        }
+
+        timers[i].subCount += 1;
+
+        if (timers[i].subCount == timers[i].prescaler) {
+            timers[i].subCount = 0;
+        } else {
+            continue;
+        }
 
         const oldCount = timers[i].count;
 
