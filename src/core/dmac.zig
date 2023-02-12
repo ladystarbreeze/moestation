@@ -351,6 +351,13 @@ pub fn write(addr: u32, data: u32) void {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D{}_CTRL) = 0x{X:0>8}.", .{addr, chn, data});
 
                 channels[chn].chcr.set(data);
+
+                if (channels[chn].chcr.mod != 1 and channels[chn].qwc != 0) channels[chn].tagEnd = true;
+
+                if (chn == 1 and @intToEnum(Direction, channels[chn].chcr.dir) == Direction.To) {
+                    // Force DMA on GS downloads
+                    setRequest(Channel.Vif1, true);
+                }
             },
             @enumToInt(ChannelReg.DMadr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D{}_MADR) = 0x{X:0>8}.", .{addr, chn, data});
@@ -599,12 +606,6 @@ fn decodeDestTag(chnId: u4, dmaTag: u128) void {
 fn doPath3() void {
     const chnId = @enumToInt(Channel.Path3);
 
-    if (channels[chnId].chcr.dir != @enumToInt(Direction.From)) {
-        err("  [DMAC      ] Unhandled PATH3 direction.", .{});
-
-        assert(false);
-    }
-
     if (channels[chnId].qwc == 0) {
         assert(channels[chnId].chcr.mod < 2);
 
@@ -742,6 +743,12 @@ fn doVif1() void {
     if (channels[chnId].qwc == 0) {
         info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Vif1)});
 
+        if (channels[chnId].chcr.dir == @enumToInt(Direction.To)) {
+            std.debug.print("[DMAC      ] Unhandled GS download in Source Chain mode\n", .{});
+
+            @panic("Unhandled transfer mode");
+        }
+
         // Read new tag
         const dmaTag = bus.readDmac(channels[chnId].tadr);
 
@@ -759,13 +766,18 @@ fn doVif1() void {
             transferEnd(chnId);
         }
     } else {
-        if (!channels[chnId].hasTag) {
-            assert(false);
+        switch (@intToEnum(Direction, channels[chnId].chcr.dir)) {
+            Direction.To => {
+                if (!vif1.isP2Active()) return;
+
+                bus.writeDmac(channels[chnId].madr, vif1.downloadGs());
+            },
+            Direction.From => {
+                vif1.writeFifo(u128, bus.readDmac(channels[chnId].madr));
+            }
         }
 
         channels[chnId].qwc -= 1;
-
-        vif1.writeFifo(u128, bus.readDmac(channels[chnId].madr));
         
         channels[chnId].madr += @sizeOf(u128);
 
@@ -773,6 +785,10 @@ fn doVif1() void {
             channels[chnId].chcr.str = false;
 
             transferEnd(chnId);
+
+            if (@intToEnum(Direction, channels[chnId].chcr.dir) == Direction.To) {
+                vif1.releaseP2();
+            }
         }
     }
 }

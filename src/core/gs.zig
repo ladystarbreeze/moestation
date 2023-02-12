@@ -122,6 +122,12 @@ const PrivReg = enum(u32) {
     _
 };
 
+/// GS bus direction
+const BusDirection = enum(u1) {
+    Upload,
+    Download,
+};
+
 /// GS pixel formats
 const PixelFormat = enum(u6) {
     Psmct32  = 0x00,
@@ -274,6 +280,26 @@ const Bitbltbuf = struct {
         self.dstBase  = @truncate(u14, data >> 32);
         self.dstWidth = @truncate(u6 , data >> 48);
         self.dstFmt   = @intToEnum(PixelFormat, @truncate(u6, data >> 56));
+    }
+};
+
+/// Texcoord clamping mode
+const Clamp = struct {
+     wms: u2  = 0,
+     wmt: u2  = 0,
+    minu: i32 = 0,
+    maxu: i32 = 0,
+    minv: i32 = 0,
+    maxv: i32 = 0,
+
+    /// Sets CLAMP
+    pub fn set(self: *Clamp, data: u64) void {
+        self.wms  = @truncate(u2, data);
+        self.wmt  = @truncate(u2, data >> 2);
+        self.minu = @bitCast(i32, @as(u32, @truncate(u10, data >>  4)));
+        self.maxu = @bitCast(i32, @as(u32, @truncate(u10, data >> 14)));
+        self.minv = @bitCast(i32, @as(u32, @truncate(u10, data >> 24)));
+        self.minv = @bitCast(i32, @as(u32, @truncate(u10, data >> 34)));
     }
 };
 
@@ -497,12 +523,14 @@ const Csr = struct {
      field: bool = true,
       fifo: u2   = 1,
     
+    finishGenerated: bool = false,
+    
     /// Returns CSR
     pub fn get(self: Csr) u64 {
         var data: u64 = 0;
 
         data |= @as(u64, @bitCast(u1, self.signal));
-        data |= @as(u64, @bitCast(u1, self.finish)) <<  1;
+        data |= @as(u64, @bitCast(u1, self.finishGenerated)) <<  1;
         data |= @as(u64, @bitCast(u1, self.hsint )) <<  2;
         data |= @as(u64, @bitCast(u1, self.vsint )) <<  3;
         data |= @as(u64, @bitCast(u1, self.edwint)) <<  4;
@@ -580,8 +608,9 @@ var rgbaq: Rgbaq = Rgbaq{};
 var st: St = St{};
 var uv: Uv = Uv{};
 
-var  tex: [2]Tex = undefined;
-var texa: Texa   = Texa{};
+var   tex: [2]Tex   = undefined;
+var clamp: [2]Clamp = undefined;
+var  texa:    Texa  = Texa{};
 
 var    alpha: [2]Alpha = undefined;
 var colclamp: bool     = false;
@@ -601,6 +630,8 @@ var    trxdir: Trxdir    = Trxdir.Off;
 // GS privileged registers
 var csr: Csr = Csr{};
 var imr: Imr = Imr{};
+
+var busdir: BusDirection = BusDirection.Upload;
 
 // Transmission parameters
 var trxParam: TrxParam = TrxParam{};
@@ -627,13 +658,17 @@ fn reset() void {
     imr.set(0xFF00);
 
     csr.fifo = 1;
+
+    busdir = BusDirection.Upload;
 }
 
 /// Sets FINISH
 pub fn setFinish() void {
-    csr.finish = true;
+    std.debug.print("GS FINISH\n", .{});
 
-    if (!imr.finishmsk) @panic("Unhandled FINISH interrupt");
+    csr.finishGenerated = csr.finish;
+
+    if (csr.finishGenerated and !imr.finishmsk) @panic("Unhandled FINISH interrupt");
 }
 
 /// Clears vertex queue, sets primitive vertex number
@@ -669,7 +704,9 @@ pub fn readPriv(comptime T: type, addr: u32) T {
 pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23) T {
     var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => base + width * y + x,
+        PixelFormat.Psmct24 => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
+        PixelFormat.Psmct4  => base + ((width * y) >> 3) + (x >> 3),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
@@ -681,7 +718,13 @@ pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u
 
     return switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr],
+        PixelFormat.Psmct24 => (vram[addr] & 0xFF_FFFF),
         PixelFormat.Psmct16, PixelFormat.Psmz16s => @truncate(u16, vram[addr] >> (16 * @truncate(u5, x & 1))),
+        PixelFormat.Psmct4  => {
+            const shift = 4 * @truncate(u5, x & 7);
+
+            return @truncate(u4, vram[addr] >> shift);
+        },
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
@@ -757,6 +800,7 @@ pub fn write(addr: u8, data: u64) void {
             if (vtxCount == Primitive.getVtxCount(prim.prim)) {
                 switch (prim.prim) {
                     Primitive.Point  => drawPoint(),
+                    Primitive.LineStrip => {},
                     Primitive.Triangle, Primitive.TriangleStrip => drawTriangle(),
                     Primitive.Sprite => drawSprite(),
                     else => {
@@ -766,7 +810,7 @@ pub fn write(addr: u8, data: u64) void {
                     }
                 }
 
-                if (prim.prim == Primitive.TriangleStrip) {
+                if (prim.prim == Primitive.LineStrip or prim.prim == Primitive.TriangleStrip) {
                     vtxQueue.discard(1);
                 } else {
                     clearVtxQueue();
@@ -775,6 +819,8 @@ pub fn write(addr: u8, data: u64) void {
         },
         @enumToInt(GsReg.Tex01     ) => tex[0].setTex0(data),
         @enumToInt(GsReg.Tex02     ) => tex[1].setTex0(data),
+        @enumToInt(GsReg.Clamp1    ) => clamp[0].set(data),
+        @enumToInt(GsReg.Clamp2    ) => clamp[1].set(data),
         @enumToInt(GsReg.Tex21     ) => tex[0].setTex2(data),
         @enumToInt(GsReg.Tex22     ) => tex[1].setTex2(data),
         @enumToInt(GsReg.PrMode    ) => prmode.set(data),
@@ -911,6 +957,16 @@ var framePtr: u23 = 0;
 /// Writes data to privileged register
 pub fn writePriv(addr: u32, data: u64) void {
     switch (addr) {
+        @enumToInt(PrivReg.Dispfb1 ) => {
+            std.debug.print("[GS        ] Write to Dispfb1 = 0x{X:0>16}\n", .{data});
+
+            framePtr = 2048 * @as(u23, @truncate(u9, data));
+        },
+        @enumToInt(PrivReg.Dispfb2 ) => {
+            std.debug.print("[GS        ] Write to Dispfb2 = 0x{X:0>16}\n", .{data});
+
+            framePtr = 2048 * @as(u23, @truncate(u9, data));
+        },
         @enumToInt(PrivReg.GsCsr) => {
             if ((data & (1 << 9)) != 0) {
                 reset();
@@ -921,15 +977,10 @@ pub fn writePriv(addr: u32, data: u64) void {
         @enumToInt(PrivReg.GsImr) => {
             imr.set(data);
         },
-        @enumToInt(PrivReg.Dispfb1 ) => {
-            std.debug.print("[GS        ] Write to Dispfb1 = 0x{X:0>16}\n", .{data});
+        @enumToInt(PrivReg.Busdir  ) => {
+            busdir = @intToEnum(BusDirection, @truncate(u1, data));
 
-            framePtr = 2048 * @as(u23, @truncate(u9, data));
-        },
-        @enumToInt(PrivReg.Dispfb2 ) => {
-            std.debug.print("[GS        ] Write to Dispfb2 = 0x{X:0>16}\n", .{data});
-
-            framePtr = 2048 * @as(u23, @truncate(u9, data));
+            std.debug.print("[GS        ] Bus direction = {s}\n", .{@tagName(busdir)});
         },
         @enumToInt(PrivReg.Pmode   ),
         @enumToInt(PrivReg.Smode1  ),
@@ -960,6 +1011,7 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
         PixelFormat.Psmct24 => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
+        PixelFormat.Psmct4  => base + ((width * y) >> 3) + (x >> 3),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
 
@@ -984,6 +1036,14 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
 
             const shift = 8 * @truncate(u5, x & 3);
             const mask  = ~(@as(u32, 0xFF) << shift);
+
+            vram[addr] = (vramData & mask) | (@as(u32, data) << shift);
+        },
+        PixelFormat.Psmct4 => {
+            const vramData = vram[addr];
+
+            const shift = 4 * @truncate(u5, x & 7);
+            const mask  = ~(@as(u32, 0xF) << shift);
 
             vram[addr] = (vramData & mask) | (@as(u32, data) << shift);
         },
@@ -1242,13 +1302,36 @@ fn getTex(u: u14, v: u14) u32 {
         PixelFormat.Psmct24 => {
             color = (@as(u32, texa.ta0) << 24) | (readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) & 0xFF_FFFF);
         },
-        PixelFormat.Psmct4hl, PixelFormat.Psmct4hh => {
-            var idtex4 = @truncate(u23, readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) >> 24);
+        PixelFormat.Psmct16 => {
+            const tex16 = readVram(u16, PixelFormat.Psmct16, texAddr, tbWidth, u, v);
 
-            if (tex[ctxt].psm == PixelFormat.Psmct4hl) {
-                idtex4 &= 0xF;
+            const r = @truncate(u5, tex16 >>  0);
+            const g = @truncate(u5, tex16 >>  5);
+            const b = @truncate(u5, tex16 >> 10);
+
+            color = (@as(u32, b) << 19) | (@as(u32, g) << 11) | (@as(u32, r) << 3);
+
+            if (!(texa.aem and color == 0)) {
+                if ((tex16 & (1 << 15)) != 0) {
+                    color |= @as(u32, texa.ta1) << 24;
+                } else {
+                    color |= @as(u32, texa.ta0) << 24;
+                }
+            }
+        },
+        PixelFormat.Psmct4, PixelFormat.Psmct4hl, PixelFormat.Psmct4hh => {
+            var idtex4: u23 = undefined;
+
+            if (tex[ctxt].psm == PixelFormat.Psmct4) {
+                idtex4 = @as(u23, readVram(u4, PixelFormat.Psmct4, texAddr, tbWidth, u, v));
             } else {
-                idtex4 >>= 4;
+                idtex4 = @truncate(u23, readVram(u32, PixelFormat.Psmct32, texAddr, tbWidth, u, v) >> 24);
+
+                if (tex[ctxt].psm == PixelFormat.Psmct4hl) {
+                    idtex4 &= 0xF;
+                } else {
+                    idtex4 >>= 4;
+                }
             }
 
             // Get color from CLUT
@@ -1479,10 +1562,62 @@ fn drawSprite() void {
             var color: u32 = 0;
 
             if (tme) {
-                const texU = if (fst) @truncate(u14, @bitCast(u64, u >> 16)) else @truncate(u14, @floatToInt(u32, ((s / a.q) * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0));
-                const texV = if (fst) @truncate(u14, @bitCast(u64, v >> 16)) else @truncate(u14, @floatToInt(u32, ((t / a.q) * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0));
+                var texU: u14 = undefined;
+                var texV: u14 = undefined;
 
-                const texColor = getTex(texU >> 4, texV >> 4);
+                const texWidth  = @as(i32, 1) << tex[ctxt].tw;
+                const texHeight = @as(i32, 1) << tex[ctxt].th;
+
+                const sU = if (fst) u >> 20 else @floatToInt(i32, (s / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+                const tV = if (fst) v >> 20 else @floatToInt(i32, (t / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+
+                switch (clamp[ctxt].wms) {
+                    0 => texU = @truncate(u14, @bitCast(u64, @rem(sU, texWidth))),
+                    1 => {
+                        if (sU >= texWidth) {
+                            texU = @truncate(u14, @bitCast(u32, texWidth)) - 1;
+                        } else if (sU < texWidth) {
+                            texU = 0;
+                        } else {
+                            texU = @truncate(u14, @bitCast(u64, sU));
+                        }
+                    },
+                    2 => {
+                        if (sU > clamp[ctxt].maxu) {
+                            texU = @truncate(u14, @bitCast(u32, clamp[ctxt].maxu));
+                        } else if (sU < clamp[ctxt].minu) {
+                            texU = @truncate(u14, @bitCast(u32, clamp[ctxt].minu));
+                        } else {
+                            texU = @truncate(u14, @bitCast(u64, sU));
+                        }
+                    },
+                    3 => @panic("Unhandled S clamp mode")
+                }
+
+                switch (clamp[ctxt].wmt) {
+                    0 => texV = @truncate(u14, @bitCast(u64, @rem(tV, texHeight))),
+                    1 => {
+                        if (tV >= texHeight) {
+                            texV = @truncate(u14, @bitCast(u32, texHeight)) - 1;
+                        } else if (tV < texHeight) {
+                            texV = 0;
+                        } else {
+                            texV = @truncate(u14, @bitCast(u64, tV));
+                        }
+                    },
+                    2 => {
+                        if (tV > clamp[ctxt].maxv) {
+                            texV = @truncate(u14, @bitCast(u32, clamp[ctxt].maxv));
+                        } else if (tV < clamp[ctxt].minv) {
+                            texV = @truncate(u14, @bitCast(u32, clamp[ctxt].minv));
+                        } else {
+                            texV = @truncate(u14, @bitCast(u64, tV));
+                        }
+                    },
+                    3 => @panic("Unhandled T clamp mode")
+                }
+
+                const texColor = getTex(texU, texV);
 
                 switch (tex[ctxt].tfx) {
                 //switch (@as(u2, 1)) {
@@ -1563,6 +1698,8 @@ fn drawSprite() void {
         v += vStep;
         t += tStep;
     }
+
+    std.debug.print("Sprite done\n", .{});
 }
 
 /// Draws a triangle
@@ -1769,31 +1906,24 @@ fn setupTransmission() void {
 
             const dstSize = PixelFormat.getPixelSize(bitbltbuf.dstFmt);
 
-            if (dstSize == 4) {
-                switch (bitbltbuf.dstFmt) {
-                    PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => {},
-                    else => {
-                        std.debug.print("Unhandled 4-bit pixel format: {s}\n", .{@tagName(bitbltbuf.dstFmt)});
-
-                        @panic("Unhandled 4-bit pixel format");
-                    }
-                }
-            }
-
             trxParam.dstSize = dstSize;
 
             trxParam.dstBase  = 64 * @as(u23, bitbltbuf.dstBase);
             trxParam.dstWidth = 64 * @as(u23, bitbltbuf.dstWidth);
-
-            trxParam.dstX = 0;
-            trxParam.dstY = 0;
             
             std.debug.print("Destination base = 0x{X:0>6}, width = {}, X = {}, Y = {}, Format = {s}\n", .{trxParam.dstBase, trxParam.dstWidth, trxpos.dstX, trxpos.dstY, @tagName(bitbltbuf.dstFmt)});
         },
         Trxdir.VramToGif => {
-            std.debug.print("Unhandled VRAM->GIF transfer\n", .{});
+            std.debug.print("Setting up VRAM->GIF transmission...\n", .{});
 
-            @panic("Unhandled VRAM->GIF transfer");
+            const srcSize = PixelFormat.getPixelSize(bitbltbuf.srcFmt);
+
+            trxParam.srcSize = srcSize;
+
+            trxParam.srcBase  = 64 * @as(u23, bitbltbuf.srcBase);
+            trxParam.srcWidth = 64 * @as(u23, bitbltbuf.srcWidth);
+            
+            std.debug.print("Source base = 0x{X:0>6}, width = {}, X = {}, Y = {}, Format = {s}\n", .{trxParam.srcBase, trxParam.srcWidth, trxpos.srcX, trxpos.srcY, @tagName(bitbltbuf.srcFmt)});
         },
         Trxdir.VramToVram => {
             std.debug.print("Setting up VRAM->VRAM transmission...\n", .{});
@@ -1825,11 +1955,6 @@ fn setupTransmission() void {
             trxParam.srcWidth = 64 * @as(u23, bitbltbuf.srcWidth);
             trxParam.dstBase  = 64 * @as(u23, bitbltbuf.dstBase);
             trxParam.dstWidth = 64 * @as(u23, bitbltbuf.dstWidth);
-
-            trxParam.srcX = 0;
-            trxParam.srcY = 0;
-            trxParam.dstX = 0;
-            trxParam.dstY = 0;
             
             std.debug.print("     Source base = 0x{X:0>6}, width = {}, X = {}, Y = {}, Format = {s}\n", .{trxParam.srcBase, trxParam.srcWidth, trxpos.srcX, trxpos.srcY, @tagName(bitbltbuf.srcFmt)});
             std.debug.print("Destination base = 0x{X:0>6}, width = {}, X = {}, Y = {}, Format = {s}\n", .{trxParam.dstBase, trxParam.dstWidth, trxpos.dstX, trxpos.dstY, @tagName(bitbltbuf.dstFmt)});
@@ -1838,11 +1963,14 @@ fn setupTransmission() void {
             std.debug.print("No transmission\n", .{});
         },
     }
+
+    rgb24Pos = [2]i32 {0, 0};
+    rgb24Rem = [2]u32 {0, 0};
 }
 
 // Why
-var rgb24Pos: i32 = 0;
-var rgb24Rem: u32 = 0;
+var rgb24Pos = [2]i32 {0, 0};
+var rgb24Rem = [2]u32 {0, 0};
 
 /// Handles GIF->VRAM transfers
 fn transmissionGifToVram(data: u64) void {
@@ -1864,9 +1992,9 @@ fn transmissionGifToVram(data: u64) void {
             trxParam.dstX += 2;
         },
         PixelFormat.Psmct24 => {
-            switch (rgb24Pos) {
+            switch (rgb24Pos[0]) {
                 0 => {
-                    rgb24Rem = @truncate(u32, data >> 48);
+                    rgb24Rem[0] = @truncate(u32, data >> 48);
 
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, @truncate(u32, data >>  0));
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >> 24));
@@ -1874,11 +2002,11 @@ fn transmissionGifToVram(data: u64) void {
                     trxParam.dstX += 2;
                 },
                 1 => {
-                    rgb24Rem |= @truncate(u32, data & 0xFF) << 16;
+                    rgb24Rem[0] |= @truncate(u32, data & 0xFF) << 16;
 
-                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem);
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem[0]);
 
-                    rgb24Rem = @truncate(u32, data >> 56);
+                    rgb24Rem[0] = @truncate(u32, data >> 56);
 
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >>  8));
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y, @truncate(u32, data >> 32));
@@ -1886,9 +2014,9 @@ fn transmissionGifToVram(data: u64) void {
                     trxParam.dstX += 3;
                 },
                 2 => {
-                    rgb24Rem |= @truncate(u32, data & 0xFFFF) << 8;
+                    rgb24Rem[0] |= @truncate(u32, data & 0xFFFF) << 8;
 
-                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem);
+                    writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y, rgb24Rem[0]);
 
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y, @truncate(u32, data >> 16));
                     writeVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y, @truncate(u32, data >> 40));
@@ -1898,7 +2026,7 @@ fn transmissionGifToVram(data: u64) void {
                 else => unreachable,
             }
 
-            rgb24Pos = @rem(rgb24Pos + 1, 3);
+            rgb24Pos[0] = @rem(rgb24Pos[0] + 1, 3);
         },
         PixelFormat.Psmct16 => {
             var i: u23 = 0;
@@ -1915,6 +2043,14 @@ fn transmissionGifToVram(data: u64) void {
             }
 
             trxParam.dstX += 8;
+        },
+        PixelFormat.Psmct4 => {
+            var i: u23 = 0;
+            while (i < 16) : (i += 1) {
+                writeVram(u4, PixelFormat.Psmct4, base, trxWidth, x + i, y, @truncate(u4, data >> @truncate(u6, 4 * i)));
+            }
+
+            trxParam.dstX += 16;
         },
         PixelFormat.Psmct4hh => {
             var i: u23 = 0;
@@ -1946,10 +2082,99 @@ fn transmissionGifToVram(data: u64) void {
             std.debug.print("Transmission end\n", .{});
 
             trxdir = Trxdir.Off;
+
+            trxParam.dstY = 0;
         }
 
         trxParam.dstX = 0;
     }
+}
+
+/// Handles VRAM->host transfers
+pub fn download() u128 {
+    if (busdir != BusDirection.Download or trxdir != Trxdir.VramToGif) @panic("Unhandled transmission direction");
+
+    var data: u128 = 0;
+
+    const base = trxParam.srcBase;
+
+    const x = trxpos.srcX + trxParam.srcX;
+    const y = trxpos.srcY + trxParam.srcY;
+
+    const trxWidth = trxParam.srcWidth;
+
+    switch (bitbltbuf.srcFmt) {
+        PixelFormat.Psmct24 => {
+            switch (rgb24Pos[1]) {
+                0 => {
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y));
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y)) << 24;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y)) << 48;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 3, y)) << 72;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 4, y)) << 96;
+
+                    const rem = readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 5, y);
+
+                    rgb24Rem[1] = rem >> 8;
+
+                    data |= @as(u128, rem) << 120;
+
+                    trxParam.dstX += 6;
+                },
+                1 => {
+                    data |= @as(u128, rgb24Rem[1]);
+
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y)) <<  16;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y)) <<  40;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y)) <<  64;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 3, y)) <<  88;
+
+                    const rem = readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 4, y);
+
+                    rgb24Rem[1] = rem >> 16;
+
+                    data |= @as(u128, rem) << 112;
+
+                    trxParam.dstX += 5;
+                },
+                2 => {
+                    data |= @as(u128, rgb24Rem[1]);
+
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 0, y)) <<   8;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 1, y)) <<  32;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 2, y)) <<  56;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 3, y)) <<  80;
+                    data |= @as(u128, readVram(u32, PixelFormat.Psmct24, base, trxWidth, x + 4, y)) << 104;
+
+                    trxParam.dstX += 5;
+                },
+                else => unreachable,
+            }
+
+            rgb24Pos[1] = @rem(rgb24Pos[1] + 1, 3);
+        },
+        else => {
+            std.debug.print("Unhandled pixel format: {s}\n", .{@tagName(bitbltbuf.srcFmt)});
+
+            @panic("Unhandled pixel format");
+        }
+    }
+
+    if (trxParam.srcX >= @as(u23, trxreg.width)) {
+        trxParam.srcY += 1;
+
+        if (trxParam.srcY >= @as(u23, trxreg.height)) {
+            std.debug.print("Download end\n", .{});
+
+            trxdir = Trxdir.Off;
+
+            trxParam.srcY = 0;
+        }
+
+        trxParam.srcX = 0;
+    }
+
+    return data;
 }
 
 /// Handles VRAM->VRAM transfers

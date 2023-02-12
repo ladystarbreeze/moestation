@@ -214,6 +214,21 @@ pub fn getActivePath() ActivePath {
     return @intToEnum(ActivePath, gifStat.apath);
 }
 
+/// Returns true if PATH1 is active
+pub fn isP1Active() bool {
+    return @intToEnum(ActivePath, gifStat.apath) == ActivePath.Path1;
+}
+
+/// Returns true if PATH2 is active
+pub fn isP2Active() bool {
+    return @intToEnum(ActivePath, gifStat.apath) == ActivePath.Path2;
+}
+
+/// Returns true if PATH3 is pending
+pub fn isP3Pending() bool {
+    return gifStat.p3q;
+}
+
 /// Returns queued PATH
 pub fn getNextPath() ActivePath {
     if (gifStat.p1q) {
@@ -313,6 +328,40 @@ pub fn readPath1() u128 {
     return data;
 }
 
+/// Writes data to GIF FIFO via PATH2
+pub fn writePath2(data: u128) void {
+    std.debug.print("[GIF       ] PATH2 write = 0x{X:0>32}\n", .{data});
+
+    if (!gifTag.hasTag) {
+        decodeGifTag(data);
+
+        if (gifTag.nloop == 0) {
+            if (gifTag.eop) {
+                std.debug.print("   [GIF       ] End of packet\n", .{});
+
+                pathEnd();
+            }
+
+            gifTag.hasTag = false;
+        } else {
+            if (gifTag.prim) {
+                gs.write(@enumToInt(GsReg.Prim), gifTag.pdata);
+            }
+
+            nloop = gifTag.nloop;
+        }
+    } else {
+        switch (gifTag.fmt) {
+            Format.Packed  => doPacked(data),
+            Format.Reglist => {
+                doReglist(@truncate(u64, data));
+                doReglist(@truncate(u64, data >> 64));
+            },
+            Format.Image   => doImage(data),
+        }
+    }
+}
+
 /// Writes data to GIF FIFO via PATH3
 pub fn writePath3(data: u128) void {
     writeFifo(data);
@@ -360,18 +409,13 @@ pub fn step() void {
     var data: u128 = undefined;
 
     switch (@intToEnum(ActivePath, gifStat.apath)) {
-        ActivePath.Idle  => return,
+        ActivePath.Idle, ActivePath.Path2 => return,
         ActivePath.Path1 => data = readPath1(),
         ActivePath.Path3 => {
             if (gifFifo.readableLength() == 0) return;
 
             data = readFifo();
         },
-        else => {
-            std.debug.print("[GIF       ] Unhandled PATH{} transfer\n", .{@enumToInt(ActivePath.Path3)});
-
-            @panic("Unhandled GIF PATH");
-        }
     }
 
     if (!gifTag.hasTag) {

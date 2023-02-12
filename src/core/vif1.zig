@@ -22,6 +22,12 @@ const dmac = @import("dmac.zig");
 
 const Channel = dmac.Channel;
 
+const gif = @import("gif.zig");
+
+const ActivePath = gif.ActivePath;
+
+const gs = @import("gs.zig");
+
 /// VIF registers
 const VifReg = enum(u32) {
     VifStat  = 0x1000_3C00,
@@ -109,17 +115,20 @@ const VifCode = enum(u7) {
     Mark     = 0x07,
     Flushe   = 0x10,
     Flush    = 0x11,
+    Flusha   = 0x13,
     Mscal    = 0x14,
     Mscnt    = 0x17,
     Stmask   = 0x20,
     Strow    = 0x30,
     Stcol    = 0x31,
     Mpg      = 0x4A,
+    Direct   = 0x50,
     Unpack   = 0x60,
 };
 
 const VifState = enum {
     Mpg,
+    Direct,
     Unpack,
     Idle,
 };
@@ -184,9 +193,16 @@ var mpgInfo = MpgInfo{};
 /// UNPACK
 var unpackInfo = UnpackInfo{};
 
+var p2Count: u16 = 0;
+
 // Stall control
 var isStall = false;
 var isStop  = false;
+
+/// Downloads data from GS VRAM
+pub fn downloadGs() u128 {
+    return gs.download();
+}
 
 /// Reads data from the VIF
 pub fn read(addr: u32) u32 {
@@ -196,7 +212,9 @@ pub fn read(addr: u32) u32 {
         @enumToInt(VifReg.VifStat) => {
             std.debug.print("[VIF1      ] Read @ 0x{X:0>8} (VIF1_STAT)\n", .{addr});
 
-            data = vif1Stat.get() | (@truncate(u32, vif1Fifo.readableLength()) << 24);
+            cpu.dumpRegs();
+
+            data = vif1Stat.get() | (@truncate(u32, vif1Fifo.readableLength() / 4) << 24);
         },
         else => {
             std.debug.print("[VIF1      ] Unhandled read @ 0x{X:0>8}\n", .{addr});
@@ -247,7 +265,7 @@ pub fn write(addr: u32, data: u32) void {
 
                 vif1Fifo = VifFifo.init();
 
-                dmac.setRequest(Channel.Vif1, false);
+                dmac.setRequest(Channel.Vif1, true);
             }
 
             if ((data & (1 << 1)) != 0) {
@@ -317,6 +335,24 @@ fn updateStall() void {
     isStall = vif1Stat.vfs or isStop;
 }
 
+/// Returns true if PATH2 is active, requests PATH2 and returns false if not
+pub fn isP2Active() bool {
+    if (gif.isP2Active()) return true;
+    
+    gif.setActivePath(ActivePath.Path2);
+
+    vif1Stat.vps = 3;
+
+    return false;
+}
+
+/// Releases PATH2, returns VIF1 to idle state
+pub fn releaseP2() void {
+    gif.pathEnd();
+
+    vif1Stat.vps = 0;
+}
+
 /// Executes a VIFcode
 fn doCmd() void {
     const cmd = @truncate(u7, vifCode >> 24);
@@ -332,12 +368,14 @@ fn doCmd() void {
         @enumToInt(VifCode.Mark    ) => iMark(vifCode),
         @enumToInt(VifCode.Flushe  ) => iFlushe(),
         @enumToInt(VifCode.Flush   ) => iFlush(),
+        @enumToInt(VifCode.Flusha  ) => iFlusha(),
         @enumToInt(VifCode.Mscal   ) => iMscal(vifCode),
         @enumToInt(VifCode.Mscnt   ) => iMscnt(),
         @enumToInt(VifCode.Stmask  ) => iStmask(),
         @enumToInt(VifCode.Strow   ) => iStrow(),
         @enumToInt(VifCode.Stcol   ) => iStcol(),
         @enumToInt(VifCode.Mpg     ) => iMpg(vifCode),
+        @enumToInt(VifCode.Direct  ) => iDirect(vifCode),
         @enumToInt(VifCode.Unpack  ) ... @enumToInt(VifCode.Unpack) + 0x1F => iUnpack(vifCode),
         else => {
             std.debug.print("[VIF1      ] Unhandled VIFcode 0x{X:0>2} (0x{X:0>8})\n", .{cmd, vifCode});
@@ -383,15 +421,37 @@ fn iBase(code: u32) void {
     isCmdDone = true;
 }
 
+/// send data to gif DIRECTly? :)
+fn iDirect(code: u32) void {
+    p2Count = @truncate(u16, code);
+
+    std.debug.print("[VIF1      ] DIRECT; SIZE = {}\n", .{p2Count});
+
+    vifState = VifState.Direct;
+}
+
 /// FLUSH
 fn iFlush() void {
+    if (!cpu.vu[1].isIdle() or gif.isP1Active() or gif.isP2Active()) return;
+
     std.debug.print("[VIF1      ] FLUSH\n", .{});
+
+    isCmdDone = true;
+}
+
+/// FLUSHA
+fn iFlusha() void {
+    if (!cpu.vu[1].isIdle() or gif.isP1Active() or gif.isP2Active() or gif.isP3Pending()) return;
+
+    std.debug.print("[VIF1      ] FLUSHA\n", .{});
 
     isCmdDone = true;
 }
 
 /// FLUSHE
 fn iFlushe() void {
+    if (!cpu.vu[1].isIdle()) return;
+
     std.debug.print("[VIF1      ] FLUSHE\n", .{});
 
     isCmdDone = true;
@@ -608,6 +668,21 @@ pub fn step() void {
             mpgInfo.size -%= 1;
             
             if (mpgInfo.size == 0) cmdDone();
+        },
+        VifState.Direct => {
+            if (vif1Fifo.readableLength() < 4) return;
+
+            if (!isP2Active()) return;
+
+            gif.writePath2(@as(u128, readFifo(u32)) | (@as(u128, readFifo(u32)) << 32) | (@as(u128, readFifo(u32)) << 64) | (@as(u128, readFifo(u32)) << 96));
+
+            p2Count -%= 1;
+            
+            if (p2Count == 0) {
+                cmdDone();
+
+                releaseP2();
+            }
         },
         VifState.Unpack => {
             switch (unpackInfo.mode) {
