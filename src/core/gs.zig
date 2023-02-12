@@ -530,7 +530,7 @@ const Csr = struct {
         var data: u64 = 0;
 
         data |= @as(u64, @bitCast(u1, self.signal));
-        data |= @as(u64, @bitCast(u1, self.finishGenerated)) <<  1;
+        data |= @as(u64, @as(u1, 1)) <<  1;
         data |= @as(u64, @bitCast(u1, self.hsint )) <<  2;
         data |= @as(u64, @bitCast(u1, self.vsint )) <<  3;
         data |= @as(u64, @bitCast(u1, self.edwint)) <<  4;
@@ -664,9 +664,11 @@ fn reset() void {
 
 /// Sets FINISH
 pub fn setFinish() void {
-    std.debug.print("GS FINISH\n", .{});
+    //std.debug.print("GS FINISH\n", .{});
 
-    csr.finishGenerated = csr.finish;
+    //csr.finishGenerated = csr.finish;
+
+    csr.finish = false;
 
     if (csr.finishGenerated and !imr.finishmsk) @panic("Unhandled FINISH interrupt");
 }
@@ -687,6 +689,8 @@ pub fn readPriv(comptime T: type, addr: u32) T {
     switch (addr) {
         @enumToInt(PrivReg.GsCsr) => {
             data = @truncate(T, csr.get());
+
+            //std.debug.print("[GS        ] Read @ CSR = 0x{X:0>8}\n", .{data});
         },
         else => {
             err("  [GS        ] Unhandled read ({s}) @ 0x{X:0>8} ({s}).", .{@typeName(T), addr, @tagName(@intToEnum(PrivReg, addr))});
@@ -1966,6 +1970,11 @@ fn setupTransmission() void {
 
     rgb24Pos = [2]i32 {0, 0};
     rgb24Rem = [2]u32 {0, 0};
+
+    trxParam.srcX = 0;
+    trxParam.srcY = 0;
+    trxParam.dstX = 0;
+    trxParam.dstY = 0;
 }
 
 // Why
@@ -2082,8 +2091,6 @@ fn transmissionGifToVram(data: u64) void {
             std.debug.print("Transmission end\n", .{});
 
             trxdir = Trxdir.Off;
-
-            trxParam.dstY = 0;
         }
 
         trxParam.dstX = 0;
@@ -2167,8 +2174,6 @@ pub fn download() u128 {
             std.debug.print("Download end\n", .{});
 
             trxdir = Trxdir.Off;
-
-            trxParam.srcY = 0;
         }
 
         trxParam.srcX = 0;
