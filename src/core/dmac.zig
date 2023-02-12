@@ -353,11 +353,6 @@ pub fn write(addr: u32, data: u32) void {
                 channels[chn].chcr.set(data);
 
                 if (channels[chn].chcr.mod != 1 and channels[chn].qwc != 0) channels[chn].tagEnd = true;
-
-                if (chn == 1 and @intToEnum(Direction, channels[chn].chcr.dir) == Direction.To) {
-                    // Force DMA on GS downloads
-                    setRequest(Channel.Vif1, true);
-                }
             },
             @enumToInt(ChannelReg.DMadr) => {
                 info("   [DMAC      ] Write @ 0x{X:0>8} (D{}_MADR) = 0x{X:0>8}.", .{addr, chn, data});
@@ -483,7 +478,7 @@ pub fn checkRunning() void {
 
     var chnId: u4 = 0;
     while (chnId < 10) : (chnId += 1) {
-        if (channels[chnId].chcr.str and channels[chnId].chcr.req) {
+        if (channels[chnId].chcr.str and (channels[chnId].chcr.req or (chnId == 1 and @intToEnum(Direction, channels[chnId].chcr.dir) == Direction.To))) { // Force GS downloads
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
