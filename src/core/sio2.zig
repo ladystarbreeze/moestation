@@ -79,8 +79,9 @@ const McCommand = enum(u8) {
 
 /// Pad state
 const PadState = enum(u8) {
-    Digital = 0x41,
-    Config  = 0xF3,
+    Digital    = 0x41,
+    DualShock2 = 0x79,
+    Config     = 0xF3,
 };
 
 /// SIO2 FIFOs (FIFOIN/OUT, SEND3)
@@ -108,7 +109,7 @@ var sio2Recv1: u32 = undefined;
 var activeDev: Device = undefined;
 
 /// Pad state
-var padState = PadState.Digital;
+var padState = PadState.DualShock2;
 
 var buttonState: u16 = 0xFFFF;
 
@@ -117,6 +118,8 @@ var rumble = [_]u8 {0x5A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /// Terminator byte
 var terminator: u8 = 0x55;
+
+var replySize: u9 = 0;
 
 /// Reads data from SIO2
 pub fn read(comptime T: type, addr: u32) T {
@@ -133,7 +136,7 @@ pub fn read(comptime T: type, addr: u32) T {
             data = sio2FifoOut.readItem().?;
 
             if (sio2FifoOut.readableLength() < 4) {
-                //dmac.setRequest(Channel.Sio2Out, false);
+                dmac.setRequest(Channel.Sio2Out, false);
             }
         },
         @enumToInt(Sio2Reg.Sio2Ctrl) => {
@@ -201,7 +204,7 @@ pub fn readDmac() u32 {
     const data = @as(u32, sio2FifoOut.readItem().?) | (@as(u32, sio2FifoOut.readItem().?) << 8) | (@as(u32, sio2FifoOut.readItem().?) << 16) | (@as(u32, sio2FifoOut.readItem().?) << 24);
 
     if (sio2FifoOut.readableLength() < 4) {
-        //dmac.setRequest(Channel.Sio2Out, false);
+        dmac.setRequest(Channel.Sio2Out, false);
     }
 
     return data;
@@ -252,6 +255,8 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
                 assert(false);
             };
 
+            replySize += 1;
+
             if (sio2FifoOut.readableLength() >= 252) {
                 dmac.setRequest(Channel.Sio2In, false);
             }
@@ -273,8 +278,10 @@ pub fn write(comptime T: type, addr: u32, data: T) void {
 
                 sio2Send3 = Sio2Send3.init();
 
+                replySize = 0;
+
                 dmac.setRequest(Channel.Sio2In, true);
-                //dmac.setRequest(Channel.Sio2Out, false);
+                dmac.setRequest(Channel.Sio2Out, false);
 
                 sio2Ctrl &= ~@as(u32, 0xC);
             }
@@ -313,6 +320,8 @@ pub fn writeDmac(data: u32) void {
         };
     }
 
+    replySize += 4;
+
     if (sio2FifoOut.readableLength() >= 252) {
         dmac.setRequest(Channel.Sio2In, false);
     }
@@ -326,8 +335,10 @@ fn writeFifoOut(data: u8) void {
         assert(false);
     };
 
+    replySize -= 1;
+
     if (sio2FifoOut.readableLength() >= 4) {
-        //dmac.setRequest(Channel.Sio2Out, true);
+        dmac.setRequest(Channel.Sio2Out, true);
     }
 }
 
@@ -370,7 +381,7 @@ fn updateDevStatus() void {
     // sio2Recv1 = @enumToInt(DeviceStatus.NoDevice);
 
     sio2Recv1 = switch (activeDev) {
-        Device.Controller => @enumToInt(DeviceStatus.Connected),
+        Device.Controller => if (send3.port == 0) @enumToInt(DeviceStatus.Connected) else @enumToInt(DeviceStatus.NoDevice),
         else => @enumToInt(DeviceStatus.NoDevice),
     };
 }
@@ -401,22 +412,12 @@ fn doCmdChain() void {
             Device.MemoryCard => doMcCmd(),
             Device.Infrared, Device.Multitap => {
                 sio2FifoIn.discard(send3.len - 1);
-
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
-                writeFifoOut(0);
             }
         }
+    }
+
+    while (replySize != 0) {
+        writeFifoOut(0);
     }
 
     updateDevStatus();
@@ -516,7 +517,7 @@ fn cmdPadConfigMode() void {
     } else {
         info("   [SIO2 (Pad)] Exit Config Mode", .{});
 
-        padState = PadState.Digital;
+        padState = PadState.DualShock2;
     }
 
     // Remove excess bytes from FIFOIN
@@ -531,6 +532,10 @@ fn cmdPadConfigMode() void {
         // Send button state
         writeFifoOut(@truncate(u8, buttonState));
         writeFifoOut(@truncate(u8, buttonState >> 8));
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
     } else {
         // Send six 0 bytes
         writeFifoOut(0);
@@ -608,13 +613,13 @@ fn cmdPadQueryMaskedMode() void {
     writeFifoOut(0xF3);
     writeFifoOut(0x5A);
 
-    // Send 0 bytes (digital)
+    // Send 0 bytes (analog)
+    writeFifoOut(0xFF);
+    writeFifoOut(0xFF);
+    writeFifoOut(0xFF);
     writeFifoOut(0x00);
     writeFifoOut(0x00);
-    writeFifoOut(0x00);
-    writeFifoOut(0x00);
-    writeFifoOut(0x00);
-    writeFifoOut(0x00);
+    writeFifoOut(0x5A);
 }
 
 /// Pad Query Mode
@@ -662,7 +667,7 @@ fn cmdPadQueryModel() void {
 
     writeFifoOut(0x03); // Send model (DualShock 2)
     writeFifoOut(0x02);
-    writeFifoOut(0x00); // Send mode (digital)
+    writeFifoOut(0x01); // Send mode (analog)
     writeFifoOut(0x02);
     writeFifoOut(0x01);
     writeFifoOut(0x00);
@@ -683,6 +688,14 @@ fn cmdPadReadData() void {
     // Send button state
     writeFifoOut(@truncate(u8, buttonState));
     writeFifoOut(@truncate(u8, buttonState >> 8));
+
+    if (send3.len > 5) {
+        // Send analog button state
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
+        writeFifoOut(0x80);
+    }
 }
 
 /// Pad Set Mode and Lock
