@@ -708,8 +708,9 @@ pub fn readPriv(comptime T: type, addr: u32) T {
 pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u23, x: u23, y: u23) T {
     var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => base + width * y + x,
-        PixelFormat.Psmct24 => base + width * y + x,
+        PixelFormat.Psmct24, PixelFormat.Psmct8h => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
+        PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
         PixelFormat.Psmct4  => base + ((width * y) >> 3) + (x >> 3),
         else => {
             std.debug.print("Unhandled pixel storage mode: {s}\n", .{@tagName(psm)});
@@ -724,6 +725,12 @@ pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr],
         PixelFormat.Psmct24 => (vram[addr] & 0xFF_FFFF),
         PixelFormat.Psmct16, PixelFormat.Psmz16s => @truncate(u16, vram[addr] >> (16 * @truncate(u5, x & 1))),
+        PixelFormat.Psmct8h => @truncate(u8, vram[addr] >> 24),
+        PixelFormat.Psmct8  => {
+            const shift = 8 * @truncate(u5, x & 3);
+
+            return @truncate(u8, vram[addr] >> shift);
+        },
         PixelFormat.Psmct4  => {
             const shift = 4 * @truncate(u5, x & 7);
 
@@ -1011,7 +1018,7 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
     //std.debug.print("Width = {}\n", .{width});
 
     var addr = switch (psm) {
-        PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + width * y + x,
+        PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct8h, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + width * y + x,
         PixelFormat.Psmct24 => base + width * y + x,
         PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
@@ -1051,6 +1058,7 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
 
             vram[addr] = (vramData & mask) | (@as(u32, data) << shift);
         },
+        PixelFormat.Psmct8h  => vram[addr] = (vram[addr] & 0x00FF_FFFF) | (@as(u32, data) << 24),
         PixelFormat.Psmct4hh => vram[addr] = (vram[addr] & 0x0FFF_FFFF) | (@as(u32, data) << 28),
         PixelFormat.Psmct4hl => vram[addr] = (vram[addr] & 0xF0FF_FFFF) | (@as(u32, data) << 24),
         else => {
@@ -1230,6 +1238,14 @@ fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i64, w1: i64, w2: i64) u32 {
     return @bitCast(u32, @truncate(i32, color));
 }
 
+/// Returns IDTEX8 CLUT buffer index
+fn getIdtex8Clut(idtex8: u23) u23 {
+    const b3 = (idtex8 >> 3) & 1;
+    const b4 = (idtex8 >> 4) & 1;
+
+    return (idtex8 & 0xE7) | (b3 << 4) | (b4 << 3);
+}
+
 /// Interpolate STQ
 fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64) f32 {
     //std.debug.print("W0 = {}, W1 = {}, W2 = {}\n", .{@intToFloat(f32, w0), @intToFloat(f32, w1), @intToFloat(f32, w2)});
@@ -1323,6 +1339,52 @@ fn getTex(u: u14, v: u14) u32 {
                 }
             }
         },
+        PixelFormat.Psmct8, PixelFormat.Psmct8h => {
+            var idtex8: u23 = undefined;
+            
+            if (tex[ctxt].psm == PixelFormat.Psmct8h) {
+                idtex8 = @as(u23, readVram(u8, PixelFormat.Psmct8h, texAddr, tbWidth, u, v));
+            } else {
+                idtex8 = @as(u23, readVram(u8, PixelFormat.Psmct8, texAddr, tbWidth, u, v));
+            }
+
+            // Get color from CLUT
+            switch (tex[ctxt].cpsm) {
+                PixelFormat.Psmct32 => {
+                    if (tex[ctxt].csm) {
+                        //color = readVram(u32, PixelFormat.Psmct32, clutAddr, 0, idtex4);
+                        @panic("Invalid CLUT CSM2 pixel format");
+                    }
+
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 16, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4);
+                },
+                PixelFormat.Psmct16 => {
+                    const texColor = switch (tex[ctxt].csm) {
+                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex8, 0),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 16, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4),
+                    };
+
+                    const r = @truncate(u5, texColor >>  0);
+                    const g = @truncate(u5, texColor >>  5);
+                    const b = @truncate(u5, texColor >> 10);
+
+                    color = (@as(u32, b) << 19) | (@as(u32, g) << 11) | (@as(u32, r) << 3);
+
+                    if (!(texa.aem and color == 0)) {
+                        if ((texColor & (1 << 15)) != 0) {
+                            color |= @as(u32, texa.ta1) << 24;
+                        } else {
+                            color |= @as(u32, texa.ta0) << 24;
+                        }
+                    }
+                },
+                else => {
+                    std.debug.print("Unhandled CLUT storage mode: {s}\n", .{@tagName(tex[ctxt].cpsm)});
+
+                    @panic("Unhandled pixel format");
+                }
+            }
+        },
         PixelFormat.Psmct4, PixelFormat.Psmct4hl, PixelFormat.Psmct4hh => {
             var idtex4: u23 = undefined;
 
@@ -1346,12 +1408,12 @@ fn getTex(u: u14, v: u14) u32 {
                         @panic("Invalid CLUT CSM2 pixel format");
                     }
 
-                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 1024, idtex4 >> 3, idtex4 & 7);
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 8, idtex4 & 7, idtex4 >> 3);
                 },
                 PixelFormat.Psmct16 => {
                     const texColor = switch (tex[ctxt].csm) {
-                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 1024, 0, idtex4),
-                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 1024, idtex4 >> 3, idtex4 & 7),
+                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex4, 0),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 8, idtex4 & 7, idtex4 >> 3),
                     };
 
                     const r = @truncate(u5, texColor >>  0);
@@ -2046,6 +2108,14 @@ fn transmissionGifToVram(data: u64) void {
             trxParam.dstX += 4;
         },
         PixelFormat.Psmct8 => {
+            var i: u23 = 0;
+            while (i < 8) : (i += 1) {
+                writeVram(u8, PixelFormat.Psmct8, base, trxWidth, x + i, y, @truncate(u8, data >> @truncate(u6, 8 * i)));
+            }
+
+            trxParam.dstX += 8;
+        },
+        PixelFormat.Psmct8h => {
             var i: u23 = 0;
             while (i < 8) : (i += 1) {
                 writeVram(u8, PixelFormat.Psmct8, base, trxWidth, x + i, y, @truncate(u8, data >> @truncate(u6, 8 * i)));
