@@ -333,6 +333,8 @@ pub fn writeFifo(comptime T: type, data: T) void {
 /// Update stall
 fn updateStall() void {
     isStall = vif1Stat.vfs or isStop;
+
+    std.debug.print("[VIF1      ] Stall = {}\n", .{isStall});
 }
 
 /// Returns true if PATH2 is active, requests PATH2 and returns false if not
@@ -348,6 +350,8 @@ pub fn isP2Active() bool {
 
 /// Releases PATH2, returns VIF1 to idle state
 pub fn releaseP2() void {
+    std.debug.print("[VIF1      ] Release PATH2, return to idle state\n", .{});
+
     gif.pathEnd();
 
     vif1Stat.vps = 0;
@@ -391,6 +395,8 @@ fn doCmd() void {
 
 /// Terminates a VIF command
 fn cmdDone() void {
+    std.debug.print("[VIF1      ] Command finished, returning to idle state\n", .{});
+
     hasCode = false;
 
     vif1Stat.vps = 0;
@@ -651,7 +657,7 @@ fn iUnpack(code: u32) void {
 
 /// Steps VIF1
 pub fn step() void {
-    if (isStall or vif1Fifo.readableLength() == 0) {
+    if (vif1Stat.fdr or isStall or vif1Fifo.readableLength() == 0) {
         return;
     }
 
