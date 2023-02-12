@@ -207,8 +207,10 @@ const Cop1Word = enum(u6) {
 
 /// BC instructions
 const CopBranch = enum(u5) {
-    Bcf = 0x00,
-    Bct = 0x01,
+    Bcf  = 0x00,
+    Bct  = 0x01,
+    Bcfl = 0x02,
+    Bctl = 0x03,
 };
 
 /// COP2 instructions
@@ -691,8 +693,10 @@ fn decodeInstr(instr: u32) void {
                     const rt = getRt(instr);
 
                     switch (rt) {
-                        @enumToInt(CopBranch.Bcf) => iBcf(instr, 1),
-                        @enumToInt(CopBranch.Bct) => iBct(instr, 1),
+                        @enumToInt(CopBranch.Bcf ) => iBcf(instr, 1),
+                        @enumToInt(CopBranch.Bct ) => iBct(instr, 1),
+                        @enumToInt(CopBranch.Bcfl) => iBcfl(instr, 1),
+                        @enumToInt(CopBranch.Bctl) => iBctl(instr, 1),
                         else => {
                             err("  [EE Core   ] Unhandled COP1 Branch instruction 0x{X} (0x{X:0>8}).", .{rt, instr});
 
@@ -977,6 +981,10 @@ fn raiseExceptionL1(excode: ExCode) void {
 
 /// Branch helper
 fn doBranch(target: u32, isCond: bool, rd: u5, comptime isLikely: bool) void {
+    if (inDelaySlot[0]) {
+        @panic("Branch instruction in delay slot");
+    }
+
     if (target == 0) {
         std.debug.print("[EE Core   ] Jump to 0\n", .{});
         
@@ -1139,6 +1147,28 @@ fn iBcf(instr: u32, comptime n: u2) void {
     }
 }
 
+/// Branch on Coprocessor False Likely
+fn iBcfl(instr: u32, comptime n: u2) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const target = regFile.pc +% offset;
+
+    const cpcond = switch (n) {
+           1 => cop1.getCpcond1(),
+        else => {
+            std.debug.print("Unhandled coprocessor: {}\n", .{n});
+
+            @panic("Unhandled coprocessor");
+        }
+    };
+
+    doBranch(target, !cpcond, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        err("  [EE Core   ] BC{}FL 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
+    }
+}
+
 /// Branch on Coprocessor True
 fn iBct(instr: u32, comptime n: u2) void {
     const offset = exts(u32, u16, getImm16(instr)) << 2;
@@ -1159,6 +1189,28 @@ fn iBct(instr: u32, comptime n: u2) void {
 
     if (doDisasm) {
         err("  [EE Core   ] BC{}T 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
+    }
+}
+
+/// Branch on Coprocessor True Likely
+fn iBctl(instr: u32, comptime n: u2) void {
+    const offset = exts(u32, u16, getImm16(instr)) << 2;
+
+    const target = regFile.pc +% offset;
+
+    const cpcond = switch (n) {
+           1 => cop1.getCpcond1(),
+        else => {
+            std.debug.print("Unhandled coprocessor: {}\n", .{n});
+
+            @panic("Unhandled coprocessor");
+        }
+    };
+
+    doBranch(target, cpcond, @enumToInt(CpuReg.R0), true);
+
+    if (doDisasm) {
+        err("  [EE Core   ] BC{}TL 0x{X:0>8}; CPCOND{} = {}", .{n, target, n, cpcond});
     }
 }
 
