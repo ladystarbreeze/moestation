@@ -469,12 +469,12 @@ pub fn write(addr: u32, data: u16) void {
                 @enumToInt(Spu2Reg.IrqAddr) => {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (IRQ_ADDR_H{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    assert(false);
+                    @panic("IRQA");
                 },
                 @enumToInt(Spu2Reg.IrqAddr) + 2 => {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (IRQ_ADDR_L{}) = 0x{X:0>4}.", .{addr, coreId, data});
 
-                    assert(false);
+                    @panic("IRQA");
                 },
                 @enumToInt(Spu2Reg.AdmaStat) => {
                     info("   [SPU2      ] Write @ 0x{X:0>8} (ADMA_STAT{}) = 0x{X:0>4}.", .{addr, coreId, data});
@@ -603,10 +603,6 @@ pub fn step(cyc: i64) void {
 
     if (kon[0] != 0 or kon[1] != 0) {
         warn("[SPU2      ] K-ON! KON{} = 0x{X:0>6}, KON{} = 0x{X:0>6}", .{0, kon[0], 1, kon[1]});
-
-        if (kon[0] != 0xFFFFFF or kon[1] != 0xFFFFFF) {
-            assert(false);
-        }
 
         kon[0] = 0;
         kon[1] = 0;
