@@ -383,21 +383,39 @@ pub fn iFcset(vu: *Vu, instr: u32) void {
 
 /// Float to 28:4 fixed-point integer
 pub fn iFtoi4(vu: *Vu, instr: u32) void {
+    std.debug.print("FTOI4!\n", .{});
+
     const dest = getDest(instr);
 
     const ft = getRt(instr);
     const fs = getRs(instr);
 
     if (dest & (1 << 0) != 0) {
-        vu.setVfElement(u32, ft, Element.W, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.W)) * 16.0)))));
+        const w = vu.getVfElement(u32, fs, Element.W);
+
+        if (w == 0x7F80_0000 or w == 0xFF80_0000 or (w & ~@as(u32, 1 << 31)) == 0x7FFF_FFFF) {
+            std.debug.print("Invalid floating-point value 0x{X:0>8}\n", .{w});
+        } else {
+            std.debug.print("w: {}\n", .{vu.getVfElement(f32, fs, Element.W)});
+            vu.setVfElement(u32, ft, Element.W, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.W)) * 16.0)))));
+        }
     }
     if (dest & (1 << 1) != 0) {
-        vu.setVfElement(u32, ft, Element.Z, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.Z)) * 16.0)))));
+        const z = vu.getVfElement(u32, fs, Element.Z);
+
+        if (z == 0x7F80_0000 or z == 0xFF80_0000 or (z & ~@as(u32, 1 << 31)) == 0x7FFF_FFFF) {
+            std.debug.print("Invalid floating-point value 0x{X:0>8}\n", .{z});
+        } else {
+            std.debug.print("z: {}\n", .{vu.getVfElement(f32, fs, Element.Z)});
+            vu.setVfElement(u32, ft, Element.Z, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.Z)) * 16.0)))));
+        }
     }
     if (dest & (1 << 2) != 0) {
+        std.debug.print("y: {}\n", .{vu.getVfElement(f32, fs, Element.Y)});
         vu.setVfElement(u32, ft, Element.Y, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.Y)) * 16.0)))));
     }
     if (dest & (1 << 3) != 0) {
+        std.debug.print("x: {}\n", .{vu.getVfElement(f32, fs, Element.X)});
         vu.setVfElement(u32, ft, Element.X, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.X)) * 16.0)))));
     }
 
