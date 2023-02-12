@@ -1940,7 +1940,11 @@ fn iJ(instr: u32) void {
 fn iJal(instr: u32) void {
     const target = (regFile.pc & 0xF000_0000) | (@as(u32, getInstrIndex(instr)) << 2);
 
-    doBranch(target, true, @enumToInt(CpuReg.RA), false);
+    if (target == 0x29B37C) {
+        std.debug.print("Skip FMV!\n", .{});
+    } else {
+        doBranch(target, true, @enumToInt(CpuReg.RA), false);
+    }
 
     //std.debug.print("[EE Core   ] JAL 0x{X:0>8}; $RA = 0x{X:0>8}\n", .{target, regFile.get(u64, @enumToInt(CpuReg.RA))});
 
