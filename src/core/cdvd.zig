@@ -48,6 +48,7 @@ const CdvdReg = enum(u32) {
 
 /// N commands
 const NCommand = enum(u8) {
+    Nop     = 0x00,
     Pause   = 0x04,
     ReadCd  = 0x06,
     ReadDvd = 0x08,
@@ -443,6 +444,7 @@ fn runNCmd(cmd: u8) void {
     nCmdStat = 0x80;
 
     switch (cmd) {
+        @enumToInt(NCommand.Nop    ) => cmdNop(),
         @enumToInt(NCommand.Pause  ) => cmdPause(),
         @enumToInt(NCommand.ReadCd ) => cmdReadCd(),
         @enumToInt(NCommand.ReadDvd) => cmdReadDvd(),
@@ -450,7 +452,7 @@ fn runNCmd(cmd: u8) void {
         else => {
             std.debug.print("[CDVD      ] Unhandled N command 0x{X:0>2}.", .{cmd});
 
-            assert(false);
+            @panic("Unhandled CDVD command");
         }
     }
 
@@ -682,6 +684,13 @@ fn cmdMechaconVersion() void {
     sCmdData.write(0x00);
 
     sCmdLen = 4;
+}
+
+/// NOP
+pub fn cmdNop() void {
+    std.debug.print("[CDVD      ] NOP\n", .{});
+
+    sendInterrupt();
 }
 
 /// OpenConfig
