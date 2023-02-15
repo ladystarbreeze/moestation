@@ -482,6 +482,7 @@ pub fn checkRunning() void {
             const chn = @intToEnum(Channel, chnId);
 
             switch (chn) {
+                Channel.Vif0  => doVif0(),
                 Channel.Vif1  => doVif1(),
                 Channel.Path3 => doPath3(),
                 Channel.Sif0  => doSif0(),
@@ -720,6 +721,44 @@ fn doSif1() void {
         channels[chnId].qwc -= 1;
 
         sif.writeSif1(bus.readDmac(channels[chnId].madr));
+        
+        channels[chnId].madr += @sizeOf(u128);
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
+    }
+}
+
+/// Performs a VIF0 transfer
+fn doVif0() void {
+    const chnId = @enumToInt(Channel.Vif0);
+
+    if (channels[chnId].qwc == 0) {
+        info("   [DMAC      ] Channel {} ({s}) transfer, Source Chain mode.", .{chnId, @tagName(Channel.Vif1)});
+
+        // Read new tag
+        const dmaTag = bus.readDmac(channels[chnId].tadr);
+
+        decodeSourceTag(chnId, dmaTag);
+
+        channels[chnId].hasTag = true;
+
+        if (channels[chnId].chcr.tte) {
+            //vif0.writeFifo(u64, @truncate(u64, dmaTag >> 64));
+        }
+
+        if (channels[chnId].qwc == 0 and channels[chnId].tagEnd) {
+            channels[chnId].chcr.str = false;
+
+            transferEnd(chnId);
+        }
+    } else {
+        channels[chnId].qwc -= 1;
+
+        //vif0.writeFifo(u128, bus.readDmac(channels[chnId].madr));
         
         channels[chnId].madr += @sizeOf(u128);
 
