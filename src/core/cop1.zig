@@ -73,6 +73,8 @@ pub fn getCpcond1() bool {
 
 /// Returns raw FP register
 pub fn getRaw(idx: u5) u32 {
+    //std.debug.print("FPU get ${} = {} (0x{X:0>8})\n", .{idx, @bitCast(f32, regFile.regs[idx]), regFile.regs[idx]});
+
     return regFile.regs[idx];
 }
 
@@ -88,6 +90,8 @@ pub fn setControl(idx: u5, data: u32) void {
 /// Sets raw FP register
 pub fn setRaw(idx: u5, data: u32) void {
     regFile.regs[idx] = data;
+
+    //std.debug.print("FPU set ${} = {} (0x{X:0>8})\n", .{idx, @bitCast(f32, data), data});
 }
 
 /// Get Rd field
@@ -230,6 +234,21 @@ pub fn iMov(instr: u32) void {
     }
 }
 
+/// Multiply SUBtract
+pub fn iMsub(instr: u32) void {
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) * regFile.get(ft) - regFile.getAcc();
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        std.debug.print("[COP1      ] MSUB.S ${}, ${}, ${}; ${} = {}\n", .{fd, fs, ft, fd, res});
+    }
+}
+
 /// MULtiply
 pub fn iMul(instr: u32) void {
     const fd = getRd(instr);
@@ -245,6 +264,20 @@ pub fn iMul(instr: u32) void {
     }
 }
 
+/// MULtiply Accumulator
+pub fn iMula(instr: u32) void {
+    const fs = getRs(instr);
+    const ft = getRt(instr);
+
+    const res = regFile.get(fs) * regFile.get(ft);
+
+    regFile.setAcc(res);
+
+    if (doDisasm) {
+        std.debug.print("[COP1      ] MULA.S ${}, ${}; ACC = {}\n", .{fs, ft, res});
+    }
+}
+
 /// NEGate
 pub fn iNeg(instr: u32) void {
     const fd = getRd(instr);
@@ -254,6 +287,20 @@ pub fn iNeg(instr: u32) void {
 
     if (doDisasm) {
         std.debug.print("[COP1      ] NEG.S ${}, ${}; ${} = {}\n", .{fd, fs, fd, regFile.get(fs)});
+    }
+}
+
+/// SQuare RooT
+pub fn iSqrt(instr: u32) void {
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+
+    const res = @sqrt(regFile.get(ft));
+
+    regFile.set(fd, res);
+
+    if (doDisasm) {
+        std.debug.print("[COP1      ] SQRT.S ${}, ${}; ${} = {}\n", .{fd, ft, fd, res});
     }
 }
 
