@@ -235,6 +235,40 @@ const Vertex = struct {
     q: f32 = undefined,
 };
 
+/// Alpha test
+const ATest = enum(u3) {
+    Never,
+    Always,
+    Less,
+    LEqual,
+    Equal,
+    GEqual,
+    Greater,
+    NEqual,
+};
+
+/// Alpha test failure processing
+const AFail = enum(u2) {
+    Keep,
+    FbOnly,
+    ZbOnly,
+    RgbOnly,
+};
+
+/// Alpha test results
+const AResult = struct {
+    updateRgb: bool = true,
+      updateA: bool = true,
+      updateZ: bool = true,
+
+    /// Resets alpha test results
+    pub fn reset(self: *AResult) void {
+        self.updateRgb = true;
+        self.updateA   = true;
+        self.updateZ   = true;
+    }
+};
+
 /// Depth test
 const ZTest = enum(u2) {
     Never,
@@ -349,20 +383,25 @@ const Prim = struct {
 
 /// TEST (incomplete)
 const Test = struct {
-     zte: bool  = false,
-    ztst: ZTest = ZTest.Never,
+      ate: bool  = false,
+     atst: ATest = ATest.Never,
+     aref: u8    = 0x80,
+    afail: AFail = AFail.Keep,
+      zte: bool  = false,
+     ztst: ZTest = ZTest.Never,
 
     /// Sets TEST
     pub fn set(self: *Test, data: u64) void {
-        if ((data & 1) != 0) {
-            //@panic("Unhandled alpha testing");
-        }
         if ((data & (1 << 14)) != 0) {
-            //@panic("Unhandled destination alpha testing");
+            std.debug.print("Unhandled destination alpha testing\n", .{});
         }
 
-        self.zte  = (data & (1 << 16)) != 0;
-        self.ztst = @intToEnum(ZTest, @truncate(u2, data >> 17));
+        self.ate   = (data & (1 << 0)) != 0;
+        self.atst  = @intToEnum(ATest, @truncate(u3, data >> 1));
+        self.aref  = @truncate(u8, data >> 4);
+        self.afail = @intToEnum(AFail, @truncate(u2, data >> 12));
+        self.zte   = (data & (1 << 16)) != 0;
+        self.ztst  = @intToEnum(ZTest, @truncate(u2, data >> 17));
     }
 };
 
@@ -621,6 +660,8 @@ var  scissor: [2]Scissor  = undefined;
 var frame: [2]Frame = undefined;
 var  zbuf: [2]Zbuf  = undefined;
 var test_: [2]Test  = undefined;
+
+var aResult: AResult = AResult{};
 
 var bitbltbuf: Bitbltbuf = Bitbltbuf{};
 var    trxpos: Trxpos    = Trxpos{};
@@ -1140,6 +1181,57 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
     return newColor | (color & 0xFF00_0000);
 }
 
+/// Performs an alpha test
+fn alphaTest(color: u32) void {
+    const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    if (!test_[ctxt].ate) return setAlphaTestResults(true);
+
+    const a    = @truncate(u8, color >> 24);
+    const aref = test_[ctxt].aref;
+
+    const pass = switch (test_[ctxt].atst) {
+        ATest.Never   => false,
+        ATest.Always  =>  true,
+        ATest.Less    => a <  aref,
+        ATest.LEqual  => a <= aref,
+        ATest.Equal   => a == aref,
+        ATest.GEqual  => a >= aref,
+        ATest.Greater => a >  aref,
+        ATest.NEqual  => a != aref,
+    };
+
+    setAlphaTestResults(pass);
+}
+
+/// Controlls drawing after an alpha test
+fn setAlphaTestResults(pass: bool) void {
+    const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    if (pass) {
+        aResult.reset();
+    } else {
+        switch (test_[ctxt].afail) {
+            AFail.Keep => {
+                aResult.updateRgb = false;
+                aResult.updateA   = false;
+                aResult.updateZ   = false;
+            },
+            AFail.FbOnly => {
+                aResult.updateZ = false;
+            },
+            AFail.ZbOnly => {
+                aResult.updateRgb = false;
+                aResult.updateA   = false;
+            },
+            AFail.RgbOnly => {
+                aResult.updateA = false;
+                aResult.updateZ = false;
+            }
+        }
+    }
+}
+
 /// Performs a depth test
 fn depthTest(x: i23, y: i23, depth: u32) bool {
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
@@ -1154,6 +1246,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
 
     const oldDepth = switch (zbuf[ctxt].psm) {
         PixelFormat.Psmct32 , PixelFormat.Psmz32  => readVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
+        PixelFormat.Psmct24 => readVram(u32, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         PixelFormat.Psmct16s, PixelFormat.Psmz16s => readVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         else => {
             std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
@@ -1168,6 +1261,11 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.GEqual  => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ < oldDepth) return false,
+                PixelFormat.Psmct24 => {
+                    depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
+
+                    if (depth_ < oldDepth) return false;
+                },
                 PixelFormat.Psmct16s, PixelFormat.Psmz16s => {
                     depth_ = @truncate(u16, min(u32, depth_, 0xFFFF));
 
@@ -1183,6 +1281,11 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.Greater => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ <= oldDepth) return false,
+                PixelFormat.Psmct24 => {
+                    depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
+
+                    if (depth_ <= oldDepth) return false;
+                },
                 PixelFormat.Psmct16s, PixelFormat.Psmz16s => {
                     depth_ = @truncate(u16, min(u32, depth_, 0xFFFF));
 
@@ -1197,9 +1300,10 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         }
     }
 
-    if (!zbuf[ctxt].zmsk) {
+    if (!zbuf[ctxt].zmsk and aResult.updateZ) {
         switch (zbuf[ctxt].psm) {
             PixelFormat.Psmct32 , PixelFormat.Psmz32  => writeVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y), depth_),
+            PixelFormat.Psmct24 => writeVram(u24, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u24, depth_)),
             PixelFormat.Psmct16s, PixelFormat.Psmz16s => writeVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, depth_)),
             else => {
                 std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
@@ -1246,8 +1350,15 @@ fn getIdtex8Clut(idtex8: u23) u23 {
     return (idtex8 & 0xE7) | (b3 << 4) | (b4 << 3);
 }
 
+/// Interpolate UV
+fn getTexelCoord(a: u14, b: u14, c: u14, w0: i64, w1: i64, w2: i64, area: i64) i64 {
+    const texCoord = w0 * @bitCast(i64, @as(u64, a)) + w1 * @bitCast(i64, @as(u64, b)) + w2 * @bitCast(i64, @as(u64, c));
+
+    return @divTrunc(texCoord, area);
+}
+
 /// Interpolate STQ
-fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64) f32 {
+fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64, area: i64) f32 {
     //std.debug.print("W0 = {}, W1 = {}, W2 = {}\n", .{@intToFloat(f32, w0), @intToFloat(f32, w1), @intToFloat(f32, w2)});
     //std.debug.print("Area = {}\n", .{@intToFloat(f32, area)});
 
@@ -1255,7 +1366,7 @@ fn getTexCoord(a: f32, b: f32, c: f32, w0: i64, w1: i64, w2: i64) f32 {
 
     //std.debug.print("Tex coord = {}\n", .{texCoord});
 
-    return texCoord;
+    return texCoord / @intToFloat(f32, area);
 }
 
 /// Taken from https://github.com/PSI-Rockin/DobieStation
@@ -1356,12 +1467,12 @@ fn getTex(u: u14, v: u14) u32 {
                         @panic("Invalid CLUT CSM2 pixel format");
                     }
 
-                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 16, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4);
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 16, idtex8 & 0xF, idtex8 >> 4);
                 },
                 PixelFormat.Psmct16 => {
                     const texColor = switch (tex[ctxt].csm) {
                          true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex8, 0),
-                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 16, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 16, idtex8 & 0xF, idtex8 >> 4),
                     };
 
                     const r = @truncate(u5, texColor >>  0);
@@ -1545,6 +1656,8 @@ fn drawPoint() void {
 
     var color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
 
+    if (test_[ctxt].ate) @panic("Unhandled alpha test");
+
     if (abe) color = alphaBlend(fbAddr, @bitCast(u23, a.x), @bitCast(u23, a.y), color);
 
     if (!depthTest(a.x, a.y, a.z)) return;
@@ -1634,15 +1747,15 @@ fn drawSprite() void {
                 const texWidth  = @as(i32, 1) << tex[ctxt].tw;
                 const texHeight = @as(i32, 1) << tex[ctxt].th;
 
-                const sU = if (fst) u >> 20 else @floatToInt(i32, (s / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
-                const tV = if (fst) v >> 20 else @floatToInt(i32, (t / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+                const sU = if (fst) u >> 20 else @floatToInt(i64, (s / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+                const tV = if (fst) v >> 20 else @floatToInt(i64, (t / a.q) * @intToFloat(f32, texHeight) * 16.0) >> 4;
 
                 switch (clamp[ctxt].wms) {
                     0 => texU = @truncate(u14, @bitCast(u64, @rem(sU, texWidth))),
                     1 => {
                         if (sU >= texWidth) {
                             texU = @truncate(u14, @bitCast(u32, texWidth)) - 1;
-                        } else if (sU < texWidth) {
+                        } else if (sU < 0) {
                             texU = 0;
                         } else {
                             texU = @truncate(u14, @bitCast(u64, sU));
@@ -1665,7 +1778,7 @@ fn drawSprite() void {
                     1 => {
                         if (tV >= texHeight) {
                             texV = @truncate(u14, @bitCast(u32, texHeight)) - 1;
-                        } else if (tV < texHeight) {
+                        } else if (tV < 0) {
                             texV = 0;
                         } else {
                             texV = @truncate(u14, @bitCast(u64, tV));
@@ -1738,6 +1851,8 @@ fn drawSprite() void {
                 color = (@as(u32, a.a) << 24) | (@as(u32, a.b) << 16) | (@as(u32, a.g) << 8) | @as(u32, a.r);
             }
 
+            alphaTest(color);
+
             if (abe) color = alphaBlend(fbAddr, @bitCast(u23, x), @bitCast(u23, y), color);
 
             if (!depthTest(x, y, a.z)) {
@@ -1748,8 +1863,19 @@ fn drawSprite() void {
             }
 
             switch (frame[ctxt].psm) {
-                PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color),
-                PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color),
+                PixelFormat.Psmct32 => {
+                    if (!(aResult.updateRgb and aResult.updateA)) {
+                        const oldColor = readVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y));
+
+                        if (!aResult.updateRgb) color = (color & 0xFF00_0000) | (oldColor & 0x00FF_FFFF);
+                        if (!aResult.updateA  ) color = (color & 0x00FF_FFFF) | (oldColor & 0xFF00_0000);
+                    }
+
+                    writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color);
+                },
+                PixelFormat.Psmct24 => {
+                    if (aResult.updateRgb) writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color);
+                },
                 else => {
                     std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
 
@@ -1810,6 +1936,8 @@ fn drawTriangle() void {
         c_ = c;
     }
 
+    const area = edgeFunction(a, b_, c_);
+
     const fbAddr = 2048 * @as(u23, frame[ctxt].fbp);
 
     const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
@@ -1824,16 +1952,7 @@ fn drawTriangle() void {
 
     const tme = if (prmodecont) prim.tme else prmode.tme;
     const abe = if (prmodecont) prim.abe else prmode.abe;
-
-    if (tme) {
-        const fst = if (prmodecont) prim.fst else prmode.fst;
-
-        if (fst) {
-            std.debug.print("Unhandled UV coordinates\n", .{});
-
-            @panic("Unhandled texture coordinates");
-        }
-    }
+    const fst = if (prmodecont) prim.fst else prmode.fst;
 
     // Calculate bounding box
     var xMin = min(i23, min(i23, a.x, b.x), c.x);
@@ -1857,39 +1976,72 @@ fn drawTriangle() void {
             //std.debug.print("w0 = {}, w1 = {}, w2 = {}\n", .{w0, w1, w2});
 
             if (w0 >= 0 and w1 >= 0 and w2 >= 0) {
-                p.z = getDepth(a, b_, c_, w0, w1, w2);
-
-                if (!depthTest(p.x, p.y, p.z)) continue;
-
                 var color: u32 = 0;
 
                 if (tme) {
-                    //std.debug.print("S1 = {}, S2 = {}, S3 = {}\n", .{a.s, b_.s, c_.s});
-                    //std.debug.print("T1 = {}, T2 = {}, T3 = {}\n", .{a.t, b_.t, c_.t});
-                    //std.debug.print("Q1 = {}, Q2 = {}, Q3 = {}\n", .{a.q, b_.q, c_.q});
+                    var texU: u14 = undefined;
+                    var texV: u14 = undefined;
 
-                    var s = getTexCoord(a.s, b_.s, c_.s, w0, w1, w2);
-                    var t = getTexCoord(a.t, b_.t, c_.t, w0, w1, w2);
+                    const texWidth  = @as(i32, 1) << tex[ctxt].tw;
+                    const texHeight = @as(i32, 1) << tex[ctxt].th;
 
-                    const q = getTexCoord(a.q, b_.q, c_.q, w0, w1, w2);
+                    const sU = if (fst) getTexelCoord(a.u, b_.u, c_.u, w0, w1, w2, area) >> 4 else @floatToInt(i64, (getTexCoord(a.s, b_.s, c_.s, w0, w1, w2, 1) / getTexCoord(a.q, b_.q, c_.q, w0, w1, w2, 1)) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+                    const tV = if (fst) getTexelCoord(a.v, b_.v, c_.v, w0, w1, w2, area) >> 4 else @floatToInt(i64, (getTexCoord(a.t, b_.t, c_.t, w0, w1, w2, 1) / getTexCoord(a.q, b_.q, c_.q, w0, w1, w2, 1)) * @intToFloat(f32, texHeight) * 16.0) >> 4;
 
-                    //std.debug.print("S = {}, T = {}, Q = {}\n", .{s, t, q});
+                    switch (clamp[ctxt].wms) {
+                        0 => texU = @truncate(u14, @bitCast(u64, @rem(sU, texWidth))),
+                        1 => {
+                            if (sU >= texWidth) {
+                                texU = @truncate(u14, @bitCast(u32, texWidth)) - 1;
+                            } else if (sU < 0) {
+                                texU = 0;
+                            } else {
+                                texU = @truncate(u14, @bitCast(u64, sU));
+                            }
+                        },
+                        2 => {
+                            if (sU > clamp[ctxt].maxu) {
+                                texU = @truncate(u14, @bitCast(u32, clamp[ctxt].maxu));
+                            } else if (sU < clamp[ctxt].minu) {
+                                texU = @truncate(u14, @bitCast(u32, clamp[ctxt].minu));
+                            } else {
+                                texU = @truncate(u14, @bitCast(u64, sU));
+                            }
+                        },
+                        3 => @panic("Unhandled S clamp mode")
+                    }
 
-                    s /= q;
-                    t /= q;
-
-                    //std.debug.print("S/Q = {}, T/Q = {}\n", .{s, t});
-
-                    const u = @truncate(u14, @floatToInt(u32, (s * @intToFloat(f32, @as(u16, 1) << tex[ctxt].tw)) * 16.0));
-                    const v = @truncate(u14, @floatToInt(u32, (t * @intToFloat(f32, @as(u16, 1) << tex[ctxt].th)) * 16.0));
+                    switch (clamp[ctxt].wmt) {
+                        0 => texV = @truncate(u14, @bitCast(u64, @rem(tV, texHeight))),
+                        1 => {
+                            if (tV >= texHeight) {
+                                texV = @truncate(u14, @bitCast(u32, texHeight)) - 1;
+                            } else if (tV < 0) {
+                                texV = 0;
+                            } else {
+                                texV = @truncate(u14, @bitCast(u64, tV));
+                            }
+                        },
+                        2 => {
+                            if (tV > clamp[ctxt].maxv) {
+                                texV = @truncate(u14, @bitCast(u32, clamp[ctxt].maxv));
+                            } else if (tV < clamp[ctxt].minv) {
+                                texV = @truncate(u14, @bitCast(u32, clamp[ctxt].minv));
+                            } else {
+                                texV = @truncate(u14, @bitCast(u64, tV));
+                            }
+                        },
+                        3 => @panic("Unhandled T clamp mode")
+                    }
 
                     //std.debug.print("U = {}, V = {}\n", .{(u >> 4) % (@as(u14, 1) << tex[ctxt].tw), (v >> 4) % (@as(u14, 1) << tex[ctxt].th)});
 
-                    const texColor = getTex((u >> 4) % (@as(u14, 1) << tex[ctxt].tw), (v >> 4) % (@as(u14, 1) << tex[ctxt].th));
+                    const texColor = getTex(texU, texV);
 
                     //std.debug.print("Ct = 0x{X:0>8}\n", .{texColor});
 
                     switch (tex[ctxt].tfx) {
+                    //switch (@as(u2, 1)) {
                         0 => {
                             // Modulate
                             color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)));
@@ -1914,21 +2066,21 @@ fn drawTriangle() void {
                         },
                         2 => {
                             // Highlight
-                            color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
-                            color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
-                            color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+                            color |= @as(u32, texMulAdd(a.r, @truncate(u8, texColor >>  0), a.a));
+                            color |= @as(u32, texMulAdd(a.g, @truncate(u8, texColor >>  8), a.a)) <<  8;
+                            color |= @as(u32, texMulAdd(a.b, @truncate(u8, texColor >> 16), a.a)) << 16;
 
                             if (tex[ctxt].tcc) {
-                                color |= @as(u32, a.a +| @truncate(u8, texColor >> 24)) << 24;
+                                color |= @as(u32, texAdd(a.a, @truncate(u8, texColor >> 24))) << 24;
                             } else {
                                 color |= @as(u32, a.a) << 24;
                             }
                         },
                         3 => {
                             // Highlight2
-                            color |= @as(u32, texMul(a.r, @truncate(u8, texColor >>  0)) +| a.a);
-                            color |= @as(u32, texMul(a.g, @truncate(u8, texColor >>  8)) +| a.a) <<  8;
-                            color |= @as(u32, texMul(a.b, @truncate(u8, texColor >> 16)) +| a.a) << 16;
+                            color |= @as(u32, texMulAdd(a.r, @truncate(u8, texColor >>  0), a.a));
+                            color |= @as(u32, texMulAdd(a.g, @truncate(u8, texColor >>  8), a.a)) <<  8;
+                            color |= @as(u32, texMulAdd(a.b, @truncate(u8, texColor >> 16), a.a)) << 16;
 
                             if (tex[ctxt].tcc) {
                                 color |= texColor & 0xFF00_0000;
@@ -1943,13 +2095,28 @@ fn drawTriangle() void {
                     color = getColor(a, b_, c_, w0, w1, w2);
                 }
 
+                alphaTest(color);
+
                 if (abe) color = alphaBlend(fbAddr, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
 
                 //std.debug.print("Alpha blending OK!!\n", .{});
 
+                if (!depthTest(p.x, p.y, getDepth(a, b_, c_, w0, w1, w2))) continue;
+
                 switch (frame[ctxt].psm) {
-                    PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
-                    PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color),
+                    PixelFormat.Psmct32 => {
+                        if (!(aResult.updateRgb and aResult.updateA)) {
+                            const oldColor = readVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y));
+
+                            if (!aResult.updateRgb) color = (color & 0xFF00_0000) | (oldColor & 0x00FF_FFFF);
+                            if (!aResult.updateA  ) color = (color & 0x00FF_FFFF) | (oldColor & 0xFF00_0000);
+                        }
+
+                        writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
+                    },
+                    PixelFormat.Psmct24 => {
+                        if (aResult.updateRgb) writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
+                    },
                     else => {
                         std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
 
@@ -2118,7 +2285,7 @@ fn transmissionGifToVram(data: u64) void {
         PixelFormat.Psmct8h => {
             var i: u23 = 0;
             while (i < 8) : (i += 1) {
-                writeVram(u8, PixelFormat.Psmct8, base, trxWidth, x + i, y, @truncate(u8, data >> @truncate(u6, 8 * i)));
+                writeVram(u8, PixelFormat.Psmct8h, base, trxWidth, x + i, y, @truncate(u8, data >> @truncate(u6, 8 * i)));
             }
 
             trxParam.dstX += 8;
