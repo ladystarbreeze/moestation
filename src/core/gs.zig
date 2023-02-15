@@ -1714,21 +1714,21 @@ fn drawSprite() void {
     const abe = if (prmodecont) prim.abe else prmode.abe;
     const fst = if (prmodecont) prim.fst else prmode.fst;
 
-    const uStart = getUv(xMin, a.u, a.x, b.u, b.x) << 16;
-    const vStart = getUv(yMin, a.v, a.y, b.v, b.y) << 16;
+    const uStart = getUv(xMin, a.u, a.x, b.u, b.x);
+    const vStart = getUv(yMin, a.v, a.y, b.v, b.y);
 
     const sStart = getSt(xMin, a.s, a.x, b.s, b.x);
-    const tStart = getSt(xMin, a.t, a.y, b.t, b.y);
+    const tStart = getSt(yMin, a.t, a.y, b.t, b.y);
 
-    std.debug.print("U = {}, V = {}, S = {}, T = {}\n", .{uStart >> 20, vStart >> 20, sStart, tStart});
+    std.debug.print("U = {}, V = {}, S = {}, T = {}\n", .{uStart >> 4, vStart >> 4, sStart, tStart});
 
-    const uStep = getUvStep(a.u, a.x, b.u, b.x, 0x100000);
-    const vStep = getUvStep(a.v, a.y, b.v, b.y, 0x100000);
+    const uStep = getUvStep(a.u, a.x, b.u, b.x, 0x10);
+    const vStep = getUvStep(a.v, a.y, b.v, b.y, 0x10);
 
     const sStep = getStStep(a.s, a.x, b.s, b.x, 0x10);
     const tStep = getStStep(a.t, a.y, b.t, b.y, 0x10);
 
-    std.debug.print("Ustep = {}, Vstep = {}\n", .{uStep >> 20, vStep >> 20});
+    std.debug.print("Ustep = {}, Vstep = {}\n", .{uStep >> 4, vStep >> 4});
 
     var y = yMin >> 4;
     var v = vStart;
@@ -1747,8 +1747,8 @@ fn drawSprite() void {
                 const texWidth  = @as(i32, 1) << tex[ctxt].tw;
                 const texHeight = @as(i32, 1) << tex[ctxt].th;
 
-                const sU = if (fst) u >> 20 else @floatToInt(i64, (s / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
-                const tV = if (fst) v >> 20 else @floatToInt(i64, (t / a.q) * @intToFloat(f32, texHeight) * 16.0) >> 4;
+                const sU = if (fst) u >> 4 else @floatToInt(i64, (s / a.q) * @intToFloat(f32, texWidth ) * 16.0) >> 4;
+                const tV = if (fst) v >> 4 else @floatToInt(i64, (t / a.q) * @intToFloat(f32, texHeight) * 16.0) >> 4;
 
                 switch (clamp[ctxt].wms) {
                     0 => texU = @truncate(u14, @bitCast(u64, @rem(sU, texWidth))),
