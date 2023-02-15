@@ -750,7 +750,7 @@ pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u
     var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => base + width * y + x,
         PixelFormat.Psmct24, PixelFormat.Psmct8h => base + width * y + x,
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
+        PixelFormat.Psmct16, PixelFormat.Psmct16s, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
         PixelFormat.Psmct4  => base + ((width * y) >> 3) + (x >> 3),
         else => {
@@ -765,7 +765,7 @@ pub fn readVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: u
     return switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr],
         PixelFormat.Psmct24 => (vram[addr] & 0xFF_FFFF),
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => @truncate(u16, vram[addr] >> (16 * @truncate(u5, x & 1))),
+        PixelFormat.Psmct16, PixelFormat.Psmct16s, PixelFormat.Psmz16s => @truncate(u16, vram[addr] >> (16 * @truncate(u5, x & 1))),
         PixelFormat.Psmct8h => @truncate(u8, vram[addr] >> 24),
         PixelFormat.Psmct8  => {
             const shift = 8 * @truncate(u5, x & 3);
@@ -1046,8 +1046,6 @@ pub fn writePriv(addr: u32, data: u64) void {
         @enumToInt(PrivReg.Bgcolor ) => {},
         else => {
             err("  [GS        ] Unhandled write @ 0x{X:0>8} = 0x{X:0>16} ({s}).", .{addr, data, @tagName(@intToEnum(PrivReg, addr))});
-
-            assert(false);
         }
     }
 
@@ -1061,7 +1059,7 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
     var addr = switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32, PixelFormat.Psmct8h, PixelFormat.Psmct4hh, PixelFormat.Psmct4hl => base + width * y + x,
         PixelFormat.Psmct24 => base + width * y + x,
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
+        PixelFormat.Psmct16, PixelFormat.Psmct16s, PixelFormat.Psmz16s => base + ((width * y) >> 1) + (x >> 1),
         PixelFormat.Psmct8  => base + ((width * y) >> 2) + (x >> 2),
         PixelFormat.Psmct4  => base + ((width * y) >> 3) + (x >> 3),
         else => {
@@ -1076,7 +1074,7 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
     switch (psm) {
         PixelFormat.Psmct32, PixelFormat.Psmz32  => vram[addr] = data,
         PixelFormat.Psmct24 => vram[addr] = (vram[addr] & 0xFF00_0000) | (data & 0xFF_FFFF),
-        PixelFormat.Psmct16, PixelFormat.Psmz16s => {
+        PixelFormat.Psmct16, PixelFormat.Psmct16s, PixelFormat.Psmz16s => {
             if ((x & 1) != 0) {
                 vram[addr] = (vram[addr] & 0x0000_FFFF) | (@as(u32, data) << 16);
             } else {
@@ -1340,6 +1338,11 @@ fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i64, w1: i64, w2: i64) u32 {
     const color = @divTrunc((w0 * colorA) + (w1 * colorB) + (w2 * colorC), area);
 
     return @bitCast(u32, @truncate(i32, color));
+}
+
+/// Downconverts RGBA32 to RGBA5551
+fn toRgba5551(color: u32) u32 {
+    return ((color & (1 << 31)) >> 16) | ((color & 0xF80000) >> 9) | ((color & 0xF800) >> 6) | ((color & 0xF8) >> 3);
 }
 
 /// Returns IDTEX8 CLUT buffer index
@@ -1875,6 +1878,18 @@ fn drawSprite() void {
                 },
                 PixelFormat.Psmct24 => {
                     if (aResult.updateRgb) writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color);
+                },
+                PixelFormat.Psmct16s => {
+                    color = toRgba5551(color);
+
+                    if (!(aResult.updateRgb and aResult.updateA)) {
+                        const oldColor = readVram(u16, PixelFormat.Psmct16s, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y));
+
+                        if (!aResult.updateRgb) color = (color & 0x8000) | (oldColor & 0x7FFF);
+                        if (!aResult.updateA  ) color = (color & 0x7FFF) | (oldColor & 0x8000);
+                    }
+
+                    writeVram(u16, PixelFormat.Psmct16s, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, color));
                 },
                 else => {
                     std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
