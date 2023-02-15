@@ -28,9 +28,11 @@ const LowerOp = enum(u7) {
     Isubiu  = 0x09,
     Fcset   = 0x11,
     Fcand   = 0x12,
+    B       = 0x20,
     Bal     = 0x21,
     Jr      = 0x24,
     Ibne    = 0x29,
+    Ibgtz   = 0x2D,
     Special = 0x40,
 };
 
@@ -118,9 +120,11 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.Isubiu ) => iIsubiu(vu, instr),
         @enumToInt(LowerOp.Fcset  ) => iFcset(vu, instr),
         @enumToInt(LowerOp.Fcand  ) => iFcand(vu, instr),
+        @enumToInt(LowerOp.B      ) => iB(vu, instr),
         @enumToInt(LowerOp.Bal    ) => iBal(vu, instr),
         @enumToInt(LowerOp.Jr     ) => iJr(vu, instr),
         @enumToInt(LowerOp.Ibne   ) => iIbne(vu, instr),
+        @enumToInt(LowerOp.Ibgtz  ) => iIbgtz(vu, instr),
         @enumToInt(LowerOp.Special) => {
             const funct = @truncate(u6, instr);
 
@@ -282,6 +286,17 @@ pub fn iAddq(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Branch
+pub fn iB(vu: *Vu, instr: u32) void {
+    const target = vu.pc +% (@bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr)))) << 3);
+
+    vu.doBranch(target, true, 0);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] B 0x{X:0>4}\n", .{vu.vuNum, target});
+    }
+}
+
 /// Branch And Link
 pub fn iBal(vu: *Vu, instr: u32) void {
     const it = getRt(instr);
@@ -346,13 +361,18 @@ pub fn iDiv(vu: *Vu, instr: u32) void {
     const fs = getRs(instr);
     const ft = getRt(instr);
 
-    if (vu.getVfElement(f32, ft, ftf) == 0.0) {
+    const s = vu.getVfElement(f32, fs, fsf);
+    const t = vu.getVfElement(f32, ft, ftf);
+
+    if (t == 0.0) {
         std.debug.print("[VU{}       ] DIV by 0\n", .{vu.vuNum});
 
-        @panic("DIV by 0");
-    }
+        //@panic("DIV by 0");
 
-    vu.q = vu.getVfElement(f32, fs, fsf) / vu.getVfElement(f32, ft, ftf);
+        vu.q = if ((@bitCast(u32, s) >> 31) == (@bitCast(u32, t) >> 31)) @bitCast(f32, @as(u32, 0xFF7F_FFFF)) else @bitCast(f32, @as(u32, 0x7F7F_FFFF));
+    } else {
+        vu.q = s / t;
+    }
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] DIV Q, VF[{}]{s}, VF[{}]{s}; Q = 0x{X:0>8}\n", .{vu.vuNum, fs, @tagName(fsf), ft, @tagName(ftf), @bitCast(u32, vu.q)});
@@ -468,6 +488,27 @@ pub fn iIaddiu(vu: *Vu, instr: u32) void {
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] IADDIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, @bitCast(i15, imm), it, res});
+    }
+}
+
+/// Integer Branch if Greater Than Zero
+pub fn iIbgtz(vu: *Vu, instr: u32) void {
+    const is = getRs(instr);
+
+    if (is > 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const target = vu.pc +% (@bitCast(u16, @as(i16, @bitCast(i11, @truncate(u11, instr)))) << 3);
+
+    const s = vu.getVi(@truncate(u4, is));
+
+    vu.doBranch(target, @bitCast(i16, s) > 0, 0);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] IBGTZ VI[{}], 0x{X:0>4}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, is, target, is, s});
     }
 }
 
