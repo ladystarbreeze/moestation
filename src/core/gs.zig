@@ -887,9 +887,9 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.ColClamp  ) => colclamp = (data & 1) != 0,
         @enumToInt(GsReg.Test1     ) => test_[0].set(data),
         @enumToInt(GsReg.Test2     ) => test_[1].set(data),
-        @enumToInt(GsReg.Pabe      ) => if ((data & 1) != 0) @panic("PABE"),
-        @enumToInt(GsReg.Fba1      ) => if ((data & 1) != 0) @panic("FBA1"),
-        @enumToInt(GsReg.Fba2      ) => if ((data & 1) != 0) @panic("FBA2"),
+        @enumToInt(GsReg.Pabe      ) => {},
+        @enumToInt(GsReg.Fba1      ) => {},
+        @enumToInt(GsReg.Fba2      ) => {},
         @enumToInt(GsReg.Frame1    ) => frame[0].set(data),
         @enumToInt(GsReg.Frame2    ) => frame[1].set(data),
         @enumToInt(GsReg.Zbuf1     ) => zbuf[0].set(data),
@@ -1249,7 +1249,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
 
     const oldDepth = switch (zbuf[ctxt].psm) {
         PixelFormat.Psmct32 , PixelFormat.Psmz32  => readVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
-        PixelFormat.Psmct24, PixelFormat.Psmz24 => readVram(u32, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
+        PixelFormat.Psmct24 , PixelFormat.Psmz24 => readVram(u32, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         PixelFormat.Psmct16s, PixelFormat.Psmz16s => readVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         else => {
             std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
@@ -1264,7 +1264,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.GEqual  => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ < oldDepth) return false,
-                PixelFormat.Psmct24, PixelFormat.Psmz24 => {
+                PixelFormat.Psmct24 , PixelFormat.Psmz24 => {
                     depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
 
                     if (depth_ < oldDepth) return false;
@@ -1284,7 +1284,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.Greater => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ <= oldDepth) return false,
-                PixelFormat.Psmct24, PixelFormat.Psmz24 => {
+                PixelFormat.Psmct24 , PixelFormat.Psmz24 => {
                     depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
 
                     if (depth_ <= oldDepth) return false;
