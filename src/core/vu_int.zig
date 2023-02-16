@@ -59,16 +59,21 @@ const LowerOpSpecial2 = enum(u7) {
 };
 
 const UpperOp = enum(u7) {
+    Addbc  = 0x00,
+    Subbc  = 0x04,
     Maddbc = 0x08,
+    Maxbc  = 0x10,
     Mulq   = 0x1C,
     Addi   = 0x22,
     Add    = 0x28,
     Madd   = 0x29,
+    Mul    = 0x2A,
     Sub    = 0x2C,
 };
 
 const UpperOpSpecial = enum(u7) {
     Maddabc = 0x08,
+    Ftoi0   = 0x14,
     Ftoi4   = 0x15,
     Mulabc  = 0x18,
     Clip    = 0x1F,
@@ -193,6 +198,7 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
 
         switch (funct) {
             @enumToInt(UpperOpSpecial.Maddabc) ... @enumToInt(UpperOpSpecial.Maddabc) + 3 => iMaddabc(vu, instr),
+            @enumToInt(UpperOpSpecial.Ftoi0  ) => iFtoi0(vu, instr),
             @enumToInt(UpperOpSpecial.Ftoi4  ) => iFtoi4(vu, instr),
             @enumToInt(UpperOpSpecial.Mulabc ) ... @enumToInt(UpperOpSpecial.Mulabc ) + 3 => iMulabc(vu, instr),
             @enumToInt(UpperOpSpecial.Clip   ) => iClip(vu, instr),
@@ -205,11 +211,15 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
         }
     } else {
         switch (opcode) {
+            @enumToInt(UpperOp.Addbc ) ... @enumToInt(UpperOp.Addbc ) + 3 => iAddbc(vu, instr),
+            @enumToInt(UpperOp.Subbc ) ... @enumToInt(UpperOp.Subbc ) + 3 => iSubbc(vu, instr),
             @enumToInt(UpperOp.Maddbc) ... @enumToInt(UpperOp.Maddbc) + 3 => iMaddbc(vu, instr),
+            @enumToInt(UpperOp.Maxbc ) ... @enumToInt(UpperOp.Maxbc ) + 3 => iMaxbc(vu, instr),
             @enumToInt(UpperOp.Mulq  ) => iMulq(vu, instr),
             @enumToInt(UpperOp.Addi  ) => iAddi(vu, instr),
             @enumToInt(UpperOp.Add   ) => iAdd(vu, instr),
             @enumToInt(UpperOp.Madd  ) => iMadd(vu, instr),
+            @enumToInt(UpperOp.Mul   ) => iMul(vu, instr),
             @enumToInt(UpperOp.Sub   ) => iSub(vu, instr),
             else => {
                 std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
@@ -467,6 +477,41 @@ pub fn iFmand(vu: *Vu, instr: u32) void {
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] FMAND VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, it, vu.getVi(@truncate(u4, it))});
+    }
+}
+
+/// Float to 32:0 fixed-point integer
+pub fn iFtoi0(vu: *Vu, instr: u32) void {
+    std.debug.print("FTOI0!\n", .{});
+
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    if (dest & (1 << 0) != 0) {
+        std.debug.print("w: {}\n", .{vu.getVfElement(f32, fs, Element.W)});
+        vu.setVfElement(u32, ft, Element.W, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.W)) * 1.0)))));
+    }
+    if (dest & (1 << 1) != 0) {
+        std.debug.print("z: {}\n", .{vu.getVfElement(f32, fs, Element.Z)});
+        vu.setVfElement(u32, ft, Element.Z, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.Z)) * 1.0)))));
+    }
+    if (dest & (1 << 2) != 0) {
+        std.debug.print("y: {}\n", .{vu.getVfElement(f32, fs, Element.Y)});
+        vu.setVfElement(u32, ft, Element.Y, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.Y)) * 1.0)))));
+    }
+    if (dest & (1 << 3) != 0) {
+        std.debug.print("x: {}\n", .{vu.getVfElement(f32, fs, Element.X)});
+        vu.setVfElement(u32, ft, Element.X, @truncate(u32, @bitCast(u64, @floatToInt(i64, @round(@as(f64, vu.getVfElement(f32, fs, Element.X)) * 1.0)))));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVf(ft);
+
+        std.debug.print("[VU{}       ] FTOI0.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, fs, destStr, ft, vt});
     }
 }
 
@@ -1065,6 +1110,43 @@ pub fn iMaddbc(vu: *Vu, instr: u32) void {
     }
 }
 
+/// MAX BroadCast
+pub fn iMaxbc(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    const t = vu.getVfElement(f32, ft, bc);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const s = vu.getVfElement(f32, fs, e);
+
+            vu.setVfElement(f32, fd, e, if (s > t) s else t);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] MAX{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
 /// Move From Integer Register
 pub fn iMfir(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
@@ -1184,6 +1266,43 @@ pub fn iMul(vu: *Vu, instr: u32) void {
         const vd = vu.getVf(fd);
 
         std.debug.print("[VU{}       ] MUL.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
+/// MULtiply BroadCast
+pub fn iMulbc(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    const t = vu.getVfElement(f32, ft, bc);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = vu.getVfElement(f32, fs, e) * t;
+
+            vu.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] MUL{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
     }
 }
 
@@ -1415,6 +1534,43 @@ pub fn iSub(vu: *Vu, instr: u32) void {
         const vd = vu.getVf(fd);
 
         std.debug.print("[VU{}       ] SUB.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fd, destStr, fs, destStr, ft, destStr, fd, vd});
+    }
+}
+
+/// SUBtract BroadCast
+pub fn iSubbc(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    const t = vu.getVfElement(f32, ft, bc);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = vu.getVfElement(f32, fs, e) - t;
+
+            vu.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] SUB{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
     }
 }
 
