@@ -123,6 +123,7 @@ const VifCode = enum(u7) {
     Stcol    = 0x31,
     Mpg      = 0x4A,
     Direct   = 0x50,
+    Directhl = 0x51,
     Unpack   = 0x60,
 };
 
@@ -380,6 +381,7 @@ fn doCmd() void {
         @enumToInt(VifCode.Stcol   ) => iStcol(),
         @enumToInt(VifCode.Mpg     ) => iMpg(vifCode),
         @enumToInt(VifCode.Direct  ) => iDirect(vifCode),
+        @enumToInt(VifCode.Directhl) => iDirecthl(vifCode),
         @enumToInt(VifCode.Unpack  ) ... @enumToInt(VifCode.Unpack) + 0x1F => iUnpack(vifCode),
         else => {
             std.debug.print("[VIF1      ] Unhandled VIFcode 0x{X:0>2} (0x{X:0>8})\n", .{cmd, vifCode});
@@ -432,6 +434,17 @@ fn iDirect(code: u32) void {
     p2Count = @truncate(u16, code);
 
     std.debug.print("[VIF1      ] DIRECT; SIZE = {}\n", .{p2Count});
+
+    vifState = VifState.Direct;
+}
+
+/// DIRECTHL
+fn iDirecthl(code: u32) void {
+    p2Count = @truncate(u16, code);
+
+    // TODO: check for ongoing PATH3 transfer
+
+    std.debug.print("[VIF1      ] DIRECTHL; SIZE = {}\n", .{p2Count});
 
     vifState = VifState.Direct;
 }
