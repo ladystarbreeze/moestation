@@ -28,6 +28,7 @@ const LowerOp = enum(u7) {
     Isubiu  = 0x09,
     Fcset   = 0x11,
     Fcand   = 0x12,
+    Fmand   = 0x1A,
     B       = 0x20,
     Bal     = 0x21,
     Jr      = 0x24,
@@ -40,6 +41,7 @@ const LowerOp = enum(u7) {
 const LowerOpSpecial = enum(u6) {
     Iadd  = 0x30,
     Iaddi = 0x32,
+    Iand  = 0x34,
     Ior   = 0x35,
 };
 
@@ -50,6 +52,8 @@ const LowerOpSpecial2 = enum(u7) {
     Lqi    = 0x34,
     Sqi    = 0x35,
     Div    = 0x38,
+    Waitq  = 0x3B,
+    Mfir   = 0x3D,
     Ilwr   = 0x3E,
     Iswr   = 0x3F,
 };
@@ -60,6 +64,7 @@ const UpperOp = enum(u7) {
     Addi   = 0x22,
     Add    = 0x28,
     Madd   = 0x29,
+    Sub    = 0x2C,
 };
 
 const UpperOpSpecial = enum(u7) {
@@ -127,6 +132,7 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.Isubiu ) => iIsubiu(vu, instr),
         @enumToInt(LowerOp.Fcset  ) => iFcset(vu, instr),
         @enumToInt(LowerOp.Fcand  ) => iFcand(vu, instr),
+        @enumToInt(LowerOp.Fmand  ) => iFmand(vu, instr),
         @enumToInt(LowerOp.B      ) => iB(vu, instr),
         @enumToInt(LowerOp.Bal    ) => iBal(vu, instr),
         @enumToInt(LowerOp.Jr     ) => iJr(vu, instr),
@@ -146,6 +152,8 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                     @enumToInt(LowerOpSpecial2.Lqi   ) => iLqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Sqi   ) => iSqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Div   ) => iDiv(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Waitq ) => iWaitq(vu),
+                    @enumToInt(LowerOpSpecial2.Mfir  ) => iMfir(vu, instr),
                     @enumToInt(LowerOpSpecial2.Ilwr  ) => iIlwr(vu, instr),
                     @enumToInt(LowerOpSpecial2.Iswr  ) => iIswr(vu, instr),
                     else => {
@@ -158,6 +166,7 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                 switch (funct) {
                     @enumToInt(LowerOpSpecial.Iadd ) => iIadd(vu, instr),
                     @enumToInt(LowerOpSpecial.Iaddi) => iIaddi(vu, instr),
+                    @enumToInt(LowerOpSpecial.Iand ) => iIand(vu, instr),
                     @enumToInt(LowerOpSpecial.Ior  ) => iIor(vu, instr),
                     else => {
                         std.debug.print("[VU{}       ] Unhandled lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
@@ -201,6 +210,7 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
             @enumToInt(UpperOp.Addi  ) => iAddi(vu, instr),
             @enumToInt(UpperOp.Add   ) => iAdd(vu, instr),
             @enumToInt(UpperOp.Madd  ) => iMadd(vu, instr),
+            @enumToInt(UpperOp.Sub   ) => iSub(vu, instr),
             else => {
                 std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
 
@@ -441,6 +451,25 @@ pub fn iFcset(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Flag (MAC) AND
+pub fn iFmand(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    // TODO: implement MAC flags!!!!!
+    vu.setVi(@truncate(u4, it), (0 & vu.getVi(@truncate(u4, is))));
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] FMAND VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, it, vu.getVi(@truncate(u4, it))});
+    }
+}
+
 /// Float to 28:4 fixed-point integer
 pub fn iFtoi4(vu: *Vu, instr: u32) void {
     std.debug.print("FTOI4!\n", .{});
@@ -550,6 +579,27 @@ pub fn iIaddiu(vu: *Vu, instr: u32) void {
 
     if (doDisasm) {
         std.debug.print("[VU{}       ] IADDIU VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, @bitCast(i15, imm), it, res});
+    }
+}
+
+/// Integer AND
+pub fn iIand(vu: *Vu, instr: u32) void {
+    const id = getRd(instr);
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(id < 16 and it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const res = vu.getVi(@truncate(u4, is)) & vu.getVi(@truncate(u4, it));
+
+    vu.setVi(@truncate(u4, id), res);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] IAND VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, id, is, it, id, res});
     }
 }
 
@@ -1012,6 +1062,43 @@ pub fn iMaddbc(vu: *Vu, instr: u32) void {
         const vd = vu.getVf(fd);
 
         std.debug.print("[VU{}       ] MADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
+/// Move From Integer Register
+pub fn iMfir(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const ft = getRt(instr);
+    const is = getRs(instr);
+
+    if (is >= 16) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const s = @bitCast(u32, @as(i32, @bitCast(i16, vu.getVi(@truncate(u4, is)))));
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVfElement(u32, ft, Element.W, s);
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVfElement(u32, ft, Element.Z, s);
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVfElement(u32, ft, Element.Y, s);
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVfElement(u32, ft, Element.X, s);
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVf(ft);
+
+        std.debug.print("[VU{}       ] MFIR.{s} VF[{}]{s}, VI[{}]; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, ft, destStr, is, ft, vt});
     }
 }
 
