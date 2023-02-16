@@ -550,6 +550,51 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
 
             channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
         },
+        SourceTag.Call => {
+            channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
+            channels[chnId].tadr = @truncate(u32, dmaTag >> 32);
+
+            switch (channels[chnId].chcr.asp) {
+                0 => channels[chnId].asr0 = channels[chnId].madr + @sizeOf(u128) * channels[chnId].qwc,
+                1 => channels[chnId].asr1 = channels[chnId].madr + @sizeOf(u128) * channels[chnId].qwc,
+                else => {
+                    std.debug.print("[DMAC      ] Invalid address stack pointer: {}\n", .{channels[chnId].chcr.asp});
+
+                    @panic("Invalid ASP");
+                }
+            }
+
+            channels[chnId].chcr.asp += 1;
+
+            info("   [DMAC      ] New tag: call. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+        },
+        SourceTag.Ret => {
+            channels[chnId].madr   = channels[chnId].tadr + @sizeOf(u128);
+            channels[chnId].tagEnd = (dmaTag & (1 << 31)) != 0 and channels[chnId].chcr.tie;
+
+            switch (channels[chnId].chcr.asp) {
+                0 => channels[chnId].tagEnd = true,
+                1 => {
+                    channels[chnId].tadr = channels[chnId].asr0;
+
+                    channels[chnId].chcr.asp -= 1;
+                },
+                2 => {
+                    channels[chnId].tadr = channels[chnId].asr1;
+
+                    channels[chnId].chcr.asp -= 1;
+                },
+                else => {
+                    std.debug.print("[DMAC      ] Invalid address stack pointer: {}\n", .{channels[chnId].chcr.asp});
+
+                    @panic("Invalid ASP");
+                }
+            }
+
+            info("   [DMAC      ] New tag: ret. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
+        },
         SourceTag.End => {
             channels[chnId].madr = channels[chnId].tadr + @sizeOf(u128);
             //channels[chnId].tadr += @sizeOf(u128);
@@ -557,11 +602,6 @@ fn decodeSourceTag(chnId: u4, dmaTag: u128) void {
             info("   [DMAC      ] New tag: end. MADR = 0x{X:0>8}, TADR = 0x{X:0>8}, QWC = {}", .{channels[chnId].madr, channels[chnId].tadr, channels[chnId].qwc});
 
             channels[chnId].tagEnd = true;
-        },
-        else => {
-            err("  [DMAC      ] Unhandled Source Chain tag {s}.", .{@tagName(tag)});
-
-            assert(false);
         }
     }
 }
