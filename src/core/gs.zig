@@ -1108,6 +1108,11 @@ pub fn writeVram(comptime T: type, comptime psm: PixelFormat, base: u23, width: 
     }
 }
 
+/// Sets Q to 1.0
+pub fn initQ() void {
+    rgbaq.q = @bitCast(u32, @as(f32, 1.0));
+}
+
 /// Computes edge function
 fn edgeFunction(a: Vertex, b: Vertex, c: Vertex) i64 {
     return (@as(i64, b.x) - @as(i64, a.x)) * (@as(i64, c.y) - @as(i64, a.y)) - (@as(i64, b.y) - @as(i64, a.y)) * (@as(i64, c.x) - @as(i64, a.x));
@@ -1470,12 +1475,12 @@ fn getTex(u: u14, v: u14) u32 {
                         @panic("Invalid CLUT CSM2 pixel format");
                     }
 
-                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 16, idtex8 & 0xF, idtex8 >> 4);
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 64, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4);
                 },
                 PixelFormat.Psmct16 => {
                     const texColor = switch (tex[ctxt].csm) {
-                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex8, 0),
-                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 16, idtex8 & 0xF, idtex8 >> 4),
+                         true => readVram(u16, PixelFormat.Psmct16, clutAddr,  0, idtex8, 0),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 64, getIdtex8Clut(idtex8) & 0xF, getIdtex8Clut(idtex8) >> 4),
                     };
 
                     const r = @truncate(u5, texColor >>  0);
@@ -1522,12 +1527,12 @@ fn getTex(u: u14, v: u14) u32 {
                         @panic("Invalid CLUT CSM2 pixel format");
                     }
 
-                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 8, idtex4 & 7, idtex4 >> 3);
+                    color = readVram(u32, PixelFormat.Psmct32, clutAddr, 64, idtex4 & 7, idtex4 >> 3);
                 },
                 PixelFormat.Psmct16 => {
                     const texColor = switch (tex[ctxt].csm) {
-                         true => readVram(u16, PixelFormat.Psmct16, clutAddr, 0, idtex4, 0),
-                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 8, idtex4 & 7, idtex4 >> 3),
+                         true => readVram(u16, PixelFormat.Psmct16, clutAddr,  0, idtex4, 0),
+                        false => readVram(u16, PixelFormat.Psmct16, clutAddr, 64, idtex4 & 7, idtex4 >> 3),
                     };
 
                     const r = @truncate(u5, texColor >>  0);
@@ -1930,12 +1935,12 @@ fn drawTriangle() void {
     b.y -= ofy;
     c.y -= ofy;
 
-    a.x = @as(i23, @truncate(i12, a.x >> 4));
-    b.x = @as(i23, @truncate(i12, b.x >> 4));
-    c.x = @as(i23, @truncate(i12, c.x >> 4));
-    a.y = @as(i23, @truncate(i12, a.y >> 4));
-    b.y = @as(i23, @truncate(i12, b.y >> 4));
-    c.y = @as(i23, @truncate(i12, c.y >> 4));
+    a.x >>= 4;
+    b.x >>= 4;
+    c.x >>= 4;
+    a.y >>= 4;
+    b.y >>= 4;
+    c.y >>= 4;
 
     std.debug.print("a = [{};{}], b = [{};{}], c = [{};{}]\n", .{a.x, a.y, b.x, b.y, c.x, c.y});
 
