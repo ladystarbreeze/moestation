@@ -160,6 +160,11 @@ pub const Vu = struct {
 
                 data = @as(T, self.getVi(@truncate(u4, idx)));
             },
+            @enumToInt(ControlReg.Sf) => {
+                std.debug.print("[COP2      ] Control register read ({s}) @ $SF\n", .{@typeName(T)});
+
+                data = @as(T, 0);
+            },
             @enumToInt(ControlReg.Cf) => {
                 std.debug.print("[COP2      ] Control register read ({s}) @ $CF\n", .{@typeName(T)});
 

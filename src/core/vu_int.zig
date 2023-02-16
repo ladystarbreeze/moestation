@@ -1184,6 +1184,43 @@ pub fn iMfir(vu: *Vu, instr: u32) void {
     }
 }
 
+/// MINI BroadCast
+pub fn iMinibc(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const ft = getRt(instr);
+    const fs = getRs(instr);
+
+    const bc = switch (@truncate(u2, instr)) {
+        0 => Element.X,
+        1 => Element.Y,
+        2 => Element.Z,
+        3 => Element.W,
+    };
+
+    const t = vu.getVfElement(f32, ft, bc);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const s = vu.getVfElement(f32, fs, e);
+
+            vu.setVfElement(f32, fd, e, if (s < t) s else t);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+        const bcStr = getDestStr(@enumToInt(bc));
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] MINI{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
 /// MOVE
 pub fn iMove(vu: *Vu, instr: u32) void {
     const dest = getDest(instr);
