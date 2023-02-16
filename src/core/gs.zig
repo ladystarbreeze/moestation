@@ -224,6 +224,7 @@ const Vertex = struct {
     g: u8 = undefined,
     b: u8 = undefined,
     a: u8 = undefined,
+    f: u8 = undefined,
 
     // Texel coordinates
     u: u14 = undefined,
@@ -334,6 +335,20 @@ const Clamp = struct {
         self.maxu = @bitCast(i32, @as(u32, @truncate(u10, data >> 14)));
         self.minv = @bitCast(i32, @as(u32, @truncate(u10, data >> 24)));
         self.minv = @bitCast(i32, @as(u32, @truncate(u10, data >> 34)));
+    }
+};
+
+/// Fog color
+const FogCol = struct {
+    r: i64 = 0,
+    g: i64 = 0,
+    b: i64 = 0,
+
+    /// Sets FOGCOL
+    pub fn set(self: *FogCol, data: u64) void {
+        self.r = @bitCast(i64, @as(u64, @truncate(u8, data >>  0)));
+        self.g = @bitCast(i64, @as(u64, @truncate(u8, data >>  8)));
+        self.b = @bitCast(i64, @as(u64, @truncate(u8, data >> 16)));
     }
 };
 
@@ -652,7 +667,12 @@ var clamp: [2]Clamp = undefined;
 var  texa:    Texa  = Texa{};
 
 var    alpha: [2]Alpha = undefined;
+var      fba: [2] u1   = [2]u1 {0, 0};
+var     pabe: bool     = false;
 var colclamp: bool     = false;
+
+var fogcol: FogCol = FogCol{};
+var    fog: u8     = 0;
 
 var xyoffset: [2]Xyoffset = undefined;
 var  scissor: [2]Scissor  = undefined;
@@ -823,8 +843,10 @@ pub fn write(addr: u8, data: u64) void {
 
             if (addr == @enumToInt(GsReg.Xyzf2)) {
                 vtx.z = @as(u32, @truncate(u24, data >> 32));
+                vtx.f = @truncate(u8, data >> 56);
             } else {
                 vtx.z = @as(u32, @truncate(u32, data >> 32));
+                vtx.f = fog;
             }
 
             // TODO: write fog value
@@ -873,6 +895,7 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.Tex02     ) => tex[1].setTex0(data),
         @enumToInt(GsReg.Clamp1    ) => clamp[0].set(data),
         @enumToInt(GsReg.Clamp2    ) => clamp[1].set(data),
+        @enumToInt(GsReg.Fog       ) => fog = @truncate(u8, data),
         @enumToInt(GsReg.Tex21     ) => tex[0].setTex2(data),
         @enumToInt(GsReg.Tex22     ) => tex[1].setTex2(data),
         @enumToInt(GsReg.PrMode    ) => prmode.set(data),
@@ -880,6 +903,7 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.XyOffset2 ) => xyoffset[1].set(data),
         @enumToInt(GsReg.PrModeCont) => prmodecont = (data & 1) != 0,
         @enumToInt(GsReg.TexA      ) => texa.set(data),
+        @enumToInt(GsReg.FogCol    ) => fogcol.set(data),
         @enumToInt(GsReg.Scissor1  ) => scissor[0].set(data),
         @enumToInt(GsReg.Scissor2  ) => scissor[1].set(data),
         @enumToInt(GsReg.Alpha1    ) => alpha[0].set(data),
@@ -887,9 +911,9 @@ pub fn write(addr: u8, data: u64) void {
         @enumToInt(GsReg.ColClamp  ) => colclamp = (data & 1) != 0,
         @enumToInt(GsReg.Test1     ) => test_[0].set(data),
         @enumToInt(GsReg.Test2     ) => test_[1].set(data),
-        @enumToInt(GsReg.Pabe      ) => {},
-        @enumToInt(GsReg.Fba1      ) => {},
-        @enumToInt(GsReg.Fba2      ) => {},
+        @enumToInt(GsReg.Pabe      ) => pabe = (data & 1) != 0,
+        @enumToInt(GsReg.Fba1      ) => fba[0] = @truncate(u1, data),
+        @enumToInt(GsReg.Fba2      ) => fba[1] = @truncate(u1, data),
         @enumToInt(GsReg.Frame1    ) => frame[0].set(data),
         @enumToInt(GsReg.Frame2    ) => frame[1].set(data),
         @enumToInt(GsReg.Zbuf1     ) => zbuf[0].set(data),
@@ -969,9 +993,9 @@ pub fn writePacked(addr: u4, data: u128) void {
             }
         },
         @enumToInt(GsReg.Fog) => {
-            const fog = @truncate(u64, data >> 40);
+            std.debug.print("Write @ Fog = 0x{X:0>32}\n", .{data});
 
-            write(@enumToInt(GsReg.Fog), fog);
+            fog = @truncate(u8, data >> 100);
         },
         @enumToInt(GsReg.AddrData) => {
             const reg = @truncate(u8, data >> 64);
@@ -1123,6 +1147,8 @@ fn alphaBlend(base: u23, x: u23, y: u23, color: u32) u32 {
     //std.debug.print("Alpha blend!\n", .{});
 
     const ctxt = if (prmodecont) @bitCast(u1, prim.ctxt) else @bitCast(u1, prmode.ctxt);
+
+    if (pabe and (color >> 31) == 0) return color;
 
     const fbWidth = 64 * @as(u23, frame[ctxt].fbw);
 
@@ -1343,6 +1369,13 @@ fn getColor(a: Vertex, b: Vertex, c: Vertex, w0: i64, w1: i64, w2: i64) u32 {
     const color = @divTrunc((w0 * colorA) + (w1 * colorB) + (w2 * colorC), area);
 
     return @bitCast(u32, @truncate(i32, color));
+}
+
+/// Interpolate fog
+fn getFog(a: u8, b: u8, c: u8, w0: i64, w1: i64, w2: i64, area: i64) i64 {
+    const f = w0 * @bitCast(i64, @as(u64, a)) + w1 * @bitCast(i64, @as(u64, b)) + w2 * @bitCast(i64, @as(u64, c));
+
+    return @divTrunc(f, area);
 }
 
 /// Downconverts RGBA32 to RGBA5551
@@ -1671,7 +1704,7 @@ fn drawPoint() void {
     if (!depthTest(a.x, a.y, a.z)) return;
 
     switch (frame[ctxt].psm) {
-        PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, a.x), @bitCast(u23, a.y), color),
+        PixelFormat.Psmct32 => writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, a.x), @bitCast(u23, a.y), color | (@as(u32, fba[ctxt]) << 31)),
         PixelFormat.Psmct24 => writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, a.x), @bitCast(u23, a.y), color),
         else => {
             std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
@@ -1720,7 +1753,14 @@ fn drawSprite() void {
 
     const tme = if (prmodecont) prim.tme else prmode.tme;
     const abe = if (prmodecont) prim.abe else prmode.abe;
+    const fge = if (prmodecont) prim.fge else prmode.fge;
     const fst = if (prmodecont) prim.fst else prmode.fst;
+
+    if (fge) {
+        std.debug.print("Unhandled fog setting\n", .{});
+
+        @panic("Unhandled fog");
+    }
 
     const uStart = getUv(xMin, a.u, a.x, b.u, b.x);
     const vStart = getUv(yMin, a.v, a.y, b.v, b.y);
@@ -1879,7 +1919,7 @@ fn drawSprite() void {
                         if (!aResult.updateA  ) color = (color & 0x00FF_FFFF) | (oldColor & 0xFF00_0000);
                     }
 
-                    writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color);
+                    writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color | (@as(u32, fba[ctxt]) << 31));
                 },
                 PixelFormat.Psmct24 => {
                     if (aResult.updateRgb) writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), color);
@@ -1894,7 +1934,7 @@ fn drawSprite() void {
                         if (!aResult.updateA  ) color = (color & 0x7FFF) | (oldColor & 0x8000);
                     }
 
-                    writeVram(u16, PixelFormat.Psmct16s, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, color));
+                    writeVram(u16, PixelFormat.Psmct16s, fbAddr, fbWidth, @bitCast(u23, x), @bitCast(u23, y), @truncate(u16, color) | (@as(u16, fba[ctxt]) << 15));
                 },
                 else => {
                     std.debug.print("Unhandled frame buffer storage mode: {s}\n", .{@tagName(frame[ctxt].psm)});
@@ -1972,6 +2012,7 @@ fn drawTriangle() void {
 
     const tme = if (prmodecont) prim.tme else prmode.tme;
     const abe = if (prmodecont) prim.abe else prmode.abe;
+    const fge = if (prmodecont) prim.fge else prmode.fge;
     const fst = if (prmodecont) prim.fst else prmode.fst;
 
     // Calculate bounding box
@@ -2110,6 +2151,31 @@ fn drawTriangle() void {
                         }
                     }
 
+                    if (fge) {
+                        const f = getFog(a.f, b_.f, c_.f, w0, w1, w2, area);
+
+                        const texR = @bitCast(i64, @as(u64, (color >>  0) & 0xFF));
+                        const texG = @bitCast(i64, @as(u64, (color >>  8) & 0xFF));
+                        const texB = @bitCast(i64, @as(u64, (color >> 16) & 0xFF));
+
+                        color &= ~@as(u32, 0xFF_FFFF);
+
+                        var fogR = ((f * texR) >> 8) + (((255 - f) * fogcol.r) >> 8);
+                        var fogG = ((f * texG) >> 8) + (((255 - f) * fogcol.g) >> 8);
+                        var fogB = ((f * texB) >> 8) + (((255 - f) * fogcol.b) >> 8);
+
+                        if (fogR > 0xFF) fogR = 0xFF;
+                        if (fogR < 0x00) fogR = 0;
+                        if (fogG > 0xFF) fogG = 0xFF;
+                        if (fogG < 0x00) fogG = 0;
+                        if (fogB > 0xFF) fogB = 0xFF;
+                        if (fogB < 0x00) fogB = 0;
+
+                        color |= @as(u32, @truncate(u8, @bitCast(u64, fogR))) <<  0;
+                        color |= @as(u32, @truncate(u8, @bitCast(u64, fogG))) <<  8;
+                        color |= @as(u32, @truncate(u8, @bitCast(u64, fogB))) << 16;
+                    }
+
                     //std.debug.print("Tex blending OK!!\n", .{});
                 } else {
                     color = getColor(a, b_, c_, w0, w1, w2);
@@ -2132,7 +2198,7 @@ fn drawTriangle() void {
                             if (!aResult.updateA  ) color = (color & 0x00FF_FFFF) | (oldColor & 0xFF00_0000);
                         }
 
-                        writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
+                        writeVram(u32, PixelFormat.Psmct32, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color | (@as(u32, fba[ctxt]) << 31));
                     },
                     PixelFormat.Psmct24 => {
                         if (aResult.updateRgb) writeVram(u32, PixelFormat.Psmct24, fbAddr, fbWidth, @bitCast(u23, p.x), @bitCast(u23, p.y), color);
