@@ -402,6 +402,9 @@ fn decodeGifTag(tag: u128) void {
     }
 
     gifTag.hasTag = true;
+
+    // Initialize GS Q register
+    gs.initQ();
 }
 
 /// Steps the GIF
