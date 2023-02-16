@@ -59,6 +59,7 @@ const DeviceStatus = enum(u32) {
 
 /// SIO2 Pad commands
 const PadCommand = enum(u8) {
+    SetVrefParam    = 0x40,
     QueryMaskedMode = 0x41,
     ReadData        = 0x42,
     ConfigMode      = 0x43,
@@ -68,13 +69,15 @@ const PadCommand = enum(u8) {
     QueryComb       = 0x47,
     QueryMode       = 0x4C,
     VibrationToggle = 0x4D,
+    SetNativeMode   = 0x4F,
 };
 
 /// Memory Card command
 const McCommand = enum(u8) {
-    Probe       = 0x11,
-    ReadDataPsx = 0x52,
-    AuthF3      = 0xF3,
+    Probe         = 0x11,
+    GetTerminator = 0x28,
+    ReadDataPsx   = 0x52,
+    AuthF3        = 0xF3,
 };
 
 /// Pad state
@@ -409,8 +412,8 @@ fn doCmdChain() void {
 
         switch (activeDev) {
             Device.Controller => doPadCmd(),
-            Device.MemoryCard => doMcCmd(),
-            Device.Infrared, Device.Multitap => {
+            //Device.MemoryCard => doMcCmd(),
+            Device.MemoryCard, Device.Infrared, Device.Multitap => {
                 sio2FifoIn.discard(send3.len - 1);
             }
         }
@@ -430,15 +433,17 @@ fn doPadCmd() void {
     const cmd = sio2FifoIn.readItem().?;
 
     switch (cmd) {
+        @enumToInt(PadCommand.SetVrefParam   ) => cmdPadSetVrefParam(),
         @enumToInt(PadCommand.QueryMaskedMode) => cmdPadQueryMaskedMode(),
         @enumToInt(PadCommand.ReadData       ) => cmdPadReadData(),
         @enumToInt(PadCommand.ConfigMode     ) => cmdPadConfigMode(),
-        @enumToInt(PadCommand.SetModeAndLock ) => cmdSetModeAndLock(),
+        @enumToInt(PadCommand.SetModeAndLock ) => cmdPadSetModeAndLock(),
         @enumToInt(PadCommand.QueryModel     ) => cmdPadQueryModel(),
         @enumToInt(PadCommand.QueryAct       ) => cmdPadQueryAct(),
         @enumToInt(PadCommand.QueryComb      ) => cmdPadQueryComb(),
         @enumToInt(PadCommand.QueryMode      ) => cmdPadQueryMode(),
         @enumToInt(PadCommand.VibrationToggle) => cmdPadVibrationToggle(),
+        @enumToInt(PadCommand.SetNativeMode  ) => cmdPadSetNativeMode(),
         else => {
             err("  [SIO2      ] Unhandled pad command 0x{X:0>2}.", .{cmd});
 
@@ -699,7 +704,7 @@ fn cmdPadReadData() void {
 }
 
 /// Pad Set Mode and Lock
-fn cmdSetModeAndLock() void {
+fn cmdPadSetModeAndLock() void {
     info("   [SIO2 (Pad)] Set Mode and Lock", .{});
 
     // Remove excess bytes from FIFOIN
@@ -719,6 +724,48 @@ fn cmdSetModeAndLock() void {
     writeFifoOut(0x00);
 
     rumble = [_]u8 {0x5A, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+}
+
+/// Pad Set Native Mode
+fn cmdPadSetNativeMode() void {
+    info("   [SIO2 (Pad)] Set Native Mode", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    // Send 0 bytes
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x5A);
+}
+
+/// Pad Set VREF Param
+fn cmdPadSetVrefParam() void {
+    info("   [SIO2 (Pad)] Set VREF Param", .{});
+
+    // Remove excess bytes from FIFOIN
+    sio2FifoIn.discard(send3.len - 2);
+
+    // Send header reply
+    writeFifoOut(0xFF);
+    writeFifoOut(0xF3);
+    writeFifoOut(0x5A);
+
+    // Send 0 bytes
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x02);
+    writeFifoOut(0x00);
+    writeFifoOut(0x00);
+    writeFifoOut(0x5A);
 }
 
 /// Pad Vibration Toggle
