@@ -701,6 +701,29 @@ pub fn step() void {
 
                     unpackInfo.addr += @sizeOf(u128);
                 },
+                UnpackMode.V4_8 => {
+                    if (vif1Fifo.readableLength() == 0) return;
+
+                    const data = readFifo(u32);
+
+                    var unpackData: u128 = 0;
+
+                    if (unpackInfo.usn) {
+                        unpackData |= @as(u128, @truncate(u8, data));
+                        unpackData |= @as(u128, @truncate(u8, data >>  8)) << 32;
+                        unpackData |= @as(u128, @truncate(u8, data >> 16)) << 64;
+                        unpackData |= @as(u128, @truncate(u8, data >> 24)) << 96;
+                    } else {
+                        unpackData |= @as(u128, @bitCast(u32, @as(i32, @bitCast(i8, @truncate(u8, data)))));
+                        unpackData |= @as(u128, @bitCast(u32, @as(i32, @bitCast(i8, @truncate(u8, data >>  8))))) << 32;
+                        unpackData |= @as(u128, @bitCast(u32, @as(i32, @bitCast(i8, @truncate(u8, data >> 16))))) << 64;
+                        unpackData |= @as(u128, @bitCast(u32, @as(i32, @bitCast(i8, @truncate(u8, data >> 24))))) << 96;
+                    }
+
+                    cpu.vu[1].writeData(u128, unpackInfo.addr, unpackData);
+
+                    unpackInfo.addr += @sizeOf(u128);
+                },
                 else => {
                     std.debug.print("Unhandled UNPACK\n", .{});
 
