@@ -766,6 +766,7 @@ fn decodeInstr(instr: u32) void {
 
                     switch (f) {
                         0x08 ... 0x0B => vu_int.iMaddabc(&vu[0], instr),
+                        0x14 => vu_int.iFtoi0(&vu[0], instr),
                         0x15 => vu_int.iFtoi4(&vu[0], instr),
                         0x18 ... 0x1B => vu_int.iMulabc(&vu[0], instr),
                         0x1F => vu_int.iClip(&vu[0], instr),
@@ -787,7 +788,10 @@ fn decodeInstr(instr: u32) void {
                 } else {
                     switch (funct) {
                         0x00 ... 0x03 => vu_int.iAddbc(&vu[0], instr),
+                        0x04 ... 0x07 => vu_int.iSubbc(&vu[0], instr),
                         0x08 ... 0x0B => vu_int.iMaddbc(&vu[0], instr),
+                        0x10 ... 0x13 => vu_int.iMaxbc(&vu[0], instr),
+                        0x14 ... 0x17 => vu_int.iMinibc(&vu[0], instr),
                         0x18 ... 0x1B => vu_int.iMulbc(&vu[0], instr),
                         0x1C => vu_int.iMulq(&vu[0], instr),
                         0x20 => vu_int.iAddq(&vu[0], instr),
