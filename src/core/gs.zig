@@ -1249,7 +1249,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
 
     const oldDepth = switch (zbuf[ctxt].psm) {
         PixelFormat.Psmct32 , PixelFormat.Psmz32  => readVram(u32, PixelFormat.Psmz32 , zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
-        PixelFormat.Psmct24 => readVram(u32, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
+        PixelFormat.Psmct24, PixelFormat.Psmz24 => readVram(u32, PixelFormat.Psmct24, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         PixelFormat.Psmct16s, PixelFormat.Psmz16s => readVram(u16, PixelFormat.Psmz16s, zAddr, zbWidth, @bitCast(u23, x), @bitCast(u23, y)),
         else => {
             std.debug.print("Unhandled Z buffer storage mode: {s}\n", .{@tagName(zbuf[ctxt].psm)});
@@ -1264,7 +1264,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.GEqual  => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ < oldDepth) return false,
-                PixelFormat.Psmct24 => {
+                PixelFormat.Psmct24, PixelFormat.Psmz24 => {
                     depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
 
                     if (depth_ < oldDepth) return false;
@@ -1284,7 +1284,7 @@ fn depthTest(x: i23, y: i23, depth: u32) bool {
         ZTest.Greater => {
             switch (zbuf[ctxt].psm) {
                 PixelFormat.Psmct32 , PixelFormat.Psmz32  => if (depth_ <= oldDepth) return false,
-                PixelFormat.Psmct24 => {
+                PixelFormat.Psmct24, PixelFormat.Psmz24 => {
                     depth_ = @truncate(u24, min(u32, depth_, 0xFFFFFF));
 
                     if (depth_ <= oldDepth) return false;
