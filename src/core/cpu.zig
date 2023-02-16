@@ -501,6 +501,8 @@ fn write(comptime T: type, addr: u32, data: T) void {
 
 /// Writes data to scratchpad RAM
 pub fn writeSpram(comptime T: type, addr: u32, data: T) void {
+    std.debug.print("[EE Core   ] Write ({s}) @ SPRAM 0x{X:0>8} = 0x{X}\n", .{@typeName(T), addr, data});
+
     @memcpy(@ptrCast([*]u8, &spram[addr]), @ptrCast([*]const u8, &data), @sizeOf(T));
 }
 
@@ -786,6 +788,7 @@ fn decodeInstr(instr: u32) void {
                     switch (funct) {
                         0x00 ... 0x03 => vu_int.iAddbc(&vu[0], instr),
                         0x08 ... 0x0B => vu_int.iMaddbc(&vu[0], instr),
+                        0x18 ... 0x1B => vu_int.iMulbc(&vu[0], instr),
                         0x1C => vu_int.iMulq(&vu[0], instr),
                         0x20 => vu_int.iAddq(&vu[0], instr),
                         0x28 => vu_int.iAdd(&vu[0], instr),
@@ -1924,7 +1927,7 @@ fn iEret() void {
     }
 
     if (!fastBootDone and regFile.pc == 0x82000) {
-        bus.fastBoot();
+        //bus.fastBoot();
         //regFile.setPc(bus.loadElf());
 
         fastBootDone = true;
