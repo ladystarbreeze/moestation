@@ -100,6 +100,7 @@ pub const Vu = struct {
         vf: [32]Vf  = undefined,
         vi: [16]u16 = undefined,
        acc: Vf      = undefined,
+         i: f32     = 0.0,
          q: f32     = 0.0,
      cmsar: u16     = 0,
 
@@ -108,6 +109,9 @@ pub const Vu = struct {
        cpc: u16 = 0,
        npc: u16 = 0,
        tpc: u16 = 0,
+    
+    // PATH1 transfer address
+    p1Addr: u16 = 0,
 
     // Clipping flags
         cf: u24 = 0,
@@ -299,6 +303,8 @@ pub const Vu = struct {
             },
             @enumToInt(ControlReg.I) => {
                 std.debug.print("[COP2      ] Control register write ({s}) @ $I = 0x{X:0>8}\n", .{@typeName(T), data});
+
+                self.i = @bitCast(f32, @truncate(u32, data));
             },
             @enumToInt(ControlReg.Q) => {
                 std.debug.print("[COP2      ] Control register write ({s}) @ $Q = 0x{X:0>8}\n", .{@typeName(T), data});
@@ -350,6 +356,8 @@ pub const Vu = struct {
     pub fn setVf(self: *Vu, idx: u5, data: u128) void {
         self.vf[idx].set(data);
 
+        std.debug.print("[VU{}       ] VF[{}].xyzw = 0x{X:0>8}\n", .{self.vuNum, idx, data});
+
         self.vf[0].set(0x3F800000 << 96);
     }
 
@@ -358,6 +366,8 @@ pub const Vu = struct {
         assert(T == u32 or T == f32);
 
         const data_ = if (T == f32) @bitCast(u32, data) else data;
+
+        std.debug.print("[VU{}       ] VF[{}].{s} = 0x{X:0>8}\n", .{self.vuNum, idx, @tagName(e), data_});
 
         if (data_ == 0x7F80_0000 or data_ == 0xFF80_0000 or data_ == 0x7FFF_FFFF) {
             std.debug.print("Invalid floating-point value 0x{X:0>8}\n", .{data_});
@@ -405,7 +415,7 @@ pub const Vu = struct {
 
     /// Branch helper
     pub fn doBranch(self: *Vu, target: u16, isCond: bool, id: u4) void {
-        self.setVi(id, self.npc);
+        self.setVi(id, self.npc / 8);
 
         if (isCond) {
             self.npc = target;
@@ -443,7 +453,15 @@ pub const Vu = struct {
         switch (self.state) {
             VuState.Idle   => return,
             VuState.Xgkick => {
-                if (!gif.startPath1()) return;
+                if (gif.isP1Active()) {
+                    return std.debug.print("[VU1       ] PATH1 still active\n", .{});
+                }
+
+                if (!gif.startPath1()) {
+                    return;
+                }
+
+                gif.setPath1Addr(self.p1Addr);
 
                 self.state = VuState.ExecMs;
             },
@@ -468,9 +486,11 @@ pub const Vu = struct {
         }
 
         if ((instr & (1 << 63)) != 0) {
-            std.debug.print("[VU{}       ] Unhandled I register load\n", .{self.vuNum});
+            const i = @bitCast(f32, @truncate(u32, instr));
 
-            @panic("Unhandled I register load");
+            std.debug.print("[VU{}       ] I = {}\n", .{self.vuNum, i});
+
+            self.i = i;
         } else {
             vu_int.executeLower(self, @truncate(u32, instr));
         }

@@ -31,13 +31,16 @@ const LowerOp = enum(u7) {
     B       = 0x20,
     Bal     = 0x21,
     Jr      = 0x24,
+    Jalr    = 0x25,
     Ibne    = 0x29,
     Ibgtz   = 0x2D,
     Special = 0x40,
 };
 
 const LowerOpSpecial = enum(u6) {
-    Iadd = 0x30,
+    Iadd  = 0x30,
+    Iaddi = 0x32,
+    Ior   = 0x35,
 };
 
 const LowerOpSpecial2 = enum(u7) {
@@ -47,11 +50,15 @@ const LowerOpSpecial2 = enum(u7) {
     Lqi    = 0x34,
     Sqi    = 0x35,
     Div    = 0x38,
+    Ilwr   = 0x3E,
+    Iswr   = 0x3F,
 };
 
 const UpperOp = enum(u7) {
     Maddbc = 0x08,
     Mulq   = 0x1C,
+    Addi   = 0x22,
+    Add    = 0x28,
     Madd   = 0x29,
 };
 
@@ -123,6 +130,7 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
         @enumToInt(LowerOp.B      ) => iB(vu, instr),
         @enumToInt(LowerOp.Bal    ) => iBal(vu, instr),
         @enumToInt(LowerOp.Jr     ) => iJr(vu, instr),
+        @enumToInt(LowerOp.Jalr   ) => iJalr(vu, instr),
         @enumToInt(LowerOp.Ibne   ) => iIbne(vu, instr),
         @enumToInt(LowerOp.Ibgtz  ) => iIbgtz(vu, instr),
         @enumToInt(LowerOp.Special) => {
@@ -138,6 +146,8 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                     @enumToInt(LowerOpSpecial2.Lqi   ) => iLqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Sqi   ) => iSqi(vu, instr),
                     @enumToInt(LowerOpSpecial2.Div   ) => iDiv(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Ilwr  ) => iIlwr(vu, instr),
+                    @enumToInt(LowerOpSpecial2.Iswr  ) => iIswr(vu, instr),
                     else => {
                         std.debug.print("[VU{}       ] Unhandled 11-bit lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct2, instr});
 
@@ -146,7 +156,9 @@ pub fn executeLower(vu: *Vu, instr: u32) void {
                 }
             } else {
                 switch (funct) {
-                    @enumToInt(LowerOpSpecial.Iadd) => iIadd(vu, instr),
+                    @enumToInt(LowerOpSpecial.Iadd ) => iIadd(vu, instr),
+                    @enumToInt(LowerOpSpecial.Iaddi) => iIaddi(vu, instr),
+                    @enumToInt(LowerOpSpecial.Ior  ) => iIor(vu, instr),
                     else => {
                         std.debug.print("[VU{}       ] Unhandled lower instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, funct, instr});
 
@@ -186,6 +198,8 @@ pub fn executeUpper(vu: *Vu, instr: u32) void {
         switch (opcode) {
             @enumToInt(UpperOp.Maddbc) ... @enumToInt(UpperOp.Maddbc) + 3 => iMaddbc(vu, instr),
             @enumToInt(UpperOp.Mulq  ) => iMulq(vu, instr),
+            @enumToInt(UpperOp.Addi  ) => iAddi(vu, instr),
+            @enumToInt(UpperOp.Add   ) => iAdd(vu, instr),
             @enumToInt(UpperOp.Madd  ) => iMadd(vu, instr),
             else => {
                 std.debug.print("[VU{}       ] Unhandled upper instruction 0x{X:0>2} (0x{X:0>8})\n", .{vu.vuNum, opcode, instr});
@@ -257,6 +271,32 @@ pub fn iAddbc(vu: *Vu, instr: u32) void {
         const vd = vu.getVf(fd);
 
         std.debug.print("[VU{}       ] ADD{s}.{s} VF[{}]{s}, VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, bcStr, destStr, fd, destStr, fs, destStr, ft, bcStr, fd, vd});
+    }
+}
+
+/// floating-point ADDition with I
+pub fn iAddi(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const fd = getRd(instr);
+    const fs = getRs(instr);
+
+    var i: u4 = 1;
+    while (i != 0) : (i <<= 1) {
+        if ((dest & i) != 0) {
+            const e = @intToEnum(Element, i);
+            const res = vu.getVfElement(f32, fs, e) + vu.i;
+
+            vu.setVfElement(f32, fd, e, res);
+        }
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vd = vu.getVf(fd);
+
+        std.debug.print("[VU{}       ] ADDI.{s} VF[{}]{s}, VF[{}]{s}; VF[{}] = 0x{X:0>32}\n", .{vu.vuNum, destStr, fd, destStr, fs, destStr, fd, vd});
     }
 }
 
@@ -469,6 +509,28 @@ pub fn iIadd(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Integer ADDition Immediate
+pub fn iIaddi(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const imm = @bitCast(u16, @as(i16, @bitCast(i5, getRd(instr))));
+
+    const res = vu.getVi(@truncate(u4, is)) +% imm;
+
+    vu.setVi(@truncate(u4, it), res);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] IADDI VI[{}], VI[{}], {}; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, it, is, imm, it, res});
+    }
+}
+
 /// Integer ADDition Immediate Unsigned
 pub fn iIaddiu(vu: *Vu, instr: u32) void {
     const it = getRt(instr);
@@ -575,6 +637,65 @@ pub fn iIlw(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Integer Load Word Register
+pub fn iIlwr(vu: *Vu, instr: u32) void {
+    const dest = getDest(instr);
+
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(is < 16 and it < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const addr = vu.getVi(@truncate(u4, is)) << 4;
+    const data = vu.readData(u128, addr);
+
+    if (dest & (1 << 0) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 96));
+    }
+    if (dest & (1 << 1) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 64));
+    }
+    if (dest & (1 << 2) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 32));
+    }
+    if (dest & (1 << 3) != 0) {
+        vu.setVi(@truncate(u4, it), @truncate(u16, data >> 0));
+    }
+
+    if (doDisasm) {
+        const destStr = getDestStr(dest);
+
+        const vt = vu.getVi(@truncate(u4, it));
+
+        std.debug.print("[VU{}       ] ILWR.{s} VI[{}]{s}, (VI[{}]); VI[{}] = [0x{X:0>4}] = 0x{X:0>3}\n", .{vu.vuNum, destStr, it, destStr, is, it, addr, vt});
+    }
+}
+
+/// Integer OR
+pub fn iIor(vu: *Vu, instr: u32) void {
+    const id = getRd(instr);
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(id < 16 and it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const res = vu.getVi(@truncate(u4, is)) | vu.getVi(@truncate(u4, it));
+
+    vu.setVi(@truncate(u4, id), res);
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] IOR VI[{}], VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}\n", .{vu.vuNum, id, is, it, id, res});
+    }
+}
+
 /// Integer SUBtract Immediate Unsigned
 pub fn iIsubiu(vu: *Vu, instr: u32) void {
     const it = getRt(instr);
@@ -675,6 +796,26 @@ pub fn iIswr(vu: *Vu, instr: u32) void {
     }
 }
 
+/// Jump And Link Register
+pub fn iJalr(vu: *Vu, instr: u32) void {
+    const it = getRt(instr);
+    const is = getRs(instr);
+
+    if (!(it < 16 and is < 16)) {
+        std.debug.print("[VU{}       ] Index out of bounds\n", .{vu.vuNum});
+
+        @panic("Index out of bounds");
+    }
+
+    const target = vu.getVi(@truncate(u4, is)) * 8;
+
+    vu.doBranch(target, true, @truncate(u4, it));
+
+    if (doDisasm) {
+        std.debug.print("[VU{}       ] JALR VI[{}], VI[{}]; VI[{}] = 0x{X:0>3}, PC = 0x{X:0>3}\n", .{vu.vuNum, it, is, it, vu.getVi(@truncate(u4, it)), target});
+    }
+}
+
 /// Jump Register
 pub fn iJr(vu: *Vu, instr: u32) void {
     const is = getRs(instr);
@@ -685,7 +826,7 @@ pub fn iJr(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    const target = vu.getVi(@truncate(u4, is));
+    const target = vu.getVi(@truncate(u4, is)) * 8;
 
     vu.doBranch(target, true, 0);
 
@@ -1200,13 +1341,7 @@ pub fn iWaitq(vu: *Vu) void {
 /// Xfer GIF KICK
 pub fn iXgkick(vu: *Vu, instr: u32) void {
     assert(vu.vuNum == 1);
-
-    if (gif.getActivePath() == ActivePath.Path1) {
-        std.debug.print("[VU1       ] PATH1 still running\n", .{});
-
-        @panic("PATH1 still running");
-    }
-
+    
     const is = getRs(instr);
 
     if (is >= 16) {
@@ -1215,7 +1350,7 @@ pub fn iXgkick(vu: *Vu, instr: u32) void {
         @panic("Index out of bounds");
     }
 
-    gif.setPath1Addr(vu.getVi(@truncate(u4, is)));
+    vu.p1Addr = vu.getVi(@truncate(u4, is));
 
     vu.state = VuState.Xgkick;
 
