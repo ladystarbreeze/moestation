@@ -14,8 +14,8 @@
 /* --- GS constants --- */
 
 constexpr i64 CYCLES_PER_SCANLINE = 2 * 9370; // NTSC, converted to EE clock
-constexpr i64 SCANLINES_PER_VDRAW = 240;
-constexpr i64 SCANLINES_PER_FRAME = 262;
+//constexpr i64 SCANLINES_PER_VDRAW = 240;
+//constexpr i64 SCANLINES_PER_FRAME = 262;
 
 /* --- GS privileged registers --- */
 enum PrivReg {
@@ -25,6 +25,7 @@ enum PrivReg {
     SYNCH1 = 0x12000040,
     SYNCH2 = 0x12000050,
     SYNCV  = 0x12000060,
+    CSR    = 0x12001000,
 };
 
 /* GS scheduler event IDs */
@@ -66,6 +67,9 @@ void writePriv64(u32 addr, u64 data) {
             break;
         case PrivReg::SYNCV:
             std::printf("[GS        ] 64-bit write @ SYNCV = 0x%016llX\n", data);
+            break;
+        case PrivReg::CSR:
+            std::printf("[GS        ] 64-bit write @ GS_CSR = 0x%016llX\n", data);
             break;
         default:
             std::printf("[GS        ] Unhandled 64-bit write @ 0x%08X = 0x%016llX\n", addr, data);
