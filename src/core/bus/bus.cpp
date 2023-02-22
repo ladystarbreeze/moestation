@@ -253,6 +253,9 @@ void write32(u32 addr, u32 data) {
         return rdram::write32(addr, data);
     } else {
         switch (addr) {
+            case 0x1000F010:
+                std::printf("[Bus:EE    ] 32-bit write @ INTC_MASK = 0x%08X\n", data);
+                return ps2::intc::writeMask(data);
             case 0x1000F100:
             case 0x1000F120:
             case 0x1000F140:

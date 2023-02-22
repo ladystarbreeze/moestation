@@ -11,4 +11,6 @@ namespace ps2::intc {
 
 u16 readMask();
 
+void writeMask(u16 data);
+
 }
