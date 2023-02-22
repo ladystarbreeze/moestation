@@ -9,6 +9,7 @@ add_compile_options(-Wall -Wextra)
 set(SOURCES
     src/main.cpp
     src/common/file.cpp
+    src/core/intc.cpp
     src/core/moestation.cpp
     src/core/scheduler.cpp
     src/core/bus/bus.cpp
@@ -22,6 +23,7 @@ set(SOURCES
 set(HEADERS
     src/common/file.hpp
     src/common/types.hpp
+    src/core/intc.hpp
     src/core/moestation.hpp
     src/core/scheduler.hpp
     src/core/bus/bus.hpp

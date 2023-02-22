@@ -8,6 +8,7 @@
 #include <cstdio>
 
 #include "rdram.hpp"
+#include "../intc.hpp"
 #include "../ee/timer/timer.hpp"
 #include "../gs/gs.hpp"
 #include "../../common/file.hpp"
@@ -149,12 +150,15 @@ u32 read32(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read32(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
-        std::printf("[Bus::EE   ] Unhandled 32-bit read @ 0x%08X (IOP RAM)\n", addr);
+        std::printf("[Bus:EE    ] Unhandled 32-bit read @ 0x%08X (IOP RAM)\n", addr);
         return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1000F010:
+                std::printf("[Bus:EE    ] 32-bit read @ INTC_MASK\n");
+                return ps2::intc::readMask();
             case 0x1000F520:
                 std::printf("[Bus:EE    ] 32-bit read @ D_ENABLER\n");
                 return 0x1201;
