@@ -10,18 +10,28 @@
 
 /* --- INTC registers --- */
 
-u16 intcMASK = 0; // EE interrupt mask
+u16 intcMASK = 0, intcSTAT = 0; // EE interrupt registers
 
 namespace ps2::intc {
 
 /* Returns INTC_MASK */
 u16 readMask() {
-    return intcMASK & 0x7FFF;
+    return intcMASK;
+}
+
+/* Returns INTC_STAT */
+u16 readStat() {
+    return intcSTAT;
 }
 
 /* Writes INTC_MASK */
 void writeMask(u16 data) {
-    intcMASK ^= data;
+    intcMASK = (intcMASK ^ data) & 0x7FFF;
+}
+
+/* Writes INTC_STAT */
+void writeStat(u16 data) {
+    intcSTAT = (intcSTAT & ~data) & 0x7FFF;
 }
 
 }

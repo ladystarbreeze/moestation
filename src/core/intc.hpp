@@ -10,7 +10,9 @@
 namespace ps2::intc {
 
 u16 readMask();
+u16 readStat();
 
 void writeMask(u16 data);
+void writeStat(u16 data);
 
 }
