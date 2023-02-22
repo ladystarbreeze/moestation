@@ -83,6 +83,7 @@ enum SPECIALOpcode {
     SLL    = 0x00,
     SRL    = 0x02,
     SRA    = 0x03,
+    SLLV   = 0x04,
     JR     = 0x08,
     JALR   = 0x09,
     MOVZ   = 0x0A,
@@ -1352,6 +1353,19 @@ void iSLL(u32 instr) {
     }
 }
 
+/* Shift Left Logical Variable */
+void iSLLV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set32(rd, regs[rt]._u32[0] << (regs[rs]._u64[0] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SLLV %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* Set on Less Than */
 void iSLT(u32 instr) {
     const auto rd = getRd(instr);
@@ -1537,6 +1551,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SLL   : iSLL(instr); break;
                     case SPECIALOpcode::SRL   : iSRL(instr); break;
                     case SPECIALOpcode::SRA   : iSRA(instr); break;
+                    case SPECIALOpcode::SLLV  : iSLLV(instr); break;
                     case SPECIALOpcode::JR    : iJR(instr); break;
                     case SPECIALOpcode::JALR  : iJALR(instr); break;
                     case SPECIALOpcode::MOVZ  : iMOVZ(instr); break;
