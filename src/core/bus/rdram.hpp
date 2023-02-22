@@ -9,8 +9,8 @@
 
 namespace ps2::bus::rdram {
 
-u32 read32(u32 addr);
+u32 read(u32 addr);
 
-void write32(u32 addr, u32 data);
+void write(u32 addr, u32 data);
 
 }
