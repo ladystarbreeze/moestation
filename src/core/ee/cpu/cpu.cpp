@@ -227,20 +227,12 @@ void stepPC() {
 
 /* Translates a virtual address to a physical address */
 u32 translateAddr(u32 addr) {
-    const auto region = addr >> 28;
+    if (addr >= 0xFFFF8000) {
+        std::printf("[EE Core   ] Unhandled TLB mapped region @ 0x%08X\n", addr);
 
-    if ((region >= 0x8) && (region < 0xC)) {
-        addr &= (1 << 29) - 1;
+        exit(0);
     } else {
-        const auto maskedAddr = addr & 0xFFFFFFF;
-
-        if ((maskedAddr >= 0) && (maskedAddr < 0x2000000)) {
-            addr &= (1 << 29) - 1;
-        } else {
-            std::printf("[EE Core   ] Unhandled TLB mapped region @ 0x%08X\n", addr);
-
-            exit(0);
-        }
+        addr &= (1 << 29) - 1;
     }
 
     return addr;
