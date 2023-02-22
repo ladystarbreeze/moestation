@@ -129,7 +129,11 @@ u16 read16(u32 addr) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
         switch (addr) {
+            case 0x1A000006:
+                //std::printf("[Bus:EE    ] Unhandled 16-bit read @ 0x%08X\n", addr);
+                return 1;
             case 0x1000F480:
+            case 0x1A000010:
                 //std::printf("[Bus:EE    ] Unhandled 16-bit read @ 0x%08X\n", addr);
                 return 0;
             default:
@@ -149,7 +153,9 @@ u32 read32(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
-        return ee::timer::read32(addr);
+        return ps2::ee::timer::read32(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
+        return ps2::gif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -159,6 +165,9 @@ u32 read32(u32 addr) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1000F000:
+                std::printf("[Bus:EE    ] 32-bit read @ INTC_STAT\n");
+                return ps2::intc::readStat();
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit read @ INTC_MASK\n");
                 return ps2::intc::readMask();
@@ -238,9 +247,13 @@ void write16(u32 addr, u16 data) {
         std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X (IOP I/O) = 0x%04X\n", addr, data);
     } else {
         switch (addr) {
+            case 0x1A000000:
+            case 0x1A000002:
             case 0x1A000004:
+            case 0x1A000006:
             case 0x1A000008:
-                //std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
+            case 0x1A000010:
+                std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
                 break;
             default:
                 std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -262,6 +275,9 @@ void write32(u32 addr, u32 data) {
         return rdram::write(addr, data);
     } else {
         switch (addr) {
+            case 0x1000F000:
+                std::printf("[Bus:EE    ] 32-bit write @ INTC_STAT = 0x%08X\n", data);
+                return ps2::intc::writeStat(data);
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit write @ INTC_MASK = 0x%08X\n", data);
                 return ps2::intc::writeMask(data);
@@ -309,6 +325,9 @@ void write128(u32 addr, const u128 &data) {
         memcpy(&ram[addr], &data, sizeof(u128));
     } else {
         switch (addr) {
+            case 0x10006000:
+                std::printf("[Bus:EE    ] 128-bit write @ GIF_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
+                break;
             default:
                 std::printf("[Bus:EE    ] Unhandled 128-bit write @ 0x%08X = 0x%016llX%016llX\n", addr, data._u64[1], data._u64[0]);
 

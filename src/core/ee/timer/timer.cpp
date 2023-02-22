@@ -84,7 +84,12 @@ void write32(u32 addr, u32 data) {
     auto &timer = timers[chn];
 
     switch (addr & ~0x1800) {
-        case TimerReg::MODE:
+        case TimerReg::COUNT:
+            std::printf("[Timer:EE  ] 32-bit write @ T%u_COUNT = 0x%08X\n", chn, data);
+
+            timer.count = data & 0xFFFF;
+            break;
+        case TimerReg::MODE :
             {
                 auto &mode = timer.mode;
 
@@ -113,10 +118,55 @@ void write32(u32 addr, u32 data) {
                 timer.subcount = 0;
             }
             break;
+        case TimerReg::COMP:
+            std::printf("[Timer:EE  ] 32-bit write @ T%u_COMP = 0x%08X\n", chn, data);
+
+            timer.comp = data;
+            break;
+        case TimerReg::HOLD:
+            std::printf("[Timer:EE  ] 32-bit write @ T%u_HOLD = 0x%08X\n", chn, data);
+
+            timer.comp = data;
+            break;
         default:
             std::printf("[Timer:EE  ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
 
             exit(0);
+    }
+}
+
+/* Steps timers */
+void step(i64 c) {
+    for (int i = 0; i < 4; i++) {
+        auto &timer = timers[i];
+
+        if (!timer.mode.cue || (timer.mode.clks == 3)) continue;
+
+        timer.subcount += c;
+
+        while (timer.subcount > timer.prescaler) {
+            timer.count++;
+
+            if (timer.count == timer.comp) {
+                if (timer.mode.cmpe && !timer.mode.equf) {
+                    // Checking EQUF is necessary because timer IRQs are edge-triggered
+                    timer.mode.equf = true;
+
+                    assert(false);
+                }
+
+                if (timer.mode.zret) timer.count = 0;
+            } else if (timer.count & (1 << 16)) {
+                if (timer.mode.ovfe && !timer.mode.ovff) {
+                    // Checking OVFF is necessary because timer IRQs are edge-triggered
+                    timer.mode.ovff = true;
+
+                    assert(false);
+                }
+            }
+
+            timer.subcount -= timer.prescaler;
+        }
     }
 }
 

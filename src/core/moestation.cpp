@@ -36,6 +36,7 @@ void init(const char *biosPath, const char *execPath) {
 void run() {
     while (true) {
         ee::cpu::step(EE_CYCLES);
+        ee::timer::step(EE_CYCLES >> 1);
 
         scheduler::processEvents(EE_CYCLES);
     }

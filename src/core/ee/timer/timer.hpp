@@ -15,6 +15,7 @@ u32 read32(u32 addr);
 
 void write32(u32 addr, u32 data);
 
+void step(i64 c);
 void stepHBLANK();
 
 }
