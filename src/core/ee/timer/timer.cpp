@@ -57,7 +57,7 @@ void init() {
     timers[2].prescaler = 1;
     timers[3].prescaler = 1;
 
-    std::printf("[Timer::EE ] Init OK\n");
+    std::printf("[Timer:EE  ] Init OK\n");
 }
 
 u32 read32(u32 addr) {
@@ -68,10 +68,10 @@ u32 read32(u32 addr) {
 
     switch (addr & ~0x1800) {
         case TimerReg::COUNT:
-            std::printf("[Timer::EE ] 32-bit read @ T%u_COUNT\n", chn);
+            std::printf("[Timer:EE  ] 32-bit read @ T%u_COUNT\n", chn);
             return timer.count;
         default:
-            std::printf("[Timer::EE ] Unhandled 32-bit read @ 0x%08X\n", addr);
+            std::printf("[Timer:EE  ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
             exit(0);
     }
@@ -88,7 +88,7 @@ void write32(u32 addr, u32 data) {
             {
                 auto &mode = timer.mode;
 
-                std::printf("[Timer::EE ] 32-bit write @ T%u_MODE = 0x%08X\n", chn, data);
+                std::printf("[Timer:EE  ] 32-bit write @ T%u_MODE = 0x%08X\n", chn, data);
 
                 mode.clks = data & 3;
                 mode.gate = data & (1 << 2);
@@ -114,7 +114,7 @@ void write32(u32 addr, u32 data) {
             }
             break;
         default:
-            std::printf("[Timer::EE ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
+            std::printf("[Timer:EE  ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
 
             exit(0);
     }
