@@ -10,6 +10,7 @@
 #include "rdram.hpp"
 #include "../intc.hpp"
 #include "../ee/timer/timer.hpp"
+#include "../gif/gif.hpp"
 #include "../gs/gs.hpp"
 #include "../../common/file.hpp"
 
@@ -122,7 +123,9 @@ u8 read8(u32 addr) {
 u16 read16(u32 addr) {
     u16 data;
 
-    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
+        std::memcpy(&data, &ram[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
         switch (addr) {
@@ -148,7 +151,7 @@ u32 read32(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return ee::timer::read32(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
-        return rdram::read32(addr);
+        return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
         std::printf("[Bus:EE    ] Unhandled 32-bit read @ 0x%08X (IOP RAM)\n", addr);
         return 0;
@@ -235,6 +238,10 @@ void write16(u32 addr, u16 data) {
         std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X (IOP I/O) = 0x%04X\n", addr, data);
     } else {
         switch (addr) {
+            case 0x1A000004:
+            case 0x1A000008:
+                //std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
+                break;
             default:
                 std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
 
@@ -248,9 +255,11 @@ void write32(u32 addr, u32 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
-        ee::timer::write32(addr, data);
+        ps2::ee::timer::write32(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
+        ps2::gif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
-        return rdram::write32(addr, data);
+        return rdram::write(addr, data);
     } else {
         switch (addr) {
             case 0x1000F010:
