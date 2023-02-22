@@ -1,10 +1,10 @@
-# Zig
-zig-cache
-zig-out
-
 # Debug & dev
+build
 moeDocs
 moeFiles
 
 # macOS
 .DS_Store
+
+# VS Code
+.vscode
