@@ -11,9 +11,27 @@
 /* GIF registers */
 enum GIFReg {
     CTRL = 0x10003000,
+    STAT = 0x10003020,
 };
 
 namespace ps2::gif {
+
+/* Returns a GIF register */
+u32 read(u32 addr) {
+    u32 data;
+
+    switch (addr) {
+        case GIFReg::STAT:
+            std::printf("[GIF       ] Read @ GIF_STAT\n");
+            return 0;
+        default:
+            std::printf("[GIF       ] Unhandled read @ 0x%08X\n", addr);
+
+            exit(0);
+    }
+
+    return data;
+}
 
 /* Writes a GIF register */
 void write(u32 addr, u32 data) {
