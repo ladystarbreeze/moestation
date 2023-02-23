@@ -12,10 +12,14 @@
 #include "cop0.hpp"
 
 #include "../vu/vu.hpp"
+#include "../vu/vu_int.hpp"
 #include "../../bus/bus.hpp"
 
 using namespace ps2::ee;
-using namespace ps2::ee::vu;
+
+using VectorUnit = vu::VectorUnit;
+
+/* --- EE Core constants --- */
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
@@ -121,11 +125,12 @@ enum REGIMMOpcode {
 };
 
 enum COPOpcode {
-    MF = 0x00,
-    CF = 0x02,
-    MT = 0x04,
-    CT = 0x06,
-    CO = 0x10,
+    MF  = 0x00,
+    QMF = 0x01,
+    CF  = 0x02,
+    MT  = 0x04,
+    CT  = 0x06,
+    CO  = 0x10,
 };
 
 enum COP0Opcode {
@@ -1336,6 +1341,44 @@ void iPAND(u32 instr) {
     }
 }
 
+/* Quadword Move From Coprocessor */
+void iQMFC(int copN, u32 instr) {
+    assert(copN == 2); // VU0/COP2 only?
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    u128 data;
+
+    switch (copN) {
+        case 2:
+            {
+                const auto x = vus[0].getVF(rd, 0);
+                const auto y = vus[0].getVF(rd, 1);
+                const auto z = vus[0].getVF(rd, 2);
+                const auto w = vus[0].getVF(rd, 3);
+
+                data._u32[0] = *(u32 *)&x;
+                data._u32[1] = *(u32 *)&y;
+                data._u32[2] = *(u32 *)&z;
+                data._u32[3] = *(u32 *)&w;
+            }
+            break;
+        default:
+            std::printf("[EE Core   ] QMFC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    set128(rt, data);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] QMFC%d %s, %d; %s = 0x%016llX%016llX\n", copN, regNames[rt], rd, regNames[rt], regs[rt]._u64[1], regs[rt]._u64[0]);
+    }
+}
+
 /* Store Byte */
 void iSB(u32 instr) {
     const auto rs = getRs(instr);
@@ -1720,9 +1763,14 @@ void decodeInstr(u32 instr) {
             {
                 const auto rs = getRs(instr);
 
+                if (rs & (1 << 4)) {
+                    return vu::interpreter::executeMacro(&vus[0], instr);
+                }
+
                 switch (rs) {
-                    case COPOpcode::CF: iCFC(2, instr); break;
-                    case COPOpcode::CT: iCTC(2, instr); break;
+                    case COPOpcode::QMF: iQMFC(2, instr); break;
+                    case COPOpcode::CF : iCFC(2, instr); break;
+                    case COPOpcode::CT : iCTC(2, instr); break;
                     default:
                         std::printf("[EE Core   ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
