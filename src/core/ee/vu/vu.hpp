@@ -18,13 +18,13 @@ struct VectorUnit {
     void forceBreak();
 
     u32 getControl(u32 idx); // VU0 only
-    f32 getVF(u32 idx, u32 e);
+    f32 getVF(u32 idx, int e);
     u16 getVI(u32 idx);
 
     void writeData32(u32 addr, u32 data);
 
     void setControl(u32 idx, u32 data); // VU0 only
-    void setVF(u32 idx, u32 e, f32 data);
+    void setVF(u32 idx, int e, f32 data);
     void setVI(u32 idx, u16 data);
     
     int vuID;

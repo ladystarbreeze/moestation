@@ -50,7 +50,7 @@ u32 VectorUnit::getControl(u32 idx) {
 }
 
 /* Returns VF register element */
-f32 VectorUnit::getVF(u32 idx, u32 e) {
+f32 VectorUnit::getVF(u32 idx, int e) {
     return vf[idx][e];
 }
 
@@ -119,7 +119,7 @@ void VectorUnit::setControl(u32 idx, u32 data) {
 }
 
 /* Sets a VF register element */
-void VectorUnit::setVF(u32 idx, u32 e, f32 data) {
+void VectorUnit::setVF(u32 idx, int e, f32 data) {
     std::printf("[VU%d       ] VF%u.%s = %f\n", vuID, idx, elementStr[e], data);
 
     vf[idx][e] = data;
