@@ -86,6 +86,9 @@ u32 read(u32 addr) {
             case static_cast<u32>(ControlReg::STAT):
                 std::printf("[DMAC:EE   ] 32-bit read @ D_STAT\n");
                 return 0;
+            case static_cast<u32>(ControlReg::PCR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_PCR\n");
+                return 0;
             default:
                 std::printf("[DMAC:EE   ] Unhandled 32-bit control read @ 0x%08X\n", addr);
 
@@ -129,6 +132,18 @@ void write(u32 addr, u32 data) {
                 break;
             case static_cast<u32>(ControlReg::STAT):
                 std::printf("[DMAC:EE   ] 32-bit write @ D_STAT = 0x%08X\n", data);
+                break;
+            case static_cast<u32>(ControlReg::PCR):
+                std::printf("[DMAC:EE   ] 32-bit write @ D_PCR = 0x%08X\n", data);
+                break;
+            case static_cast<u32>(ControlReg::SQWC):
+                std::printf("[DMAC:EE   ] 32-bit write @ D_SQWC = 0x%08X\n", data);
+                break;
+            case static_cast<u32>(ControlReg::RBSR):
+                std::printf("[DMAC:EE   ] 32-bit write @ D_RBSR = 0x%08X\n", data);
+                break;
+            case static_cast<u32>(ControlReg::RBOR):
+                std::printf("[DMAC:EE   ] 32-bit write @ D_RBOR = 0x%08X\n", data);
                 break;
             default:
                 std::printf("[DMAC:EE   ] Unhandled 32-bit control write @ 0x%08X = 0x%08X\n", addr, data);
