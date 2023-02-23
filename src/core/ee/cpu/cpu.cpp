@@ -11,9 +11,11 @@
 
 #include "cop0.hpp"
 
+#include "../vu/vu.hpp"
 #include "../../bus/bus.hpp"
 
 using namespace ps2::ee;
+using namespace ps2::ee::vu;
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
@@ -60,6 +62,7 @@ enum Opcode {
     XORI    = 0x0E,
     LUI     = 0x0F,
     COP0    = 0x10,
+    COP2    = 0x12,
     BEQL    = 0x14,
     BNEL    = 0x15,
     DADDIU  = 0x19,
@@ -119,7 +122,9 @@ enum REGIMMOpcode {
 
 enum COPOpcode {
     MF = 0x00,
+    CF = 0x02,
     MT = 0x04,
+    CT = 0x06,
     CO = 0x10,
 };
 
@@ -150,6 +155,8 @@ u8 sa; // Shift amount
 bool inDelaySlot[2]; // Branch delay helper
 
 u8 spram[0x4000]; // Scratchpad RAM
+
+VectorUnit vus[2] = {VectorUnit(0, &vus[1]), VectorUnit(1, &vus[0])}; // Vector units VU0 and VU1
 
 /* --- Register accessors --- */
 
@@ -653,6 +660,56 @@ void iBNEL(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] BNEL %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], (u64)rs, regNames[rt], regs[rt]._u64[0]);
+    }
+}
+
+/* Coprocessor move From Control */
+void iCFC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    u32 data;
+
+    switch (copN) {
+        case 2: data = vus[0].getControl(rd); break;
+        default:
+            std::printf("[EE Core   ] CFC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    set32(rt, data);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] CFC%d %s, %d; %s = 0x%016llX\n", copN, regNames[rt], rd, regNames[rt], regs[rt]._u64[0]);
+    }
+}
+
+/* Coprocessor move To Control */
+void iCTC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    const auto data = regs[rt]._u32[0];
+
+    switch (copN) {
+        case 2: vus[0].setControl(rd, data); break;
+        default:
+            std::printf("[EE Core   ] CTC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] CTC%d %s, %d; %d = 0x%08X\n", copN, regNames[rt], rd, rd, regs[rt]._u32[0]);
     }
 }
 
@@ -1654,6 +1711,20 @@ void decodeInstr(u32 instr) {
                         break;
                     default:
                         std::printf("[EE Core   ] Unhandled COP0 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
+
+                        exit(0);
+                }
+            }
+            break;
+        case Opcode::COP2 :
+            {
+                const auto rs = getRs(instr);
+
+                switch (rs) {
+                    case COPOpcode::CF: iCFC(2, instr); break;
+                    case COPOpcode::CT: iCTC(2, instr); break;
+                    default:
+                        std::printf("[EE Core   ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
                         exit(0);
                 }
