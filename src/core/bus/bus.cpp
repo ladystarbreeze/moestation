@@ -9,6 +9,7 @@
 
 #include "rdram.hpp"
 #include "../intc.hpp"
+#include "../ee/dmac/dmac.hpp"
 #include "../ee/timer/timer.hpp"
 #include "../gif/gif.hpp"
 #include "../gs/gs.hpp"
@@ -156,6 +157,8 @@ u32 read32(u32 addr) {
         return ps2::ee::timer::read32(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         return ps2::gif::read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
+        return ps2::ee::dmac::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -271,6 +274,8 @@ void write32(u32 addr, u32 data) {
         ps2::ee::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         ps2::gif::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
+        return ps2::ee::dmac::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::write(addr, data);
     } else {

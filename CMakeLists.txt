@@ -16,6 +16,7 @@ set(SOURCES
     src/core/bus/rdram.cpp
     src/core/ee/cpu/cop0.cpp
     src/core/ee/cpu/cpu.cpp
+    src/core/ee/dmac/dmac.cpp
     src/core/ee/timer/timer.cpp
     src/core/gif/gif.cpp
     src/core/gs/gs.cpp
@@ -31,6 +32,7 @@ set(HEADERS
     src/core/bus/rdram.hpp
     src/core/ee/cpu/cop0.hpp
     src/core/ee/cpu/cpu.hpp
+    src/core/ee/dmac/dmac.hpp
     src/core/ee/timer/timer.hpp
     src/core/gif/gif.hpp
     src/core/gs/gs.hpp
