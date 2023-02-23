@@ -129,6 +129,7 @@ enum COPOpcode {
     QMF = 0x01,
     CF  = 0x02,
     MT  = 0x04,
+    QMT = 0x05,
     CT  = 0x06,
     CO  = 0x10,
 };
@@ -1379,6 +1380,33 @@ void iQMFC(int copN, u32 instr) {
     }
 }
 
+/* Quadword Move To Coprocessor */
+void iQMTC(int copN, u32 instr) {
+    assert(copN == 2);
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    switch (copN) {
+        case 2:
+            vus[0].setVF(rd, 0, *(f32 *)&regs[rt]._u32[0]);
+            vus[0].setVF(rd, 1, *(f32 *)&regs[rt]._u32[1]);
+            vus[0].setVF(rd, 2, *(f32 *)&regs[rt]._u32[2]);
+            vus[0].setVF(rd, 3, *(f32 *)&regs[rt]._u32[3]);
+            break;
+        default:
+            std::printf("[EE Core   ] QMTC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] QMTC%d %s, %d; %d = 0x%016llX%016llX\n", copN, regNames[rt], rd, rd, regs[rt]._u64[1], regs[rt]._u64[0]);
+    }
+}
+
 /* Store Byte */
 void iSB(u32 instr) {
     const auto rs = getRs(instr);
@@ -1770,6 +1798,7 @@ void decodeInstr(u32 instr) {
                 switch (rs) {
                     case COPOpcode::QMF: iQMFC(2, instr); break;
                     case COPOpcode::CF : iCFC(2, instr); break;
+                    case COPOpcode::QMT: iQMTC(2, instr); break;
                     case COPOpcode::CT : iCTC(2, instr); break;
                     default:
                         std::printf("[EE Core   ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
