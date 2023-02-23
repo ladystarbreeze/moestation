@@ -84,6 +84,7 @@ enum SPECIALOpcode {
     SRL    = 0x02,
     SRA    = 0x03,
     SLLV   = 0x04,
+    SRAV   = 0x07,
     JR     = 0x08,
     JALR   = 0x09,
     MOVZ   = 0x0A,
@@ -100,6 +101,7 @@ enum SPECIALOpcode {
     SUBU   = 0x23,
     AND    = 0x24,
     OR     = 0x25,
+    NOR    = 0x27,
     SLT    = 0x2A,
     SLTU   = 0x2B,
     DADDU  = 0x2D,
@@ -1222,6 +1224,19 @@ void iMULT1(u32 instr) {
     }
 }
 
+/* NOR */
+void iNOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set64(rd, ~(regs[rs]._u64[0] | regs[rt]._u64[0]));
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] NOR %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* OR */
 void iOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -1449,6 +1464,19 @@ void iSRA(u32 instr) {
     }
 }
 
+/* Shift Right Arithmetic Variable */
+void iSRAV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set32(rd, (i32)regs[rt]._u32[0] >> (regs[rs]._u64[0] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SRAV %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* Shift Right Logical */
 void iSRL(u32 instr) {
     const auto rd = getRd(instr);
@@ -1544,6 +1572,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SRL   : iSRL(instr); break;
                     case SPECIALOpcode::SRA   : iSRA(instr); break;
                     case SPECIALOpcode::SLLV  : iSLLV(instr); break;
+                    case SPECIALOpcode::SRAV  : iSRAV(instr); break;
                     case SPECIALOpcode::JR    : iJR(instr); break;
                     case SPECIALOpcode::JALR  : iJALR(instr); break;
                     case SPECIALOpcode::MOVZ  : iMOVZ(instr); break;
@@ -1560,6 +1589,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SUBU  : iSUBU(instr); break;
                     case SPECIALOpcode::AND   : iAND(instr); break;
                     case SPECIALOpcode::OR    : iOR(instr); break;
+                    case SPECIALOpcode::NOR   : iNOR(instr); break;
                     case SPECIALOpcode::SLT   : iSLT(instr); break;
                     case SPECIALOpcode::SLTU  : iSLTU(instr); break;
                     case SPECIALOpcode::DADDU : iDADDU(instr); break;
