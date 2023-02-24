@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::bus::rdram {
+
 /* --- RDRAM controller constants --- */
 
 constexpr u8 MAX_RDRAM = 2; // ??
@@ -448,8 +450,6 @@ void doCmd() {
             exit(0);
     }
 }
-
-namespace ps2::bus::rdram {
 
 u32 read(u32 addr) {
     switch (addr) {
