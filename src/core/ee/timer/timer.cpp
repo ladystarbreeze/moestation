@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cstring>
 
+namespace ps2::ee::timer {
+
 /* EE timer registers */
 
 enum TimerReg {
@@ -46,8 +48,6 @@ struct Timer {
 };
 
 Timer timers[4];
-
-namespace ps2::ee::timer {
 
 void init() {
     memset(&timers, 0, 4 * sizeof(Timer));

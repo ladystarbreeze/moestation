@@ -8,11 +8,11 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::intc {
+
 /* --- INTC registers --- */
 
 u16 intcMASK = 0, intcSTAT = 0; // EE interrupt registers
-
-namespace ps2::intc {
 
 /* Returns INTC_MASK */
 u16 readMask() {

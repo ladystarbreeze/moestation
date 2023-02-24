@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::ee::dmac {
+
 /* DMA channels */
 enum Channel {
     VIF0,    // Vector Interface 0
@@ -70,19 +72,28 @@ Channel getChannel(u32 addr) {
     }
 }
 
-namespace ps2::ee::dmac {
-
 void init() {
     /* TODO: set initial DMA requests */
 }
 
 u32 read(u32 addr) {
     if (addr < static_cast<u32>(ControlReg::CTRL)) {
-        std::printf("[DMAC:EE   ] Unhandled 32-bit channel read @ 0x%08X\n", addr);
+        const auto chnID = static_cast<int>(getChannel(addr));
 
-        exit(0);
+        switch (addr & ~(0xFF << 8)) {
+            case static_cast<u32>(ChannelReg::CHCR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D%u_CHCR\n", chnID);
+                return 0;
+            default:
+                std::printf("[DMAC:EE   ] Unhandled 32-bit channel read @ 0x%08X\n", addr);
+
+                exit(0);
+        }
     } else {
         switch (addr) {
+            case static_cast<u32>(ControlReg::CTRL):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_CTRL\n");
+                return 0;
             case static_cast<u32>(ControlReg::STAT):
                 std::printf("[DMAC:EE   ] 32-bit read @ D_STAT\n");
                 return 0;
@@ -99,26 +110,29 @@ u32 read(u32 addr) {
 
 void write(u32 addr, u32 data) {
     if (addr < static_cast<u32>(ControlReg::CTRL)) {
-        const auto chnId = static_cast<int>(getChannel(addr));
+        const auto chnID = static_cast<int>(getChannel(addr));
 
         switch (addr & ~(0xFF << 8)) {
             case static_cast<u32>(ChannelReg::CHCR):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_CHCR = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_CHCR = 0x%08X\n", chnID, data);
                 break;
             case static_cast<u32>(ChannelReg::MADR):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_MADR = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_MADR = 0x%08X\n", chnID, data);
+                break;
+            case static_cast<u32>(ChannelReg::QWC):
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_QWC = 0x%08X\n", chnID, data);
                 break;
             case static_cast<u32>(ChannelReg::TADR):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_TADR = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_TADR = 0x%08X\n", chnID, data);
                 break;
             case static_cast<u32>(ChannelReg::ASR0):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_ASR0 = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_ASR0 = 0x%08X\n", chnID, data);
                 break;
             case static_cast<u32>(ChannelReg::ASR1):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_ASR1 = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_ASR1 = 0x%08X\n", chnID, data);
                 break;
             case static_cast<u32>(ChannelReg::SADR):
-                std::printf("[DMAC:EE   ] 32-bit write @ D%u_SADR = 0x%08X\n", chnId, data);
+                std::printf("[DMAC:EE   ] 32-bit write @ D%u_SADR = 0x%08X\n", chnID, data);
                 break;
             default:
                 std::printf("[DMAC:EE   ] Unhandled 32-bit channel write @ 0x%08X = 0x%08X\n", addr, data);

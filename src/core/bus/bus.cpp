@@ -9,6 +9,7 @@
 
 #include "rdram.hpp"
 #include "../intc.hpp"
+#include "../sif.hpp"
 #include "../ee/dmac/dmac.hpp"
 #include "../ee/ipu/ipu.hpp"
 #include "../ee/timer/timer.hpp"
@@ -114,8 +115,7 @@ u8 read8(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
         // Using MemorySize::BIOS works because the IOP I/O has the same size
         std::printf("[Bus:EE    ] Unhandled 8-bit read @ 0x%08X (IOP I/O)\n", addr);
-
-        data = 0;
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         data = bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
@@ -133,6 +133,9 @@ u16 read16(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
+        std::printf("[Bus:EE    ] Unhandled 16-bit read @ 0x%08X (IOP I/O)\n", addr);
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else {
@@ -168,11 +171,12 @@ u32 read32(u32 addr) {
         return ps2::gif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
         return ps2::ee::dmac::read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
+        return ps2::sif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
-        std::printf("[Bus:EE    ] Unhandled 32-bit read @ 0x%08X (IOP RAM)\n", addr);
-        return 0;
+        std::memcpy(&data, &iopRam[addr - static_cast<u32>(MemoryBase::IOPRAM)], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
@@ -254,7 +258,9 @@ void write8(u32 addr, u8 data) {
 
 /* Writes a halfword to the EE bus */
 void write16(u32 addr, u16 data) {
-    if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
+        memcpy(&ram[addr], &data, sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
         // Using MemorySize::BIOS works because the IOP I/O has the same size
         std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X (IOP I/O) = 0x%04X\n", addr, data);
     } else {
@@ -291,8 +297,12 @@ void write32(u32 addr, u32 data) {
         return vif[1]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
         return ps2::ee::dmac::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
+        return ps2::sif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
+        memcpy(&iopRam[addr - static_cast<u32>(MemoryBase::IOPRAM)], &data, sizeof(u32));
     } else {
         switch (addr) {
             case 0x1000F000:

@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::ee::cpu::cop0 {
+
 /* --- COP0 register definitions --- */
 
 enum class COP0Reg {
@@ -54,8 +56,6 @@ struct Status {
 Status status;
 
 u32 count, compare;
-
-namespace ps2::ee::cpu::cop0 {
 
 void init() {
     status.erl = true;

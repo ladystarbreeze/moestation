@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::ee::ipu {
+
 /* IPU commands */
 enum Command {
     BCLR  = 0x0,
@@ -45,8 +47,6 @@ void doCmd(u32 data) {
             exit(0);
     }
 }
-
-namespace ps2::ee::ipu {
 
 u32 read(u32 addr) {
     switch (addr) {

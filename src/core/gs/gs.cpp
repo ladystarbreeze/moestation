@@ -11,6 +11,8 @@
 #include "../scheduler.hpp"
 #include "../ee/timer/timer.hpp"
 
+namespace ps2::gs {
+
 /* --- GS constants --- */
 
 constexpr i64 CYCLES_PER_SCANLINE = 2 * 9370; // NTSC, converted to EE clock
@@ -37,8 +39,6 @@ void hblankEvent(i64 c) {
     
     ps2::scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE + c);
 }
-
-namespace ps2::gs {
 
 /* Registers GS events */
 void init() {

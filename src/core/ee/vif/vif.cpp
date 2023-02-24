@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::ee::vif {
+
 /* --- VIF registers --- */
 
 enum VIFReg {
@@ -16,8 +18,6 @@ enum VIFReg {
     ERR   = 0x10003820,
     MARK  = 0x10003830,
 };
-
-namespace ps2::ee::vif {
 
 VectorInterface::VectorInterface(int vifID, VectorUnit *vu) {
     this->vifID = vifID;

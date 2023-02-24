@@ -8,7 +8,7 @@
 #include <cassert>
 #include <cstdio>
 
-using namespace ps2::ee::cpu::fpu;
+namespace ps2::ee::cpu::fpu {
 
 /* --- FPU constants --- */
 
@@ -57,8 +57,6 @@ void iADDA(u32 instr) {
 
     setAcc(get(fs) + get(ft));
 }
-
-namespace ps2::ee::cpu::fpu {
 
 f32 get(u32 idx) {
     return fprs[idx];

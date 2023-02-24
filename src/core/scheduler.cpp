@@ -10,6 +10,8 @@
 #include <deque>
 #include <vector>
 
+namespace ps2::scheduler {
+
 /* Scheduler event */
 struct Event {
     u64 id;
@@ -35,8 +37,6 @@ void reschedule() {
 
     cyclesUntilNextEvent = nextEvent;
 }
-
-namespace ps2::scheduler {
 
 void init() {
     cycleCount = cyclesUntilNextEvent = 0;

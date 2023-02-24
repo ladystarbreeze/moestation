@@ -14,7 +14,7 @@
 #include "../vu/vu_int.hpp"
 #include "../../bus/bus.hpp"
 
-using namespace ps2::ee::cpu;
+namespace ps2::ee::cpu {
 
 /* --- EE Core constants --- */
 
@@ -68,6 +68,8 @@ enum Opcode {
     BEQL    = 0x14,
     BNEL    = 0x15,
     DADDIU  = 0x19,
+    LDL     = 0x1A,
+    LDR     = 0x1B,
     MMI     = 0x1C,
     LQ      = 0x1E,
     SQ      = 0x1F,
@@ -80,6 +82,8 @@ enum Opcode {
     SB      = 0x28,
     SH      = 0x29,
     SW      = 0x2B,
+    SDL     = 0x2C,
+    SDR     = 0x2D,
     LD      = 0x37,
     SD      = 0x3F,
 };
@@ -89,6 +93,7 @@ enum SPECIALOpcode {
     SRL    = 0x02,
     SRA    = 0x03,
     SLLV   = 0x04,
+    SRLV   = 0x06,
     SRAV   = 0x07,
     JR     = 0x08,
     JALR   = 0x09,
@@ -1020,6 +1025,44 @@ void iLD(u32 instr) {
     set64(rt, read64(addr));
 }
 
+/* Load Doubleword Left */
+void iLDL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LDL %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 56 - 8 * (addr & 7);
+    const auto mask = ~(~0 << shift);
+
+    set64(rt, (regs[rt]._u64[0] & mask) | (read64(addr & ~7) << shift));
+}
+
+/* Load Doubleword Right */
+void iLDR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LDR %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 8 * (addr & 7);
+    const auto mask = ~(~0 >> shift);
+
+    set64(rt, (regs[rt]._u64[0] & mask) | (read64(addr & ~7) >> shift));
+}
+
 /* Load Halfword */
 void iLH(u32 instr) {
     const auto rs = getRs(instr);
@@ -1451,6 +1494,48 @@ void iSD(u32 instr) {
     write64(addr, data);
 }
 
+/* Store Doubleword Left */
+void iSDL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    const auto shift = 56 - 8 * (addr & 7);
+    const auto mask  = ~(~0 >> shift);
+
+    const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] >> shift);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SDL %s, 0x%X(%s); [0x%08X] = 0x%016llX\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write64(addr & ~7, data);
+}
+
+/* Store Doubleword Right */
+void iSDR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    const auto shift = 8 * (addr & 7);
+    const auto mask  = ~(~0 << shift);
+
+    const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] << shift);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SDR %s, 0x%X(%s); [0x%08X] = 0x%016llX\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write64(addr & ~7, data);
+}
+
 /* Store Halfword */
 void iSH(u32 instr) {
     const auto rs = getRs(instr);
@@ -1623,6 +1708,19 @@ void iSRL(u32 instr) {
     }
 }
 
+/* Shift Right Logical Variable */
+void iSRLV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set32(rd, regs[rt]._u32[0] >> (regs[rs]._u64[0] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SRLV %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* SUBtract Unsigned */
 void iSUBU(u32 instr) {
     const auto rd = getRd(instr);
@@ -1704,6 +1802,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SRL   : iSRL(instr); break;
                     case SPECIALOpcode::SRA   : iSRA(instr); break;
                     case SPECIALOpcode::SLLV  : iSLLV(instr); break;
+                    case SPECIALOpcode::SRLV  : iSRLV(instr); break;
                     case SPECIALOpcode::SRAV  : iSRAV(instr); break;
                     case SPECIALOpcode::JR    : iJR(instr); break;
                     case SPECIALOpcode::JALR  : iJALR(instr); break;
@@ -1833,6 +1932,8 @@ void decodeInstr(u32 instr) {
         case Opcode::BEQL  : iBEQL(instr); break;
         case Opcode::BNEL  : iBNEL(instr); break;
         case Opcode::DADDIU: iDADDIU(instr); break;
+        case Opcode::LDL   : iLDL(instr); break;
+        case Opcode::LDR   : iLDR(instr); break;
         case Opcode::MMI   :
             {
                 const auto funct = getFunct(instr);
@@ -1873,6 +1974,8 @@ void decodeInstr(u32 instr) {
         case Opcode::SB : iSB(instr); break;
         case Opcode::SH : iSH(instr); break;
         case Opcode::SW : iSW(instr); break;
+        case Opcode::SDL: iSDL(instr); break;
+        case Opcode::SDR: iSDR(instr); break;
         case 0x2F       : break; // CACHE
         case Opcode::LD : iLD(instr); break;
         case 0x39       : break; // SWC1
@@ -1883,8 +1986,6 @@ void decodeInstr(u32 instr) {
             exit(0);
     }
 }
-
-namespace ps2::ee::cpu {
 
 void init() {
     std::memset(&regs, 0, 34 * sizeof(u128));

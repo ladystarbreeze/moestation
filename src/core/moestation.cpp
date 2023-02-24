@@ -15,22 +15,22 @@
 #include "gs/gs.hpp"
 #include "../common/types.hpp"
 
+namespace ps2 {
+
 using VectorInterface = ps2::ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
 constexpr i64 EE_CYCLES = 16;
 
-VectorInterface vif0 = VectorInterface(0, ps2::ee::cpu::getVU(0)), vif1 = VectorInterface(1, ps2::ee::cpu::getVU(1));
-
-namespace ps2 {
+VectorInterface vif[2] = {VectorInterface(0, ps2::ee::cpu::getVU(0)), VectorInterface(1, ps2::ee::cpu::getVU(1))};
 
 void init(const char *biosPath, const char *execPath) {
     std::printf("BIOS path: %s\nExec path: %s\n", biosPath, execPath);
 
     scheduler::init();
 
-    bus::init(biosPath, &vif0, &vif1);
+    bus::init(biosPath, &vif[0], &vif[1]);
 
     ee::cpu::init();
     ee::timer::init();

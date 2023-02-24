@@ -8,13 +8,13 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::gif {
+
 /* GIF registers */
 enum GIFReg {
     CTRL = 0x10003000,
     STAT = 0x10003020,
 };
-
-namespace ps2::gif {
 
 /* Returns a GIF register */
 u32 read(u32 addr) {

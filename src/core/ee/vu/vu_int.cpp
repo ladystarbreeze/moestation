@@ -8,7 +8,7 @@
 #include <cassert>
 #include <cstdio>
 
-using VectorUnit = ps2::ee::vu::VectorUnit;
+namespace ps2::ee::vu::interpreter {
 
 /* --- VU constants --- */
 
@@ -130,8 +130,6 @@ void iSUB(VectorUnit *vu, u32 instr) {
         if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) - vu->getVF(ft, i));
     }
 }
-
-namespace ps2::ee::vu::interpreter {
 
 /* Executes a COP2 instruction (VU0 only) */
 void executeMacro(VectorUnit *vu, u32 instr) {

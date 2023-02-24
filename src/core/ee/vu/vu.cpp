@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+namespace ps2::ee::vu {
+
 /* --- VU registers --- */
 
 /* COP2 control registers */
@@ -22,8 +24,6 @@ enum class ControlReg {
 };
 
 const f32 vf0Data[4] = {0.0, 0.0, 0.0, 1.0};
-
-namespace ps2::ee::vu {
 
 VectorUnit::VectorUnit(int vuID, VectorUnit *otherVU) {
     this->vuID = vuID;
