@@ -31,7 +31,7 @@ enum class MemoryBase {
     VU0Code = 0x11000000,
     VU0Data = 0x11004000,
     VU1Code = 0x11008000,
-    VU1Data = 0x1000C000,
+    VU1Data = 0x1100C000,
     GS      = 0x12000000,
     IOPRAM  = 0x1C000000,
     IOPIO   = 0x1F800000,
@@ -82,6 +82,9 @@ enum class MemorySizeIop {
 std::vector<u8> ram, iopRam;
 std::vector<u8> bios;
 
+/* Vector Interfaces */
+VectorInterface *vif[2];
+
 /* Returns true if address is in range [base;size] */
 bool inRange(u64 addr, u64 base, u64 size) {
     return (addr >= base) && (addr < (base + size));
@@ -89,11 +92,14 @@ bool inRange(u64 addr, u64 base, u64 size) {
 
 namespace ps2::bus {
 
-void init(const char *biosPath) {
+void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1) {
     ram.resize(static_cast<int>(MemorySize::RAM));
     iopRam.resize(static_cast<int>(MemorySizeIop::RAM));
 
     bios = loadBinary(biosPath);
+
+    vif[0] = vif0;
+    vif[1] = vif1;
 
     std::printf("[Bus       ] Init OK\n");
 }
@@ -271,9 +277,11 @@ void write32(u32 addr, u32 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
-        ps2::ee::timer::write32(addr, data);
+        return ps2::ee::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
-        ps2::gif::write(addr, data);
+        return ps2::gif::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
+        return vif[1]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
         return ps2::ee::dmac::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
@@ -312,6 +320,8 @@ void write32(u32 addr, u32 data) {
 void write64(u32 addr, u64 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u64));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VU1Code), static_cast<u32>(MemorySize::VU1))) {
+        /* TODO: implement VU code1 writes */
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GS), static_cast<u32>(MemorySize::GS))) {
         ps2::gs::writePriv64(addr, data);
     } else {
@@ -328,6 +338,8 @@ void write64(u32 addr, u64 data) {
 void write128(u32 addr, const u128 &data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u128));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VU1Data), static_cast<u32>(MemorySize::VU1))) {
+        /* TODO: implement VU mem1 writes */
     } else {
         switch (addr) {
             case 0x10006000:

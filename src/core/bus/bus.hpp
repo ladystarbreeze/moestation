@@ -5,11 +5,14 @@
 
 #pragma once
 
+#include "../ee/vif/vif.hpp"
 #include "../../common/types.hpp"
+
+using VectorInterface = ps2::ee::vif::VectorInterface;
 
 namespace ps2::bus {
 
-void init(const char *biosPath);
+void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1);
 
 u8   read8(u32 addr);
 u16  read16(u32 addr);

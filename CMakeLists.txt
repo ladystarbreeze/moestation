@@ -18,6 +18,7 @@ set(SOURCES
     src/core/ee/cpu/cpu.cpp
     src/core/ee/dmac/dmac.cpp
     src/core/ee/timer/timer.cpp
+    src/core/ee/vif/vif.cpp
     src/core/ee/vu/vu.cpp
     src/core/ee/vu/vu_int.cpp
     src/core/gif/gif.cpp
@@ -36,6 +37,7 @@ set(HEADERS
     src/core/ee/cpu/cpu.hpp
     src/core/ee/dmac/dmac.hpp
     src/core/ee/timer/timer.hpp
+    src/core/ee/vif/vif.hpp
     src/core/ee/vu/vu.hpp
     src/core/ee/vu/vu_int.hpp
     src/core/gif/gif.hpp

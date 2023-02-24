@@ -11,12 +11,17 @@
 #include "bus/bus.hpp"
 #include "ee/cpu/cpu.hpp"
 #include "ee/timer/timer.hpp"
+#include "ee/vif/vif.hpp"
 #include "gs/gs.hpp"
 #include "../common/types.hpp"
+
+using VectorInterface = ps2::ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
 constexpr i64 EE_CYCLES = 16;
+
+VectorInterface vif0 = VectorInterface(0, ps2::ee::cpu::getVU(0)), vif1 = VectorInterface(1, ps2::ee::cpu::getVU(1));
 
 namespace ps2 {
 
@@ -25,7 +30,7 @@ void init(const char *biosPath, const char *execPath) {
 
     scheduler::init();
 
-    bus::init(biosPath);
+    bus::init(biosPath, &vif0, &vif1);
 
     ee::cpu::init();
     ee::timer::init();
