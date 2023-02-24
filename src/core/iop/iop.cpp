@@ -18,7 +18,7 @@ namespace ps2::iop {
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
-constexpr auto doDisasm = false;
+constexpr auto doDisasm = true;
 
 /* --- IOP register definitions --- */
 
@@ -45,7 +45,17 @@ const char *regNames[34] = {
 /* --- IOP instructions --- */
 
 enum Opcode {
-    COP0 = 0x10,
+    SPECIAL = 0x00,
+    BNE     = 0x05,
+    SLTI    = 0x0A,
+    ORI     = 0x0D,
+    LUI     = 0x0F,
+    COP0    = 0x10,
+};
+
+enum SPECIALOpcode {
+    SLL = 0x00,
+    JR  = 0x08,
 };
 
 enum COPOpcode {
@@ -173,7 +183,65 @@ u32 getRt(u32 instr) {
     return (instr >> 16) & 0x1F;
 }
 
+/* Executes branches */
+void doBranch(u32 target, bool isCond, u32 rd) {
+    if (inDelaySlot[0]) {
+        std::printf("[IOP       ] Branch instruction in delay slot\n");
+
+        exit(0);
+    }
+
+    set(rd, npc);
+
+    inDelaySlot[1] = true;
+
+    if (isCond) {
+        setBranchPC(target);
+    }
+}
+
 /* --- Instruction handlers --- */
+
+/* Branch if Not Equal */
+void iBNE(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, regs[rs] != regs[rt], CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] BNE %s, %s, 0x%08X; %s = 0x%08X, %s = 0x%08X\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs], regNames[rt], regs[rt]);
+    }
+}
+
+/* Jump Register */
+void iJR(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto target = regs[rs];
+
+    doBranch(target, true, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] JR %s; PC = 0x%08X\n", regNames[rs], target);
+    }
+}
+
+/* Load Upper Immediate */
+void iLUI(u32 instr) {
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr) << 16;
+
+    set(rt, imm);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LUI %s, 0x%08X; %s = 0x%08X\n", regNames[rt], imm, regNames[rt], regs[rt]);
+    }
+}
 
 /* Move From Coprocessor */
 void iMFC(int copN, u32 instr) {
@@ -201,10 +269,74 @@ void iMFC(int copN, u32 instr) {
     }
 }
 
+/* OR Immediate */
+void iORI(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = getImm(instr);
+
+    set(rt, regs[rs] | imm);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] ORI %s, %s, 0x%X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
+    }
+}
+
+/* Shift Left Logical */
+void iSLL(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    const auto shamt = getShamt(instr);
+
+    set(rd, regs[rt] << shamt);
+
+    if (doDisasm) {
+        if (rd == CPUReg::R0) {
+            std::printf("[IOP       ] NOP\n");
+        } else {
+            std::printf("[IOP       ] SLL %s, %s, %u; %s = 0x%08X\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]);
+        }
+    }
+}
+
+/* Set on Less Than Immediate */
+void iSLTI(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    set(rt, (i32)regs[rs] < imm);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SLTI %s, %s, 0x%08X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
+    }
+}
+
 void decodeInstr(u32 instr) {
     const auto opcode = getOpcode(instr);
 
     switch (opcode) {
+        case Opcode::SPECIAL:
+            {
+                const auto funct = getFunct(instr);
+
+                switch (funct) {
+                    case SPECIALOpcode::SLL: iSLL(instr); break;
+                    case SPECIALOpcode::JR : iJR(instr); break;
+                    default:
+                        std::printf("[IOP       ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
+
+                        exit(0);
+                }
+            }
+            break;
+        case Opcode::BNE : iBNE(instr); break;
+        case Opcode::SLTI: iSLTI(instr); break;
+        case Opcode::ORI : iORI(instr); break;
+        case Opcode::LUI : iLUI(instr); break;
         case Opcode::COP0:
             {
                 const auto rs = getRs(instr);
