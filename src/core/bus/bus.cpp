@@ -245,7 +245,7 @@ u128 read128(u32 addr) {
     return data;
 }
 
-/* Returns a word from the IOP bus */
+/* Returns a byte from the IOP bus */
 u8 readIOP8(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
@@ -259,6 +259,26 @@ u8 readIOP8(u32 addr) {
                 exit(0);
         }
     }
+}
+
+/* Returns a halfword from the IOP bus */
+u16 readIOP16(u32 addr) {
+    u16 data;
+
+    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+        std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
+        std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u16));
+    } else {
+        switch (addr) {
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 16-bit read @ 0x%08X\n", addr);
+
+                exit(0);
+        }
+    }
+
+    return data;
 }
 
 /* Returns a word from the IOP bus */
@@ -449,7 +469,9 @@ void writeIOP8(u32 addr, u8 data) {
 
 /* Writes a word to the IOP bus */
 void writeIOP32(u32 addr, u32 data) {
-    if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        memcpy(&iopRAM[addr], &data, sizeof(u32));
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA))) {
         std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
@@ -473,6 +495,7 @@ void writeIOP32(u32 addr, u32 data) {
             case 0x1F801004: case 0x1F80100C:
             case 0x1F801010: case 0x1F801014: case 0x1F801018: case 0x1F80101C:
             case 0x1F801020:
+            case 0x1F801060:
             case 0x1F801400: case 0x1F801404: case 0x1F801408: case 0x1F80140C:
             case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
             case 0x1F801420:
