@@ -13,6 +13,8 @@ void init();
 
 u32 get(u32 idx);
 
-//void set(u32 idx, u32 data);
+void set(u32 idx, u32 data);
+
+bool isCacheIsolated();
 
 }
