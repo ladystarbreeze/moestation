@@ -5,11 +5,16 @@
 
 #pragma once
 
+#include "../vu/vu.hpp"
 #include "../../../common/types.hpp"
+
+using VectorUnit = ps2::ee::vu::VectorUnit;
 
 namespace ps2::ee::cpu {
 
 void init();
 void step(i64 c);
+
+VectorUnit *getVU(int vuID);
 
 }

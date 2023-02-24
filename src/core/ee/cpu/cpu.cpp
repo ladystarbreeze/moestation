@@ -11,13 +11,10 @@
 
 #include "cop0.hpp"
 
-#include "../vu/vu.hpp"
 #include "../vu/vu_int.hpp"
 #include "../../bus/bus.hpp"
 
 using namespace ps2::ee;
-
-using VectorUnit = vu::VectorUnit;
 
 /* --- EE Core constants --- */
 
@@ -1887,6 +1884,11 @@ void step(i64 c) {
     }
 
     cop0::incrementCount(c);
+}
+
+/* Returns pointer to vector unit */
+VectorUnit *getVU(int vuID) {
+    return &vus[vuID];
 }
 
 }
