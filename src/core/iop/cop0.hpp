@@ -7,9 +7,12 @@
 
 #include "../../common/types.hpp"
 
-namespace ps2::iop {
+namespace ps2::iop::cop0 {
 
 void init();
-void step(i64 c);
+
+u32 get(u32 idx);
+
+//void set(u32 idx, u32 data);
 
 }

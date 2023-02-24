@@ -26,6 +26,7 @@ set(SOURCES
     src/core/ee/vu/vu_int.cpp
     src/core/gif/gif.cpp
     src/core/gs/gs.cpp
+    src/core/iop/cop0.cpp
     src/core/iop/iop.cpp
 )
 
@@ -49,6 +50,7 @@ set(HEADERS
     src/core/ee/vu/vu_int.hpp
     src/core/gif/gif.hpp
     src/core/gs/gs.hpp
+    src/core/iop/cop0.hpp
     src/core/iop/iop.hpp
 )
 
