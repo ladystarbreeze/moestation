@@ -12,6 +12,12 @@
 
 /* COP2 control registers */
 enum class ControlReg {
+    SF    = 16,
+    CF    = 18,
+    R     = 20,
+    I     = 21,
+    Q     = 22,
+    CMSAR = 27,
     FBRST = 28,
 };
 
@@ -103,6 +109,24 @@ void VectorUnit::setControl(u32 idx, u32 data) {
     }
 
     switch (idx) {
+        case static_cast<u32>(ControlReg::SF):
+            std::printf("[VU%d       ] Write @ SF = 0x%08X\n", vuID, data);
+            break;
+        case static_cast<u32>(ControlReg::CF):
+            std::printf("[VU%d       ] Write @ CF = 0x%08X\n", vuID, data);
+            break;
+        case static_cast<u32>(ControlReg::R):
+            std::printf("[VU%d       ] Write @ R = 0x%08X\n", vuID, data);
+            break;
+        case static_cast<u32>(ControlReg::I):
+            std::printf("[VU%d       ] Write @ I = 0x%08X\n", vuID, data);
+            break;
+        case static_cast<u32>(ControlReg::Q):
+            std::printf("[VU%d       ] Write @ Q = 0x%08X\n", vuID, data);
+            break;
+        case static_cast<u32>(ControlReg::CMSAR):
+            std::printf("[VU%d       ] Write @ CMSAR = 0x%08X\n", vuID, data);
+            break;
         case static_cast<u32>(ControlReg::FBRST):
             std::printf("[VU%d       ] Write @ FBRST = 0x%08X\n", vuID, data);
 

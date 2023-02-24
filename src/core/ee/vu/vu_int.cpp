@@ -17,7 +17,8 @@ constexpr auto doDisasm = true;
 /* --- VU instructions --- */
 
 enum SPECIAL1Opcode {
-    VSUB = 0x2C,
+    VSUB  = 0x2C,
+    VIADD = 0x30,
 };
 
 enum SPECIAL2Opcode {
@@ -55,6 +56,19 @@ u32 getT(u32 instr) {
 }
 
 /* --- VU instruction handlers --- */
+
+/* Integer ADD */
+void iIADD(VectorUnit *vu, u32 instr) {
+    const auto id = getD(instr);
+    const auto is = getS(instr);
+    const auto it = getT(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] IADD VI%u, VI%u, VI%u\n", vu->vuID, id, is, it);
+    }
+
+    vu->setVI(id, vu->getVI(is) + vu->getVI(it));
+}
 
 /* Integer Store Word Register */
 void iISWR(VectorUnit *vu, u32 instr) {
@@ -138,7 +152,8 @@ void executeMacro(VectorUnit *vu, u32 instr) {
         const auto opcode = instr & 0x3F;
 
         switch (opcode) {
-            case SPECIAL1Opcode::VSUB: iSUB(vu, instr); break;
+            case SPECIAL1Opcode::VSUB : iSUB(vu, instr); break;
+            case SPECIAL1Opcode::VIADD: iIADD(vu, instr); break;
             default:
                 std::printf("[VU%d       ] Unhandled SPECIAL1 macro instruction 0x%02X (0x%08X)\n", vu->vuID, opcode, instr);
 
