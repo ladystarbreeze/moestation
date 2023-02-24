@@ -246,10 +246,28 @@ u128 read128(u32 addr) {
 }
 
 /* Returns a word from the IOP bus */
+u8 readIOP8(u32 addr) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+        return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
+        return iopSPRAM[addr - spramStart];
+    } else {
+        switch (addr) {
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 8-bit read @ 0x%08X\n", addr);
+
+                exit(0);
+        }
+    }
+}
+
+/* Returns a word from the IOP bus */
 u32 readIOP32(u32 addr) {
     u32 data;
 
-    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        std::memcpy(&data, &iopRAM[addr], sizeof(u32));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u32));
@@ -439,6 +457,9 @@ void writeIOP32(u32 addr, u32 data) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1FFE0130:
+                std::printf("[Bus:IOP   ] 32-bit write @ Cache Control = 0x%08X\n", data);
+                break;
             case 0x1FFE0140:
                 std::printf("[Bus:IOP   ] 32-bit write @ SPRAM End = 0x%08X\n", data);
 

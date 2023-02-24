@@ -55,6 +55,7 @@ enum Opcode {
     ORI     = 0x0D,
     LUI     = 0x0F,
     COP0    = 0x10,
+    LB      = 0x20,
     LW      = 0x23,
     SB      = 0x28,
     SW      = 0x2B,
@@ -68,6 +69,7 @@ enum SPECIALOpcode {
 
 enum COPOpcode {
     MF  = 0x00,
+    MT  = 0x04,
 };
 
 /* --- IOP registers --- */
@@ -132,6 +134,11 @@ void stepPC() {
 }
 
 /* --- Memory accessors --- */
+
+/* Reads a byte from memory */
+u8 read8(u32 addr) {
+    return bus::readIOP8(addr & 0x1FFFFFFF); // Masking the address like this should be fine
+}
 
 /* Reads a word from memory */
 u32 read32(u32 addr) {
@@ -318,6 +325,24 @@ void iJR(u32 instr) {
     }
 }
 
+/* Load Byte */
+void iLB(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LB %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    assert(!cop0::isCacheIsolated());
+
+    set(rt, read8(addr));
+}
+
 /* Load Upper Immediate */
 void iLUI(u32 instr) {
     const auto rt = getRt(instr);
@@ -350,6 +375,8 @@ void iLW(u32 instr) {
         exit(0);
     }
 
+    assert(!cop0::isCacheIsolated());
+
     set(rt, read32(addr));
 }
 
@@ -376,6 +403,30 @@ void iMFC(int copN, u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] MFC%d %s, %d; %s = 0x%08X\n", copN, regNames[rt], rd, regNames[rt], regs[rt]);
+    }
+}
+
+/* Move To Coprocessor */
+void iMTC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    const auto data = regs[rt];
+
+    switch (copN) {
+        case 0: cop0::set(rd, data); break;
+        default:
+            std::printf("[IOP       ] MTC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MTC%d %s, %d; %d = 0x%08X\n", copN, regNames[rt], rd, rd, regs[rt]);
     }
 }
 
@@ -419,6 +470,8 @@ void iSB(u32 instr) {
     if (doDisasm) {
         std::printf("[IOP       ] SB %s, 0x%X(%s); [0x%08X] = 0x%02X\n", regNames[rt], imm, regNames[rs], addr, data);
     }
+
+    assert(!cop0::isCacheIsolated() || (addr >> 28));
 
     write8(addr, data);
 }
@@ -469,6 +522,12 @@ void iSW(u32 instr) {
         std::printf("[IOP       ] SW %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
     }
 
+    if (cop0::isCacheIsolated() && !(addr >> 28)) {
+        //std::printf("[IOP       ] Cache isolated\n");
+
+        return;
+    }
+
     if (addr & 3) {
         std::printf("[IOP       ] SW: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
@@ -511,6 +570,7 @@ void decodeInstr(u32 instr) {
 
                 switch (rs) {
                     case COPOpcode::MF: iMFC(0, instr); break;
+                    case COPOpcode::MT: iMTC(0, instr); break;
                     default:
                         std::printf("[IOP       ] Unhandled COP0 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
@@ -518,6 +578,7 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
+        case Opcode::LB: iLB(instr); break;
         case Opcode::LW: iLW(instr); break;
         case Opcode::SB: iSB(instr); break;
         case Opcode::SW: iSW(instr); break;
