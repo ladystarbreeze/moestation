@@ -46,6 +46,8 @@ const char *regNames[34] = {
 
 enum Opcode {
     SPECIAL = 0x00,
+    J       = 0x02,
+    JAL     = 0x03,
     BEQ     = 0x04,
     BNE     = 0x05,
     ADDI    = 0x08,
@@ -56,15 +58,20 @@ enum Opcode {
     LUI     = 0x0F,
     COP0    = 0x10,
     LB      = 0x20,
+    LH      = 0x21,
     LW      = 0x23,
     SB      = 0x28,
     SW      = 0x2B,
 };
 
 enum SPECIALOpcode {
-    SLL = 0x00,
-    JR  = 0x08,
-    OR  = 0x25,
+    SLL  = 0x00,
+    JR   = 0x08,
+    ADDU = 0x21,
+    AND  = 0x24,
+    OR   = 0x25,
+    SLT  = 0x2A,
+    SLTU = 0x2B,
 };
 
 enum COPOpcode {
@@ -138,6 +145,13 @@ void stepPC() {
 /* Reads a byte from memory */
 u8 read8(u32 addr) {
     return bus::readIOP8(addr & 0x1FFFFFFF); // Masking the address like this should be fine
+}
+
+/* Reads a halfword from memory */
+u16 read16(u32 addr) {
+    assert(!(addr & 1));
+
+    return bus::readIOP16(addr & 0x1FFFFFFF); // Masking the address like this should be fine
 }
 
 /* Reads a word from memory */
@@ -268,6 +282,32 @@ void iADDIU(u32 instr) {
     }
 }
 
+/* ADD Unsigned */
+void iADDU(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rs] + regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] ADDU %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
+/* AND */
+void iAND(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rs] & regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] AND %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
 /* AND Immediate */
 void iANDI(u32 instr) {
     const auto rs = getRs(instr);
@@ -312,6 +352,28 @@ void iBNE(u32 instr) {
     }
 }
 
+/* Jump */
+void iJ(u32 instr) {
+    const auto target = (pc & 0xF0000000) | (getOffset(instr) << 2);
+
+    doBranch(target, true, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] J 0x%08X; PC = 0x%08X\n", target, target);
+    }
+}
+
+/* Jump And Link */
+void iJAL(u32 instr) {
+    const auto target = (pc & 0xF0000000) | (getOffset(instr) << 2);
+
+    doBranch(target, true, CPUReg::RA);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] JAL 0x%08X; RA = 0x%08X, PC = 0x%08X\n", target, regs[CPUReg::RA], target);
+    }
+}
+
 /* Jump Register */
 void iJR(u32 instr) {
     const auto rs = getRs(instr);
@@ -340,7 +402,31 @@ void iLB(u32 instr) {
 
     assert(!cop0::isCacheIsolated());
 
-    set(rt, read8(addr));
+    set(rt, (i8)read8(addr));
+}
+
+/* Load Halfword */
+void iLH(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LH %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    if (addr & 1) {
+        std::printf("[IOP       ] LH: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    assert(!cop0::isCacheIsolated());
+
+    set(rt, (i16)read16(addr));
 }
 
 /* Load Upper Immediate */
@@ -494,6 +580,19 @@ void iSLL(u32 instr) {
     }
 }
 
+/* Set on Less Than */
+void iSLT(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, (i32)regs[rs] < (i32)regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SLT %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
 /* Set on Less Than Immediate */
 void iSLTI(u32 instr) {
     const auto rs = getRs(instr);
@@ -505,6 +604,19 @@ void iSLTI(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] SLTI %s, %s, 0x%08X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
+    }
+}
+
+/* Set on Less Than Unsigned */
+void iSLTU(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rs] < regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SLTU %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
     }
 }
 
@@ -546,9 +658,13 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
-                    case SPECIALOpcode::SLL: iSLL(instr); break;
-                    case SPECIALOpcode::JR : iJR(instr); break;
-                    case SPECIALOpcode::OR : iOR(instr); break;
+                    case SPECIALOpcode::SLL : iSLL(instr); break;
+                    case SPECIALOpcode::JR  : iJR(instr); break;
+                    case SPECIALOpcode::ADDU: iADDU(instr); break;
+                    case SPECIALOpcode::AND : iAND(instr); break;
+                    case SPECIALOpcode::OR  : iOR(instr); break;
+                    case SPECIALOpcode::SLT : iSLT(instr); break;
+                    case SPECIALOpcode::SLTU: iSLTU(instr); break;
                     default:
                         std::printf("[IOP       ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
 
@@ -556,6 +672,8 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
+        case Opcode::J    : iJ(instr); break;
+        case Opcode::JAL  : iJAL(instr); break;
         case Opcode::BEQ  : iBEQ(instr); break;
         case Opcode::BNE  : iBNE(instr); break;
         case Opcode::ADDI : iADDI(instr); break;
@@ -579,6 +697,7 @@ void decodeInstr(u32 instr) {
             }
             break;
         case Opcode::LB: iLB(instr); break;
+        case Opcode::LH: iLH(instr); break;
         case Opcode::LW: iLW(instr); break;
         case Opcode::SB: iSB(instr); break;
         case Opcode::SW: iSW(instr); break;
