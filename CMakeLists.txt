@@ -17,6 +17,7 @@ set(SOURCES
     src/core/ee/cpu/cop0.cpp
     src/core/ee/cpu/cpu.cpp
     src/core/ee/dmac/dmac.cpp
+    src/core/ee/ipu/ipu.cpp
     src/core/ee/timer/timer.cpp
     src/core/ee/vif/vif.cpp
     src/core/ee/vu/vu.cpp
@@ -36,6 +37,7 @@ set(HEADERS
     src/core/ee/cpu/cop0.hpp
     src/core/ee/cpu/cpu.hpp
     src/core/ee/dmac/dmac.hpp
+    src/core/ee/ipu/ipu.hpp
     src/core/ee/timer/timer.hpp
     src/core/ee/vif/vif.hpp
     src/core/ee/vu/vu.hpp

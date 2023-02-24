@@ -10,6 +10,7 @@
 #include "rdram.hpp"
 #include "../intc.hpp"
 #include "../ee/dmac/dmac.hpp"
+#include "../ee/ipu/ipu.hpp"
 #include "../ee/timer/timer.hpp"
 #include "../gif/gif.hpp"
 #include "../gs/gs.hpp"
@@ -161,6 +162,8 @@ u32 read32(u32 addr) {
         std::memcpy(&data, &ram[addr], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return ps2::ee::timer::read32(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
+        return ps2::ee::ipu::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         return ps2::gif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
@@ -278,6 +281,8 @@ void write32(u32 addr, u32 data) {
         memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
         return ps2::ee::timer::write32(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
+        return ps2::ee::ipu::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         return ps2::gif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
@@ -357,6 +362,9 @@ void write128(u32 addr, const u128 &data) {
                 break;
             case 0x10006000:
                 std::printf("[Bus:EE    ] 128-bit write @ GIF_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
+                break;
+            case 0x10007010:
+                std::printf("[Bus:EE    ] 128-bit write @ IPU_IN_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
                 break;
             default:
                 std::printf("[Bus:EE    ] Unhandled 128-bit write @ 0x%08X = 0x%016llX%016llX\n", addr, data._u64[1], data._u64[0]);
