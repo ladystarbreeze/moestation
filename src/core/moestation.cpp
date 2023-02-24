@@ -13,17 +13,18 @@
 #include "ee/timer/timer.hpp"
 #include "ee/vif/vif.hpp"
 #include "gs/gs.hpp"
+#include "iop/iop.hpp"
 #include "../common/types.hpp"
 
 namespace ps2 {
 
-using VectorInterface = ps2::ee::vif::VectorInterface;
+using VectorInterface = ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
 constexpr i64 EE_CYCLES = 16;
 
-VectorInterface vif[2] = {VectorInterface(0, ps2::ee::cpu::getVU(0)), VectorInterface(1, ps2::ee::cpu::getVU(1))};
+VectorInterface vif[2] = {VectorInterface(0, ee::cpu::getVU(0)), VectorInterface(1, ee::cpu::getVU(1))};
 
 void init(const char *biosPath, const char *execPath) {
     std::printf("BIOS path: %s\nExec path: %s\n", biosPath, execPath);
@@ -36,6 +37,8 @@ void init(const char *biosPath, const char *execPath) {
     ee::timer::init();
     
     gs::init();
+
+    iop::init();
 }
 
 void run() {

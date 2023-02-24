@@ -271,7 +271,7 @@ u8 readSPRAM8(u32 addr) {
 u8 read8(u32 addr) {
     if ((addr >> 28) == 0x7) return readSPRAM8(addr);
 
-    return ps2::bus::read8(translateAddr(addr));
+    return bus::read8(translateAddr(addr));
 }
 
 /* Reads a halfword from scratchpad RAM */
@@ -291,7 +291,7 @@ u32 read16(u32 addr) {
 
     if ((addr >> 28) == 0x7) return readSPRAM16(addr);
 
-    return ps2::bus::read16(translateAddr(addr));
+    return bus::read16(translateAddr(addr));
 }
 
 /* Reads a word from scratchpad RAM */
@@ -311,7 +311,7 @@ u32 read32(u32 addr) {
 
     if ((addr >> 28) == 0x7) return readSPRAM32(addr);
 
-    return ps2::bus::read32(translateAddr(addr));
+    return bus::read32(translateAddr(addr));
 }
 
 /* Reads a doubleword from scratchpad RAM */
@@ -331,7 +331,7 @@ u64 read64(u32 addr) {
 
     if ((addr >> 28) == 0x7) return readSPRAM64(addr);
 
-    return ps2::bus::read64(translateAddr(addr));
+    return bus::read64(translateAddr(addr));
 }
 
 /* Reads a quadword from scratchpad RAM */
@@ -351,7 +351,7 @@ u128 read128(u32 addr) {
 
     if ((addr >> 28) == 0x7) return readSPRAM128(addr);
 
-    return ps2::bus::read128(translateAddr(addr));
+    return bus::read128(translateAddr(addr));
 }
 
 /* Fetches an instruction word, advances PC */
@@ -374,7 +374,7 @@ void writeSPRAM8(u32 addr, u32 data) {
 void write8(u32 addr, u32 data) {
     if ((addr >> 28) == 0x7) return writeSPRAM8(addr, data);
 
-    ps2::bus::write8(translateAddr(addr), data);
+    bus::write8(translateAddr(addr), data);
 }
 
 /* Writes a halfword to scratchpad RAM */
@@ -390,7 +390,7 @@ void write16(u32 addr, u32 data) {
 
     if ((addr >> 28) == 0x7) return writeSPRAM16(addr, data);
 
-    ps2::bus::write16(translateAddr(addr), data);
+    bus::write16(translateAddr(addr), data);
 }
 
 /* Writes a word to scratchpad RAM */
@@ -406,7 +406,7 @@ void write32(u32 addr, u32 data) {
 
     if ((addr >> 28) == 0x7) return writeSPRAM32(addr, data);
 
-    ps2::bus::write32(translateAddr(addr), data);
+    bus::write32(translateAddr(addr), data);
 }
 
 /* Writes a doubleword to scratchpad RAM */
@@ -422,7 +422,7 @@ void write64(u32 addr, u64 data) {
 
     if ((addr >> 28) == 0x7) return writeSPRAM64(addr, data);
 
-    ps2::bus::write64(translateAddr(addr), data);
+    bus::write64(translateAddr(addr), data);
 }
 
 /* Writes a quadword to scratchpad RAM */
@@ -438,7 +438,7 @@ void write128(u32 addr, const u128 &data) {
 
     if ((addr >> 28) == 0x7) return writeSPRAM128(addr, data);
 
-    ps2::bus::write128(translateAddr(addr), data);
+    bus::write128(translateAddr(addr), data);
 }
 
 /* --- Instruction helpers --- */
@@ -1914,7 +1914,7 @@ void decodeInstr(u32 instr) {
                 const auto rs = getRs(instr);
 
                 if (rs & (1 << 4)) {
-                    return ps2::ee::vu::interpreter::executeMacro(&vus[0], instr);
+                    return ee::vu::interpreter::executeMacro(&vus[0], instr);
                 }
 
                 switch (rs) {

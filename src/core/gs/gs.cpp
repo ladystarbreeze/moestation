@@ -35,9 +35,9 @@ u64 idHBLANK;
 
 /* Handles HBLANK events */
 void hblankEvent(i64 c) {
-    ps2::ee::timer::stepHBLANK();
+    ee::timer::stepHBLANK();
     
-    ps2::scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE + c);
+    scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE + c);
 }
 
 /* Registers GS events */
