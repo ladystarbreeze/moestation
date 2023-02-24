@@ -10,11 +10,11 @@
 #include <cstring>
 
 #include "cop0.hpp"
-
+#include "fpu.hpp"
 #include "../vu/vu_int.hpp"
 #include "../../bus/bus.hpp"
 
-using namespace ps2::ee;
+using namespace ps2::ee::cpu;
 
 /* --- EE Core constants --- */
 
@@ -63,6 +63,7 @@ enum Opcode {
     XORI    = 0x0E,
     LUI     = 0x0F,
     COP0    = 0x10,
+    COP1    = 0x11,
     COP2    = 0x12,
     BEQL    = 0x14,
     BNEL    = 0x15,
@@ -129,6 +130,10 @@ enum COPOpcode {
     QMT = 0x05,
     CT  = 0x06,
     CO  = 0x10,
+};
+
+enum COP1Opcode {
+    S = 0x10,
 };
 
 enum COP0Opcode {
@@ -704,6 +709,7 @@ void iCTC(int copN, u32 instr) {
     const auto data = regs[rt]._u32[0];
 
     switch (copN) {
+        case 1: fpu::setControl(rd, data); break;
         case 2: vus[0].setControl(rd, data); break;
         default:
             std::printf("[EE Core   ] CTC: Unhandled coprocessor %d\n", copN);
@@ -1237,6 +1243,7 @@ void iMTC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: cop0::set32(rd, data); break;
+        case 1: fpu::set(rd, *(f32 *)&data); break;
         default:
             std::printf("[EE Core   ] MTC: Unhandled coprocessor %d\n", copN);
 
@@ -1784,12 +1791,31 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
+        case Opcode::COP1:
+            {
+                const auto rs = getRs(instr);
+
+                switch (rs) {
+                    case COPOpcode::MT: iMTC(1, instr); break;
+                    case COPOpcode::CT: iCTC(1, instr); break;
+                    case COP1Opcode::S:
+                        {
+                            fpu::executeSingle(instr);
+                        }
+                        break;
+                    default:
+                        std::printf("[EE Core   ] Unhandled COP1 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
+
+                        exit(0);
+                }
+            }
+            break;
         case Opcode::COP2 :
             {
                 const auto rs = getRs(instr);
 
                 if (rs & (1 << 4)) {
-                    return vu::interpreter::executeMacro(&vus[0], instr);
+                    return ps2::ee::vu::interpreter::executeMacro(&vus[0], instr);
                 }
 
                 switch (rs) {
