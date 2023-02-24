@@ -247,7 +247,9 @@ u128 read128(u32 addr) {
 
 /* Returns a byte from the IOP bus */
 u8 readIOP8(u32 addr) {
-    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        return iopRAM[addr];
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         return iopSPRAM[addr - spramStart];
@@ -265,7 +267,9 @@ u8 readIOP8(u32 addr) {
 u16 readIOP16(u32 addr) {
     u16 data;
 
-    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        std::memcpy(&data, &iopRAM[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u16));
@@ -452,7 +456,9 @@ void write128(u32 addr, const u128 &data) {
 
 /* Writes a byte to the IOP bus */
 void writeIOP8(u32 addr, u8 data) {
-    if ((addr >= spramStart) && (addr < spramEnd)) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        iopRAM[addr] = data;
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
         iopSPRAM[addr] = data;
     } else {
         switch (addr) {
@@ -461,6 +467,22 @@ void writeIOP8(u32 addr, u8 data) {
                 break;
             default:
                 std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
+
+                exit(0);
+        }
+    }
+}
+
+/* Writes a halfword to the IOP bus */
+void writeIOP16(u32 addr, u16 data) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
+        memcpy(&iopRAM[addr], &data, sizeof(u16));
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
+        memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u16));
+    } else {
+        switch (addr) {
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
 
                 exit(0);
         }

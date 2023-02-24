@@ -31,6 +31,7 @@ void write64(u32 addr, u64 data);
 void write128(u32 addr, const u128 &data);
 
 void writeIOP8(u32 addr, u8 data);
+void writeIOP16(u32 addr, u16 data);
 void writeIOP32(u32 addr, u32 data);
 
 }
