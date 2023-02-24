@@ -55,7 +55,7 @@ Status status;
 
 u32 count, compare;
 
-namespace ps2::ee::cop0 {
+namespace ps2::ee::cpu::cop0 {
 
 void init() {
     status.erl = true;

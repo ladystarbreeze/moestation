@@ -7,7 +7,7 @@
 
 #include "../../../common/types.hpp"
 
-namespace ps2::ee::cop0 {
+namespace ps2::ee::cpu::cop0 {
 
 void init();
 
