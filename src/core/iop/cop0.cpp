@@ -68,6 +68,24 @@ u32 get(u32 idx) {
     u32 data;
 
     switch (idx) {
+        case static_cast<u32>(COP0Reg::Status  ):
+            data  = status.cie;
+            data |= status.cku <<  1;
+            data |= status.pie <<  2;
+            data |= status.pku <<  3;
+            data |= status.oie <<  4;
+            data |= status.oku <<  5;
+            data |= status.im  <<  8;
+            data |= status.isc << 16;
+            data |= status.swc << 17;
+            data |= status.pz  << 18;
+            data |= status.ch  << 19;
+            data |= status.pe  << 20;
+            data |= status.ts  << 21;
+            data |= status.bev << 22;
+            data |= status.re  << 25;
+            data |= status.cu  << 28;
+            break;
         case static_cast<u32>(COP0Reg::PRId): data = 0x1F; break; // Probably not correct, but good enough for the BIOS
         default:
             std::printf("[COP0:IOP  ] Unhandled register read @ %u\n", idx);
