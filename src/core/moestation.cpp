@@ -43,8 +43,14 @@ void init(const char *biosPath, const char *execPath) {
 
 void run() {
     while (true) {
+        /* Step EE hardware */
+
         ee::cpu::step(EE_CYCLES);
         ee::timer::step(EE_CYCLES >> 1);
+
+        /* Step IOP hardware */
+
+        iop::step(EE_CYCLES >> 3);
 
         scheduler::processEvents(EE_CYCLES);
     }
