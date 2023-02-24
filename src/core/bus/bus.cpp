@@ -40,7 +40,7 @@ enum class MemoryBase {
     BIOS    = 0x1FC00000,
 };
 
-enum class MemoryBaseIop {
+enum class MemoryBaseIOP {
     SIF    = 0x1D000000,
     CDVD   = 0x1F402004,
     DMA0   = 0x1F801080,
@@ -70,7 +70,7 @@ enum class MemorySize {
     BIOS    = 0x0400000,
 };
 
-enum class MemorySizeIop {
+enum class MemorySizeIOP {
     RAM   = 0x200000,
     CDVD  = 0x000015,
     DMA   = 0x000080,
@@ -81,8 +81,12 @@ enum class MemorySizeIop {
 
 /* --- PS2 memory --- */
 
-std::vector<u8> ram, iopRam;
+std::vector<u8> ram, iopRAM;
 std::vector<u8> bios;
+
+/* IOP scratchpad */
+u8  iopSPRAM[0x400];
+u32 spramStart = -1, spramEnd = -1;
 
 /* Vector Interfaces */
 VectorInterface *vif[2];
@@ -96,7 +100,7 @@ namespace ps2::bus {
 
 void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1) {
     ram.resize(static_cast<int>(MemorySize::RAM));
-    iopRam.resize(static_cast<int>(MemorySizeIop::RAM));
+    iopRAM.resize(static_cast<int>(MemorySizeIOP::RAM));
 
     bios = loadBinary(biosPath);
 
@@ -176,7 +180,7 @@ u32 read32(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
-        std::memcpy(&data, &iopRam[addr - static_cast<u32>(MemoryBase::IOPRAM)], sizeof(u32));
+        std::memcpy(&data, &iopRAM[addr - static_cast<u32>(MemoryBase::IOPRAM)], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else {
@@ -247,8 +251,14 @@ u32 readIOP32(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
+        std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1F801010:
+            case 0x1F801450:
+                std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
+                return 0;
             default:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -320,7 +330,7 @@ void write32(u32 addr, u32 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
-        memcpy(&iopRam[addr - static_cast<u32>(MemoryBase::IOPRAM)], &data, sizeof(u32));
+        memcpy(&iopRAM[addr - static_cast<u32>(MemoryBase::IOPRAM)], &data, sizeof(u32));
     } else {
         switch (addr) {
             case 0x1000F000:
@@ -396,6 +406,60 @@ void write128(u32 addr, const u128 &data) {
                 break;
             default:
                 std::printf("[Bus:EE    ] Unhandled 128-bit write @ 0x%08X = 0x%016llX%016llX\n", addr, data._u64[1], data._u64[0]);
+
+                exit(0);
+        }
+    }
+}
+
+/* Writes a byte to the IOP bus */
+void writeIOP8(u32 addr, u8 data) {
+    if ((addr >= spramStart) && (addr < spramEnd)) {
+        iopSPRAM[addr] = data;
+    } else {
+        switch (addr) {
+            case 0x1F802070:
+                std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
+                break;
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
+
+                exit(0);
+        }
+    }
+}
+
+/* Writes a word to the IOP bus */
+void writeIOP32(u32 addr, u32 data) {
+    if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA))) {
+        std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
+        std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
+    } else if ((addr >= spramStart) && (addr < spramEnd)) {
+        memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u32));
+    } else {
+        switch (addr) {
+            case 0x1FFE0140:
+                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM End = 0x%08X\n", data);
+
+                spramEnd = data;
+                break;
+            case 0x1FFE0144:
+                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM Start = 0x%08X\n", data);
+
+                spramStart = data;
+                break;
+            case 0x1F801004: case 0x1F80100C:
+            case 0x1F801010: case 0x1F801014: case 0x1F801018: case 0x1F80101C:
+            case 0x1F801020:
+            case 0x1F801400: case 0x1F801404: case 0x1F801408: case 0x1F80140C:
+            case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
+            case 0x1F801420:
+            case 0x1F802070:
+                std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
+                break;
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
 
                 exit(0);
         }
