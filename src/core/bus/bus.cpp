@@ -280,6 +280,8 @@ void write32(u32 addr, u32 data) {
         return ps2::ee::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         return ps2::gif::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
+        return vif[0]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
         return vif[1]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
@@ -306,6 +308,7 @@ void write32(u32 addr, u32 data) {
             case 0x1000F480:
             case 0x1000F490:
             case 0x1000F500:
+            case 0x1000F510:
                 std::printf("[Bus:EE    ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
                 break;
             default:
@@ -338,10 +341,20 @@ void write64(u32 addr, u64 data) {
 void write128(u32 addr, const u128 &data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u128));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VU0Code), static_cast<u32>(MemorySize::VU0))) {
+        /* TODO: implement VU mem1 writes */
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VU0Data), static_cast<u32>(MemorySize::VU0))) {
+        /* TODO: implement VU mem1 writes */
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VU1Data), static_cast<u32>(MemorySize::VU1))) {
         /* TODO: implement VU mem1 writes */
     } else {
         switch (addr) {
+            case 0x10004000:
+                std::printf("[Bus:EE    ] 128-bit write @ VIF0_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
+                break;
+            case 0x10005000:
+                std::printf("[Bus:EE    ] 128-bit write @ VIF1_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
+                break;
             case 0x10006000:
                 std::printf("[Bus:EE    ] 128-bit write @ GIF_FIFO = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
                 break;
