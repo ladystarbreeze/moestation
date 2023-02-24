@@ -241,6 +241,24 @@ u128 read128(u32 addr) {
     return data;
 }
 
+/* Returns a word from the IOP bus */
+u32 readIOP32(u32 addr) {
+    u32 data;
+
+    if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+        std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
+    } else {
+        switch (addr) {
+            default:
+                std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
+
+                exit(0);
+        }
+    }
+
+    return data;
+}
+
 /* Writes a byte to the EE bus */
 void write8(u32 addr, u8 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {

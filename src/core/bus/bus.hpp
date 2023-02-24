@@ -20,6 +20,8 @@ u32  read32(u32 addr);
 u64  read64(u32 addr);
 u128 read128(u32 addr);
 
+u32 readIOP32(u32 addr);
+
 void write8(u32 addr, u8 data);
 void write16(u32 addr, u16 data);
 void write32(u32 addr, u32 data);
