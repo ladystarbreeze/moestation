@@ -50,9 +50,12 @@ enum Opcode {
     JAL     = 0x03,
     BEQ     = 0x04,
     BNE     = 0x05,
+    BLEZ    = 0x06,
+    BGTZ    = 0x07,
     ADDI    = 0x08,
     ADDIU   = 0x09,
     SLTI    = 0x0A,
+    SLTIU   = 0x0B,
     ANDI    = 0x0C,
     ORI     = 0x0D,
     LUI     = 0x0F,
@@ -60,14 +63,23 @@ enum Opcode {
     LB      = 0x20,
     LH      = 0x21,
     LW      = 0x23,
+    LBU     = 0x24,
+    LHU     = 0x25,
     SB      = 0x28,
+    SH      = 0x29,
     SW      = 0x2B,
 };
 
 enum SPECIALOpcode {
     SLL  = 0x00,
+    SRL  = 0x02,
+    SRA  = 0x03,
     JR   = 0x08,
+    MFHI = 0x10,
+    MFLO = 0x12,
+    DIVU = 0x1B,
     ADDU = 0x21,
+    SUBU = 0x23,
     AND  = 0x24,
     OR   = 0x25,
     SLT  = 0x2A,
@@ -173,6 +185,13 @@ u32 fetchInstr() {
 /* Writes a byte to memory */
 void write8(u32 addr, u32 data) {
     return bus::writeIOP8(addr & 0x1FFFFFFF, data); // Masking the address like this should be fine
+}
+
+/* Writes a halfword to memory */
+void write16(u32 addr, u16 data) {
+    assert(!(addr & 1));
+
+    return bus::writeIOP16(addr & 0x1FFFFFFF, data); // Masking the address like this should be fine
 }
 
 /* Writes a word to memory */
@@ -337,6 +356,34 @@ void iBEQ(u32 instr) {
     }
 }
 
+/* Branch if Greater Than Zero */
+void iBGTZ(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] > 0, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] BGTZ %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
+/* Branch if Less than or Equal Zero */
+void iBLEZ(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] <= 0, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] BLEZ %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
 /* Branch if Not Equal */
 void iBNE(u32 instr) {
     const auto rs = getRs(instr);
@@ -349,6 +396,24 @@ void iBNE(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] BNE %s, %s, 0x%08X; %s = 0x%08X, %s = 0x%08X\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs], regNames[rt], regs[rt]);
+    }
+}
+
+/* DIVide Unsigned */
+void iDIVU(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto n = regs[rs];
+    const auto d = regs[rt];
+
+    assert(d != 0);
+
+    regs[CPUReg::LO] = n / d;
+    regs[CPUReg::HI] = n % d;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] DIVU %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
     }
 }
 
@@ -405,6 +470,24 @@ void iLB(u32 instr) {
     set(rt, (i8)read8(addr));
 }
 
+/* Load Byte Unsigned */
+void iLBU(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LBU %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    assert(!cop0::isCacheIsolated());
+
+    set(rt, read8(addr));
+}
+
 /* Load Halfword */
 void iLH(u32 instr) {
     const auto rs = getRs(instr);
@@ -427,6 +510,30 @@ void iLH(u32 instr) {
     assert(!cop0::isCacheIsolated());
 
     set(rt, (i16)read16(addr));
+}
+
+/* Load Halfword Unsigned */
+void iLHU(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LHU %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    if (addr & 1) {
+        std::printf("[IOP       ] LHU: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    assert(!cop0::isCacheIsolated());
+
+    set(rt, read16(addr));
 }
 
 /* Load Upper Immediate */
@@ -489,6 +596,28 @@ void iMFC(int copN, u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] MFC%d %s, %d; %s = 0x%08X\n", copN, regNames[rt], rd, regNames[rt], regs[rt]);
+    }
+}
+
+/* Move From HI */
+void iMFHI(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set(rd, regs[CPUReg::HI]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MFHI %s; %s = 0x%08X\n", regNames[rd], regNames[rd], regs[rd]);
+    }
+}
+
+/* Move From LO */
+void iMFLO(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set(rd, regs[CPUReg::LO]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MFLO %s; %s = 0x%08X\n", regNames[rd], regNames[rd], regs[rd]);
     }
 }
 
@@ -562,6 +691,31 @@ void iSB(u32 instr) {
     write8(addr, data);
 }
 
+/* Store Halfword */
+void iSH(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+    const auto data = (u16)regs[rt];
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SH %s, 0x%X(%s); [0x%08X] = 0x%04X\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    assert(!cop0::isCacheIsolated() || (addr >> 28));
+
+    if (addr & 1) {
+        std::printf("[IOP       ] SH: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    write16(addr, data);
+}
+
 /* Shift Left Logical */
 void iSLL(u32 instr) {
     const auto rd = getRd(instr);
@@ -607,6 +761,20 @@ void iSLTI(u32 instr) {
     }
 }
 
+/* Set on Less Than Immediate Unsigned */
+void iSLTIU(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (u32)(i16)getImm(instr);
+
+    set(rt, regs[rs] < imm);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SLTIU %s, %s, 0x%08X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
+    }
+}
+
 /* Set on Less Than Unsigned */
 void iSLTU(u32 instr) {
     const auto rd = getRd(instr);
@@ -617,6 +785,47 @@ void iSLTU(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] SLTU %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
+/* Shift Right Arithmetic */
+void iSRA(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    const auto shamt = getShamt(instr);
+
+    set(rd, (i32)regs[rt] >> shamt);
+
+    if (doDisasm) {
+         std::printf("[IOP       ] SRA %s, %s, %u; %s = 0x%08X\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]);
+    }
+}
+
+/* Shift Right Logical */
+void iSRL(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    const auto shamt = getShamt(instr);
+
+    set(rd, regs[rt] >> shamt);
+
+    if (doDisasm) {
+         std::printf("[IOP       ] SRL %s, %s, %u; %s = 0x%08X\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]);
+    }
+}
+
+/* SUBtract Unsigned */
+void iSUBU(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rs] - regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SUBU %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
     }
 }
 
@@ -659,8 +868,14 @@ void decodeInstr(u32 instr) {
 
                 switch (funct) {
                     case SPECIALOpcode::SLL : iSLL(instr); break;
+                    case SPECIALOpcode::SRL : iSRL(instr); break;
+                    case SPECIALOpcode::SRA : iSRA(instr); break;
                     case SPECIALOpcode::JR  : iJR(instr); break;
+                    case SPECIALOpcode::MFHI: iMFHI(instr); break;
+                    case SPECIALOpcode::MFLO: iMFLO(instr); break;
+                    case SPECIALOpcode::DIVU: iDIVU(instr); break;
                     case SPECIALOpcode::ADDU: iADDU(instr); break;
+                    case SPECIALOpcode::SUBU: iSUBU(instr); break;
                     case SPECIALOpcode::AND : iAND(instr); break;
                     case SPECIALOpcode::OR  : iOR(instr); break;
                     case SPECIALOpcode::SLT : iSLT(instr); break;
@@ -676,9 +891,12 @@ void decodeInstr(u32 instr) {
         case Opcode::JAL  : iJAL(instr); break;
         case Opcode::BEQ  : iBEQ(instr); break;
         case Opcode::BNE  : iBNE(instr); break;
+        case Opcode::BLEZ : iBLEZ(instr); break;
+        case Opcode::BGTZ : iBGTZ(instr); break;
         case Opcode::ADDI : iADDI(instr); break;
         case Opcode::ADDIU: iADDIU(instr); break;
         case Opcode::SLTI : iSLTI(instr); break;
+        case Opcode::SLTIU: iSLTIU(instr); break;
         case Opcode::ANDI : iANDI(instr); break;
         case Opcode::ORI  : iORI(instr); break;
         case Opcode::LUI  : iLUI(instr); break;
@@ -696,11 +914,14 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
-        case Opcode::LB: iLB(instr); break;
-        case Opcode::LH: iLH(instr); break;
-        case Opcode::LW: iLW(instr); break;
-        case Opcode::SB: iSB(instr); break;
-        case Opcode::SW: iSW(instr); break;
+        case Opcode::LB : iLB(instr); break;
+        case Opcode::LH : iLH(instr); break;
+        case Opcode::LW : iLW(instr); break;
+        case Opcode::LBU: iLBU(instr); break;
+        case Opcode::LHU: iLHU(instr); break;
+        case Opcode::SB : iSB(instr); break;
+        case Opcode::SH : iSH(instr); break;
+        case Opcode::SW : iSW(instr); break;
         default:
             std::printf("[IOP       ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
