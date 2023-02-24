@@ -521,6 +521,7 @@ void writeIOP32(u32 addr, u32 data) {
             case 0x1F801400: case 0x1F801404: case 0x1F801408: case 0x1F80140C:
             case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
             case 0x1F801420:
+            case 0x1F801450:
             case 0x1F802070:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
                 break;
