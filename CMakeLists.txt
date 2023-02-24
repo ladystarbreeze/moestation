@@ -12,6 +12,7 @@ set(SOURCES
     src/core/intc.cpp
     src/core/moestation.cpp
     src/core/scheduler.cpp
+    src/core/sif.cpp
     src/core/bus/bus.cpp
     src/core/bus/rdram.cpp
     src/core/ee/cpu/cop0.cpp
@@ -25,6 +26,7 @@ set(SOURCES
     src/core/ee/vu/vu_int.cpp
     src/core/gif/gif.cpp
     src/core/gs/gs.cpp
+    src/core/iop/iop.cpp
 )
 
 set(HEADERS
@@ -33,6 +35,7 @@ set(HEADERS
     src/core/intc.hpp
     src/core/moestation.hpp
     src/core/scheduler.hpp
+    src/core/sif.hpp
     src/core/bus/bus.hpp
     src/core/bus/rdram.hpp
     src/core/ee/cpu/cop0.hpp
@@ -46,6 +49,7 @@ set(HEADERS
     src/core/ee/vu/vu_int.hpp
     src/core/gif/gif.hpp
     src/core/gs/gs.hpp
+    src/core/iop/iop.hpp
 )
 
 add_executable(moestation ${SOURCES} ${HEADERS})
