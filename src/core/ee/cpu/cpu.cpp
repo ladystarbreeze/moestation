@@ -571,7 +571,7 @@ void iBEQ(u32 instr) {
     doBranch(target, regs[rs]._u64[0] == regs[rt]._u64[0], CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BEQ %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], (u64)rs, regNames[rt], regs[rt]._u64[0]);
+        std::printf("[EE Core   ] BEQ %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs]._u64[0], regNames[rt], regs[rt]._u64[0]);
     }
 }
 
@@ -586,7 +586,7 @@ void iBEQL(u32 instr) {
     doBranch(target, regs[rs]._u64[0] == regs[rt]._u64[0], CPUReg::R0, true);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BEQL %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], (u64)rs, regNames[rt], regs[rt]._u64[0]);
+        std::printf("[EE Core   ] BEQL %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs]._u64[0], regNames[rt], regs[rt]._u64[0]);
     }
 }
 
@@ -600,7 +600,7 @@ void iBGEZ(u32 instr) {
     doBranch(target, (i64)regs[rs]._u64[0] >= 0, CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BGEZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], (u64)rs);
+        std::printf("[EE Core   ] BGEZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -614,7 +614,7 @@ void iBGTZ(u32 instr) {
     doBranch(target, (i64)regs[rs]._u64[0] > 0, CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BGTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], (u64)rs);
+        std::printf("[EE Core   ] BGTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -628,7 +628,7 @@ void iBLEZ(u32 instr) {
     doBranch(target, (i64)regs[rs]._u64[0] <= 0, CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BLEZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], (u64)rs);
+        std::printf("[EE Core   ] BLEZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -642,7 +642,7 @@ void iBLTZ(u32 instr) {
     doBranch(target, (i64)regs[rs]._u64[0] < 0, CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BLTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], (u64)rs);
+        std::printf("[EE Core   ] BLTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -657,7 +657,7 @@ void iBNE(u32 instr) {
     doBranch(target, regs[rs]._u64[0] != regs[rt]._u64[0], CPUReg::R0, false);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BNE %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], (u64)rs, regNames[rt], regs[rt]._u64[0]);
+        std::printf("[EE Core   ] BNE %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs]._u64[0], regNames[rt], regs[rt]._u64[0]);
     }
 }
 
@@ -672,7 +672,7 @@ void iBNEL(u32 instr) {
     doBranch(target, regs[rs]._u64[0] != regs[rt]._u64[0], CPUReg::R0, true);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] BNEL %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], (u64)rs, regNames[rt], regs[rt]._u64[0]);
+        std::printf("[EE Core   ] BNEL %s, %s, 0x%08X; %s = 0x%016llX, %s = 0x%016llX\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs]._u64[0], regNames[rt], regs[rt]._u64[0]);
     }
 }
 
