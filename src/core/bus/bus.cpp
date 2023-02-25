@@ -112,23 +112,21 @@ void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1) {
 
 /* Returns a byte from the EE bus */
 u8 read8(u32 addr) {
-    u8 data;
-
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         return ram[addr];
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
         // Using MemorySize::BIOS works because the IOP I/O has the same size
         std::printf("[Bus:EE    ] Unhandled 8-bit read @ 0x%08X (IOP I/O)\n", addr);
         return 0;
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
+        return iopRAM[addr - static_cast<u32>(MemoryBase::IOPRAM)];
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
-        data = bios[addr - static_cast<u32>(MemoryBase::BIOS)];
+        return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
         std::printf("[Bus:EE    ] Unhandled 8-bit read @ 0x%08X\n", addr);
 
         exit(0);
     }
-
-    return data;
 }
 
 /* Returns a halfword from the EE bus */
@@ -168,15 +166,15 @@ u32 read32(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
-        return ps2::ee::timer::read32(addr);
+        return ee::timer::read32(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
-        return ps2::ee::ipu::read(addr);
+        return ee::ipu::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
-        return ps2::gif::read(addr);
+        return gif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
-        return ps2::ee::dmac::read(addr);
+        return ee::dmac::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
-        return ps2::sif::read(addr);
+        return sif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -187,10 +185,10 @@ u32 read32(u32 addr) {
         switch (addr) {
             case 0x1000F000:
                 std::printf("[Bus:EE    ] 32-bit read @ INTC_STAT\n");
-                return ps2::intc::readStat();
+                return intc::readStat();
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit read @ INTC_MASK\n");
-                return ps2::intc::readMask();
+                return intc::readMask();
             case 0x1000F520:
                 std::printf("[Bus:EE    ] 32-bit read @ D_ENABLER\n");
                 return 0x1201;
@@ -291,6 +289,10 @@ u32 readIOP32(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         std::memcpy(&data, &iopRAM[addr], sizeof(u32));
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA)) ||
+               inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
+        std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X (DMA)\n", addr);
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -356,19 +358,19 @@ void write32(u32 addr, u32 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::Timer), static_cast<u32>(MemorySize::Timer))) {
-        return ps2::ee::timer::write32(addr, data);
+        return ee::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
-        return ps2::ee::ipu::write(addr, data);
+        return ee::ipu::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
-        return ps2::gif::write(addr, data);
+        return gif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
         return vif[0]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
         return vif[1]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
-        return ps2::ee::dmac::write(addr, data);
+        return ee::dmac::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
-        return ps2::sif::write(addr, data);
+        return sif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -377,10 +379,10 @@ void write32(u32 addr, u32 data) {
         switch (addr) {
             case 0x1000F000:
                 std::printf("[Bus:EE    ] 32-bit write @ INTC_STAT = 0x%08X\n", data);
-                return ps2::intc::writeStat(data);
+                return intc::writeStat(data);
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit write @ INTC_MASK = 0x%08X\n", data);
-                return ps2::intc::writeMask(data);
+                return intc::writeMask(data);
             case 0x1000F100:
             case 0x1000F120:
             case 0x1000F140:
@@ -411,7 +413,7 @@ void write64(u32 addr, u64 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VU1Code), static_cast<u32>(MemorySize::VU1))) {
         /* TODO: implement VU code1 writes */
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GS), static_cast<u32>(MemorySize::GS))) {
-        ps2::gs::writePriv64(addr, data);
+        gs::writePriv64(addr, data);
     } else {
         switch (addr) {
             default:
@@ -501,6 +503,9 @@ void writeIOP32(u32 addr, u32 data) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1F801074:
+                std::printf("[Bus:IOP   ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                return intc::writeMaskIOP(data);
             case 0x1FFE0130:
                 std::printf("[Bus:IOP   ] 32-bit write @ Cache Control = 0x%08X\n", data);
                 break;
