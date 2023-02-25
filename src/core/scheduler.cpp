@@ -17,8 +17,6 @@ struct Event {
     u64 id;
 
     i64 cyclesUntilEvent;
-
-    bool isNew;
 };
 
 std::deque<Event> events; // Event queue
@@ -52,14 +50,14 @@ u64 registerEvent(std::function<void(i64)> func) {
 }
 
 /* Adds a scheduler event */
-void addEvent(u64 id, i64 cyclesUntilEvent) {
+void addEvent(u64 id, i64 cyclesUntilEvent, bool doReschedule) {
     assert(cyclesUntilEvent > 0);
 
     //std::printf("[Scheduler ] Adding event %llu, cycles until event: %lld\n", id, cyclesUntilEvent);
 
-    events.push_back(Event{id, cyclesUntilEvent, true});
+    events.push_front(Event{id, cyclesUntilEvent});
 
-    reschedule();
+    if (doReschedule) reschedule();
 }
 
 void processEvents(i64 elapsedCycles) {
@@ -69,14 +67,8 @@ void processEvents(i64 elapsedCycles) {
 
     if (cycleCount < cyclesUntilNextEvent) return;
 
-    const auto nextEvent = cyclesUntilNextEvent;
-
-    const auto end = events.end();
-
-    for (auto event = events.begin(); event != end;) {
-        if (!event->isNew) event->cyclesUntilEvent -= cycleCount;
-
-        event->isNew = false;
+    for (auto event = events.begin(); event != events.end();) {
+        event->cyclesUntilEvent -= cycleCount;
 
         if (event->cyclesUntilEvent <= 0) {
             const auto id = event->id;
@@ -90,7 +82,9 @@ void processEvents(i64 elapsedCycles) {
         }
     }
 
-    cycleCount -= nextEvent;
+    cycleCount -= cyclesUntilNextEvent;
+
+    reschedule();
 }
 
 }

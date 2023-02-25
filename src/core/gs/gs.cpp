@@ -37,14 +37,14 @@ u64 idHBLANK;
 void hblankEvent(i64 c) {
     ee::timer::stepHBLANK();
     
-    scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE + c);
+    scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE + c, false);
 }
 
 /* Registers GS events */
 void init() {
     idHBLANK = scheduler::registerEvent([](i64 c) { hblankEvent(c); });
 
-    scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE);
+    scheduler::addEvent(idHBLANK, CYCLES_PER_SCANLINE, true);
 }
 
 /* Writes a GS privileged register (64-bit) */

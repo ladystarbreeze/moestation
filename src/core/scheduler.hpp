@@ -15,7 +15,7 @@ void init();
 
 u64 registerEvent(std::function<void(i64)> func);
 
-void addEvent(u64 id, i64 cyclesUntilEvent);
+void addEvent(u64 id, i64 cyclesUntilEvent, bool doReschedule);
 void processEvents(i64 elapsedCycles);
 
 }
