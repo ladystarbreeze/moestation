@@ -18,7 +18,7 @@ namespace ps2::iop {
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
-constexpr auto doDisasm = true;
+constexpr auto doDisasm = false;
 
 /* --- IOP register definitions --- */
 
@@ -46,6 +46,7 @@ const char *regNames[34] = {
 
 enum Opcode {
     SPECIAL = 0x00,
+    REGIMM  = 0x01,
     J       = 0x02,
     JAL     = 0x03,
     BEQ     = 0x04,
@@ -75,6 +76,7 @@ enum SPECIALOpcode {
     SRL  = 0x02,
     SRA  = 0x03,
     JR   = 0x08,
+    JALR = 0x09,
     MFHI = 0x10,
     MFLO = 0x12,
     DIVU = 0x1B,
@@ -82,8 +84,14 @@ enum SPECIALOpcode {
     SUBU = 0x23,
     AND  = 0x24,
     OR   = 0x25,
+    XOR  = 0x26,
     SLT  = 0x2A,
     SLTU = 0x2B,
+};
+
+enum REGIMMOpcode {
+    BLTZ = 0x00,
+    BGEZ = 0x01,
 };
 
 enum COPOpcode {
@@ -356,6 +364,20 @@ void iBEQ(u32 instr) {
     }
 }
 
+/* Branch if Greater than or Equal Zero */
+void iBGEZ(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] >= 0, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] BGEZ %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
 /* Branch if Greater Than Zero */
 void iBGTZ(u32 instr) {
     const auto rs = getRs(instr);
@@ -381,6 +403,20 @@ void iBLEZ(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] BLEZ %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
+    }
+}
+
+/* Branch if Less Than Zero */
+void iBLTZ(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i32)regs[rs] < 0, CPUReg::R0);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] BLTZ %s, 0x%08X; %s = 0x%08X\n", regNames[rs], target, regNames[rs], regs[rs]);
     }
 }
 
@@ -436,6 +472,20 @@ void iJAL(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] JAL 0x%08X; RA = 0x%08X, PC = 0x%08X\n", target, regs[CPUReg::RA], target);
+    }
+}
+
+/* Jump And Link Register */
+void iJALR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+
+    const auto target = regs[rs];
+
+    doBranch(target, true, rd);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] JALR %s, %s; %s = 0x%08X, PC = 0x%08X\n", regNames[rd], regNames[rs], regNames[rd], regs[rd], target);
     }
 }
 
@@ -858,6 +908,19 @@ void iSW(u32 instr) {
     write32(addr, data);
 }
 
+/* XOR */
+void iXOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rs] ^ regs[rt]);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] XOR %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
 void decodeInstr(u32 instr) {
     const auto opcode = getOpcode(instr);
 
@@ -871,6 +934,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SRL : iSRL(instr); break;
                     case SPECIALOpcode::SRA : iSRA(instr); break;
                     case SPECIALOpcode::JR  : iJR(instr); break;
+                    case SPECIALOpcode::JALR: iJALR(instr); break;
                     case SPECIALOpcode::MFHI: iMFHI(instr); break;
                     case SPECIALOpcode::MFLO: iMFLO(instr); break;
                     case SPECIALOpcode::DIVU: iDIVU(instr); break;
@@ -878,10 +942,25 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SUBU: iSUBU(instr); break;
                     case SPECIALOpcode::AND : iAND(instr); break;
                     case SPECIALOpcode::OR  : iOR(instr); break;
+                    case SPECIALOpcode::XOR : iXOR(instr); break;
                     case SPECIALOpcode::SLT : iSLT(instr); break;
                     case SPECIALOpcode::SLTU: iSLTU(instr); break;
                     default:
                         std::printf("[IOP       ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
+
+                        exit(0);
+                }
+            }
+            break;
+        case Opcode::REGIMM:
+            {
+                const auto rt = getRt(instr);
+
+                switch (rt) {
+                    case REGIMMOpcode::BLTZ: iBLTZ(instr); break;
+                    case REGIMMOpcode::BGEZ: iBGEZ(instr); break;
+                    default:
+                        std::printf("[IOP       ] Unhandled REGIMM instruction 0x%02X (0x%08X) @ 0x%08X\n", rt, instr, cpc);
 
                         exit(0);
                 }
