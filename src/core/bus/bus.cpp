@@ -303,6 +303,9 @@ u32 readIOP32(u32 addr) {
         std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1F801074:
+                std::printf("[Bus:IOP   ] 32-bit read @ I_MASK\n");
+                return intc::readMaskIOP();
             case 0x1F801078:
                 std::printf("[Bus:IOP   ] 32-bit read @ I_CTRL\n");
                 return intc::readCtrlIOP();
