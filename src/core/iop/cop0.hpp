@@ -25,6 +25,7 @@ u32 get(u32 idx);
 void set(u32 idx, u32 data);
 
 void enterException(Exception e);
+void leaveException();
 
 bool isBEV();
 bool isCacheIsolated();

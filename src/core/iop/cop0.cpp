@@ -157,6 +157,19 @@ void enterException(Exception e) {
     status.cku = true;
 }
 
+/* Restores privilege level and interrupt enable bit */
+void leaveException() {
+    /* Pop interrupt enable */
+    status.cie = status.pie;
+    status.pie = status.oie;
+    status.oie = false;
+
+    /* Pop privilege level */
+    status.cku = status.pku;
+    status.pku = status.oku;
+    status.oku = false;
+}
+
 /* Returns true if BEV is set */
 bool isBEV() {
     return status.bev;
