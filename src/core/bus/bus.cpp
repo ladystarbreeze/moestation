@@ -15,6 +15,7 @@
 #include "../ee/timer/timer.hpp"
 #include "../gif/gif.hpp"
 #include "../gs/gs.hpp"
+#include "../iop/timer/timer.hpp"
 #include "../../common/file.hpp"
 
 /* --- PS2 base addresses --- */
@@ -247,6 +248,9 @@ u128 read128(u32 addr) {
 u8 readIOP8(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         return iopRAM[addr];
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::CDVD), static_cast<u32>(MemorySizeIOP::CDVD))) {
+        std::printf("[Bus:IOP   ] Unhandled 8-bit read @ 0x%08X (CDVD)\n", addr);
+        return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -299,6 +303,9 @@ u32 readIOP32(u32 addr) {
         std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u32));
     } else {
         switch (addr) {
+            case 0x1F801078:
+                std::printf("[Bus:IOP   ] 32-bit read @ I_CTRL\n");
+                return intc::readCtrlIOP();
             case 0x1F801010:
             case 0x1F801450:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
@@ -479,6 +486,9 @@ void writeIOP8(u32 addr, u8 data) {
 void writeIOP16(u32 addr, u16 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         memcpy(&iopRAM[addr], &data, sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
+               inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
+        return iop::timer::write16(addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u16));
     } else {
@@ -497,6 +507,9 @@ void writeIOP32(u32 addr, u32 data) {
         memcpy(&iopRAM[addr], &data, sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA))) {
         std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
+               inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
+        return iop::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X (DMA) = 0x%08X\n", addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -506,6 +519,9 @@ void writeIOP32(u32 addr, u32 data) {
             case 0x1F801074:
                 std::printf("[Bus:IOP   ] 32-bit write @ I_MASK = 0x%08X\n", data);
                 return intc::writeMaskIOP(data);
+            case 0x1F801078:
+                std::printf("[Bus:IOP   ] 32-bit write @ I_CTRL = 0x%08X\n", data);
+                return intc::writeCtrlIOP(data);
             case 0x1FFE0130:
                 std::printf("[Bus:IOP   ] 32-bit write @ Cache Control = 0x%08X\n", data);
                 break;
@@ -527,6 +543,7 @@ void writeIOP32(u32 addr, u32 data) {
             case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
             case 0x1F801420:
             case 0x1F801450:
+            case 0x1F8015F0:
             case 0x1F802070:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
                 break;
