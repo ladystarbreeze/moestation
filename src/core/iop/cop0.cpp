@@ -57,6 +57,8 @@ struct Status {
 Cause cause;
 Status status;
 
+u32 epc; // Exception program counter
+
 void init() {
     status.bev = true;
 }
@@ -68,7 +70,7 @@ u32 get(u32 idx) {
     u32 data;
 
     switch (idx) {
-        case static_cast<u32>(COP0Reg::Status  ):
+        case static_cast<u32>(COP0Reg::Status):
             data  = status.cie;
             data |= status.cku <<  1;
             data |= status.pie <<  2;
@@ -86,6 +88,13 @@ u32 get(u32 idx) {
             data |= status.re  << 25;
             data |= status.cu  << 28;
             break;
+        case static_cast<u32>(COP0Reg::Cause):
+            data  = cause.excode << 2;
+            data |= cause.ip << 8;
+            data |= cause.ce << 28;
+            data |= cause.bd << 31;
+            break;
+        case static_cast<u32>(COP0Reg::EPC ): data = epc; break;
         case static_cast<u32>(COP0Reg::PRId): data = 0x1F; break; // Probably not correct, but good enough for the BIOS
         default:
             std::printf("[COP0:IOP  ] Unhandled register read @ %u\n", idx);
@@ -133,9 +142,39 @@ void set(u32 idx, u32 data) {
     }
 }
 
+/* Sets exception code, saves privilege level and interrupt enable bit */
+void enterException(Exception e) {
+    cause.excode = e;
+
+    /* Push interrupt enable */
+    status.oie = status.pie;
+    status.pie = status.cie;
+    status.cie = false;
+
+    /* Push privilege level */
+    status.oku = status.pku;
+    status.pku = status.cku;
+    status.cku = true;
+}
+
+/* Returns true if BEV is set */
+bool isBEV() {
+    return status.bev;
+}
+
 /* Returns true if IsC bit is set */
 bool isCacheIsolated() {
     return status.isc;
+}
+
+/* Sets the BD bit in Cause */
+void setBD(bool bd) {
+    cause.bd = bd;
+}
+
+/* Sets the exception program counter */
+void setEPC(u32 pc) {
+    epc = pc;
 }
 
 }

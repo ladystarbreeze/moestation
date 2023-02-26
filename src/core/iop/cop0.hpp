@@ -9,12 +9,27 @@
 
 namespace ps2::iop::cop0 {
 
+/* Exception codes */
+enum Exception {
+    SystemCall = 0x8,
+};
+
+static const char *eNames[32] = { 
+    "INT", "MOD", "TLBL", "TLBS", "AdEL", "AdES", "IBE", "DBE", "Syscall", "BP", "RI", "CpU", "Ov",
+};
+
 void init();
 
 u32 get(u32 idx);
 
 void set(u32 idx, u32 data);
 
+void enterException(Exception e);
+
+bool isBEV();
 bool isCacheIsolated();
+
+void setBD(bool bd);
+void setEPC(u32 pc);
 
 }

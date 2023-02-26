@@ -14,6 +14,8 @@
 
 namespace ps2::iop {
 
+using Exception = cop0::Exception;
+
 /* --- IOP constants --- */
 
 constexpr u32 RESET_VECTOR = 0xBFC00000;
@@ -72,25 +74,26 @@ enum Opcode {
 };
 
 enum SPECIALOpcode {
-    SLL   = 0x00,
-    SRL   = 0x02,
-    SRA   = 0x03,
-    SLLV  = 0x04,
-    JR    = 0x08,
-    JALR  = 0x09,
-    MFHI  = 0x10,
-    MTHI  = 0x11,
-    MFLO  = 0x12,
-    MTLO  = 0x13,
-    MULTU = 0x19,
-    DIVU  = 0x1B,
-    ADDU  = 0x21,
-    SUBU  = 0x23,
-    AND   = 0x24,
-    OR    = 0x25,
-    XOR   = 0x26,
-    SLT   = 0x2A,
-    SLTU  = 0x2B,
+    SLL     = 0x00,
+    SRL     = 0x02,
+    SRA     = 0x03,
+    SLLV    = 0x04,
+    JR      = 0x08,
+    JALR    = 0x09,
+    SYSCALL = 0x0C,
+    MFHI    = 0x10,
+    MTHI    = 0x11,
+    MFLO    = 0x12,
+    MTLO    = 0x13,
+    MULTU   = 0x19,
+    DIVU    = 0x1B,
+    ADDU    = 0x21,
+    SUBU    = 0x23,
+    AND     = 0x24,
+    OR      = 0x25,
+    XOR     = 0x26,
+    SLT     = 0x2A,
+    SLTU    = 0x2B,
 };
 
 enum REGIMMOpcode {
@@ -270,6 +273,29 @@ void doBranch(u32 target, bool isCond, u32 rd) {
     if (isCond) {
         setBranchPC(target);
     }
+}
+
+/* Raises a CPU exception */
+void raiseException(Exception e) {
+    std::printf("[IOP       ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
+
+    cop0::enterException(e); // Set exception code, save 
+
+    u32 vector;
+    if (cop0::isBEV()) { vector = 0xBFC00180; } else { vector = 0x80000080; }
+
+    cop0::setBD(inDelaySlot[0]);
+
+    if (inDelaySlot[0]) {
+        cop0::setEPC(cpc - 4);
+    } else {
+        cop0::setEPC(cpc);
+    }
+
+    inDelaySlot[0] = false;
+    inDelaySlot[1] = true;
+
+    setPC(vector);
 }
 
 /* --- Instruction handlers --- */
@@ -962,6 +988,15 @@ void iSW(u32 instr) {
     write32(addr, data);
 }
 
+/* SYStem CALL */
+void iSYSCALL() {
+    if (doDisasm) {
+        std::printf("[IOP       ] SYSCALL\n");
+    }
+
+    raiseException(Exception::SystemCall);
+}
+
 /* XOR */
 void iXOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -984,25 +1019,26 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
-                    case SPECIALOpcode::SLL  : iSLL(instr); break;
-                    case SPECIALOpcode::SRL  : iSRL(instr); break;
-                    case SPECIALOpcode::SRA  : iSRA(instr); break;
-                    case SPECIALOpcode::SLLV : iSLLV(instr); break;
-                    case SPECIALOpcode::JR   : iJR(instr); break;
-                    case SPECIALOpcode::JALR : iJALR(instr); break;
-                    case SPECIALOpcode::MFHI : iMFHI(instr); break;
-                    case SPECIALOpcode::MTHI : iMTHI(instr); break;
-                    case SPECIALOpcode::MFLO : iMFLO(instr); break;
-                    case SPECIALOpcode::MTLO : iMTLO(instr); break;
-                    case SPECIALOpcode::MULTU: iMULTU(instr); break;
-                    case SPECIALOpcode::DIVU : iDIVU(instr); break;
-                    case SPECIALOpcode::ADDU : iADDU(instr); break;
-                    case SPECIALOpcode::SUBU : iSUBU(instr); break;
-                    case SPECIALOpcode::AND  : iAND(instr); break;
-                    case SPECIALOpcode::OR   : iOR(instr); break;
-                    case SPECIALOpcode::XOR  : iXOR(instr); break;
-                    case SPECIALOpcode::SLT  : iSLT(instr); break;
-                    case SPECIALOpcode::SLTU : iSLTU(instr); break;
+                    case SPECIALOpcode::SLL    : iSLL(instr); break;
+                    case SPECIALOpcode::SRL    : iSRL(instr); break;
+                    case SPECIALOpcode::SRA    : iSRA(instr); break;
+                    case SPECIALOpcode::SLLV   : iSLLV(instr); break;
+                    case SPECIALOpcode::JR     : iJR(instr); break;
+                    case SPECIALOpcode::JALR   : iJALR(instr); break;
+                    case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
+                    case SPECIALOpcode::MFHI   : iMFHI(instr); break;
+                    case SPECIALOpcode::MTHI   : iMTHI(instr); break;
+                    case SPECIALOpcode::MFLO   : iMFLO(instr); break;
+                    case SPECIALOpcode::MTLO   : iMTLO(instr); break;
+                    case SPECIALOpcode::MULTU  : iMULTU(instr); break;
+                    case SPECIALOpcode::DIVU   : iDIVU(instr); break;
+                    case SPECIALOpcode::ADDU   : iADDU(instr); break;
+                    case SPECIALOpcode::SUBU   : iSUBU(instr); break;
+                    case SPECIALOpcode::AND    : iAND(instr); break;
+                    case SPECIALOpcode::OR     : iOR(instr); break;
+                    case SPECIALOpcode::XOR    : iXOR(instr); break;
+                    case SPECIALOpcode::SLT    : iSLT(instr); break;
+                    case SPECIALOpcode::SLTU   : iSLTU(instr); break;
                     default:
                         std::printf("[IOP       ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
 
