@@ -107,6 +107,12 @@ void write32(u32 addr, u32 data) {
                 if (data & (1 << 10)) mode.equf = false;
                 if (data & (1 << 11)) mode.ovff = false;
 
+                if (mode.gate) {
+                    std::printf("[Timer::EE  ] Unhandled timer gate\n");
+
+                    exit(0);
+                }
+
                 // Set prescaler
                 switch (mode.clks) {
                     case 0: timer.prescaler = 1; break;
