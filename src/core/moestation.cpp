@@ -23,7 +23,7 @@ using VectorInterface = ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
-constexpr i64 EE_CYCLES = 16;
+constexpr i64 EE_CYCLES = 32;
 
 VectorInterface vif[2] = {VectorInterface(0, ee::cpu::getVU(0)), VectorInterface(1, ee::cpu::getVU(1))};
 
