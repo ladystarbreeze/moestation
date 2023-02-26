@@ -55,6 +55,8 @@ struct Status {
 
 Status status;
 
+u32 epc;
+
 u32 count, compare;
 
 void init() {
@@ -115,6 +117,9 @@ void set32(u32 idx, u32 data) {
             status.cu  = (data >> 28) & 0xF;
             break;
         case static_cast<u32>(COP0Reg::Config): break;
+        case static_cast<u32>(COP0Reg::EPC   ):
+            epc = data;
+            break;
         default:
             std::printf("[COP0:EE   ] Unhandled register write @ %u = 0x%08X\n", idx, data);
 
