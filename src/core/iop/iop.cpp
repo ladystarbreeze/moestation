@@ -85,6 +85,7 @@ enum SPECIALOpcode {
     MTHI    = 0x11,
     MFLO    = 0x12,
     MTLO    = 0x13,
+    MULT    = 0x18,
     MULTU   = 0x19,
     DIVU    = 0x1B,
     ADDU    = 0x21,
@@ -92,6 +93,7 @@ enum SPECIALOpcode {
     AND     = 0x24,
     OR      = 0x25,
     XOR     = 0x26,
+    NOR     = 0x27,
     SLT     = 0x2A,
     SLTU    = 0x2B,
 };
@@ -104,6 +106,11 @@ enum REGIMMOpcode {
 enum COPOpcode {
     MF  = 0x00,
     MT  = 0x04,
+    CO  = 0x10,
+};
+
+enum COP0Opcode {
+    RFE = 0x10,
 };
 
 /* --- IOP registers --- */
@@ -747,6 +754,21 @@ void iMTLO(u32 instr) {
     }
 }
 
+/* MULTiply */
+void iMULT(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = (i64)(i32)regs[rs] * (i64)(i32)regs[rt];
+
+    regs[CPUReg::LO] = res;
+    regs[CPUReg::HI] = res >> 32;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MULT %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
+    }
+}
+
 /* MULTiply Unsigned */
 void iMULTU(u32 instr) {
     const auto rs = getRs(instr);
@@ -759,6 +781,19 @@ void iMULTU(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] MULTU %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
+    }
+}
+
+/* NOR */
+void iNOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, ~(regs[rs] | regs[rt]));
+
+    if (doDisasm) {
+        std::printf("[IOP       ] NOR %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
     }
 }
 
@@ -787,6 +822,15 @@ void iORI(u32 instr) {
     if (doDisasm) {
         std::printf("[IOP       ] ORI %s, %s, 0x%X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
     }
+}
+
+/* Return From Exception */
+void iRFE() {
+    if (doDisasm) {
+        std::printf("[IOP       ] RFE\n");
+    }
+
+    cop0::leaveException();
 }
 
 /* Store Byte */
@@ -1030,6 +1074,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::MTHI   : iMTHI(instr); break;
                     case SPECIALOpcode::MFLO   : iMFLO(instr); break;
                     case SPECIALOpcode::MTLO   : iMTLO(instr); break;
+                    case SPECIALOpcode::MULT   : iMULT(instr); break;
                     case SPECIALOpcode::MULTU  : iMULTU(instr); break;
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
@@ -1037,6 +1082,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::AND    : iAND(instr); break;
                     case SPECIALOpcode::OR     : iOR(instr); break;
                     case SPECIALOpcode::XOR    : iXOR(instr); break;
+                    case SPECIALOpcode::NOR    : iNOR(instr); break;
                     case SPECIALOpcode::SLT    : iSLT(instr); break;
                     case SPECIALOpcode::SLTU   : iSLTU(instr); break;
                     default:
@@ -1080,6 +1126,19 @@ void decodeInstr(u32 instr) {
                 switch (rs) {
                     case COPOpcode::MF: iMFC(0, instr); break;
                     case COPOpcode::MT: iMTC(0, instr); break;
+                    case COPOpcode::CO:
+                        {
+                            const auto funct = getFunct(instr);
+
+                            switch (funct) {
+                                case COP0Opcode::RFE: iRFE(); break;
+                                default:
+                                    std::printf("[IOP       ] Unhandled COP0 instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
+
+                                    exit(0);
+                            }
+                        }
+                        break;
                     default:
                         std::printf("[IOP       ] Unhandled COP0 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
