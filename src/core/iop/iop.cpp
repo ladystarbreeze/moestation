@@ -72,21 +72,25 @@ enum Opcode {
 };
 
 enum SPECIALOpcode {
-    SLL  = 0x00,
-    SRL  = 0x02,
-    SRA  = 0x03,
-    JR   = 0x08,
-    JALR = 0x09,
-    MFHI = 0x10,
-    MFLO = 0x12,
-    DIVU = 0x1B,
-    ADDU = 0x21,
-    SUBU = 0x23,
-    AND  = 0x24,
-    OR   = 0x25,
-    XOR  = 0x26,
-    SLT  = 0x2A,
-    SLTU = 0x2B,
+    SLL   = 0x00,
+    SRL   = 0x02,
+    SRA   = 0x03,
+    SLLV  = 0x04,
+    JR    = 0x08,
+    JALR  = 0x09,
+    MFHI  = 0x10,
+    MTHI  = 0x11,
+    MFLO  = 0x12,
+    MTLO  = 0x13,
+    MULTU = 0x19,
+    DIVU  = 0x1B,
+    ADDU  = 0x21,
+    SUBU  = 0x23,
+    AND   = 0x24,
+    OR    = 0x25,
+    XOR   = 0x26,
+    SLT   = 0x2A,
+    SLTU  = 0x2B,
 };
 
 enum REGIMMOpcode {
@@ -695,6 +699,43 @@ void iMTC(int copN, u32 instr) {
     }
 }
 
+/* Move To HI */
+void iMTHI(u32 instr) {
+    const auto rs = getRs(instr);
+
+    regs[CPUReg::HI] = regs[rs];
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MTHI %s; HI = 0x%08X\n", regNames[rs], regs[rs]);
+    }
+}
+
+/* Move To LO */
+void iMTLO(u32 instr) {
+    const auto rs = getRs(instr);
+
+    regs[CPUReg::LO] = regs[rs];
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MTLO %s; LO = 0x%08X\n", regNames[rs], regs[rs]);
+    }
+}
+
+/* MULTiply Unsigned */
+void iMULTU(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = (u64)regs[rs] * (u64)regs[rt];
+
+    regs[CPUReg::LO] = res;
+    regs[CPUReg::HI] = res >> 32;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] MULTU %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
+    }
+}
+
 /* OR */
 void iOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -781,6 +822,19 @@ void iSLL(u32 instr) {
         } else {
             std::printf("[IOP       ] SLL %s, %s, %u; %s = 0x%08X\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]);
         }
+    }
+}
+
+/* Shift Left Logical Variable */
+void iSLLV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rt] << (regs[rs] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SLLV %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]);
     }
 }
 
@@ -930,21 +984,25 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
-                    case SPECIALOpcode::SLL : iSLL(instr); break;
-                    case SPECIALOpcode::SRL : iSRL(instr); break;
-                    case SPECIALOpcode::SRA : iSRA(instr); break;
-                    case SPECIALOpcode::JR  : iJR(instr); break;
-                    case SPECIALOpcode::JALR: iJALR(instr); break;
-                    case SPECIALOpcode::MFHI: iMFHI(instr); break;
-                    case SPECIALOpcode::MFLO: iMFLO(instr); break;
-                    case SPECIALOpcode::DIVU: iDIVU(instr); break;
-                    case SPECIALOpcode::ADDU: iADDU(instr); break;
-                    case SPECIALOpcode::SUBU: iSUBU(instr); break;
-                    case SPECIALOpcode::AND : iAND(instr); break;
-                    case SPECIALOpcode::OR  : iOR(instr); break;
-                    case SPECIALOpcode::XOR : iXOR(instr); break;
-                    case SPECIALOpcode::SLT : iSLT(instr); break;
-                    case SPECIALOpcode::SLTU: iSLTU(instr); break;
+                    case SPECIALOpcode::SLL  : iSLL(instr); break;
+                    case SPECIALOpcode::SRL  : iSRL(instr); break;
+                    case SPECIALOpcode::SRA  : iSRA(instr); break;
+                    case SPECIALOpcode::SLLV : iSLLV(instr); break;
+                    case SPECIALOpcode::JR   : iJR(instr); break;
+                    case SPECIALOpcode::JALR : iJALR(instr); break;
+                    case SPECIALOpcode::MFHI : iMFHI(instr); break;
+                    case SPECIALOpcode::MTHI : iMTHI(instr); break;
+                    case SPECIALOpcode::MFLO : iMFLO(instr); break;
+                    case SPECIALOpcode::MTLO : iMTLO(instr); break;
+                    case SPECIALOpcode::MULTU: iMULTU(instr); break;
+                    case SPECIALOpcode::DIVU : iDIVU(instr); break;
+                    case SPECIALOpcode::ADDU : iADDU(instr); break;
+                    case SPECIALOpcode::SUBU : iSUBU(instr); break;
+                    case SPECIALOpcode::AND  : iAND(instr); break;
+                    case SPECIALOpcode::OR   : iOR(instr); break;
+                    case SPECIALOpcode::XOR  : iXOR(instr); break;
+                    case SPECIALOpcode::SLT  : iSLT(instr); break;
+                    case SPECIALOpcode::SLTU : iSLTU(instr); break;
                     default:
                         std::printf("[IOP       ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
 
