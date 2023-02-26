@@ -14,6 +14,7 @@
 #include "ee/vif/vif.hpp"
 #include "gs/gs.hpp"
 #include "iop/iop.hpp"
+#include "iop/timer/timer.hpp"
 #include "../common/types.hpp"
 
 namespace ps2 {
@@ -39,6 +40,7 @@ void init(const char *biosPath, const char *execPath) {
     gs::init();
 
     iop::init();
+    iop::timer::init();
 }
 
 void run() {
@@ -51,6 +53,7 @@ void run() {
         /* Step IOP hardware */
 
         iop::step(EE_CYCLES >> 3);
+        iop::timer::step(EE_CYCLES >> 3);
 
         scheduler::processEvents(EE_CYCLES);
     }
