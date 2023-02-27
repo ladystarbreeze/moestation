@@ -90,7 +90,7 @@ u32 get32(u32 idx) {
     u32 data;
 
     switch (idx) {
-        case static_cast<u32>(COP0Reg::Count): data = count; break;
+        case static_cast<u32>(COP0Reg::Count): return count;
         case static_cast<u32>(COP0Reg::Cause):
             data  = cause.excode << 2;
             data |= cause.ip  << 10;
@@ -99,7 +99,8 @@ u32 get32(u32 idx) {
             data |= cause.bd2 << 30;
             data |= cause.bd  << 31;
             break;
-        case static_cast<u32>(COP0Reg::PRId ): data = (0x2E << 8) | 0x10; break; // Implementation number 0x2E, major version 1, minor version 0
+        case static_cast<u32>(COP0Reg::EPC  ): return epc;
+        case static_cast<u32>(COP0Reg::PRId ): return (0x2E << 8) | 0x10; // Implementation number 0x2E, major version 1, minor version 0
         default:
             std::printf("[COP0:EE   ] Unhandled register read @ %u\n", idx);
 

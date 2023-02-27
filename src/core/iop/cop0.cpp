@@ -94,8 +94,8 @@ u32 get(u32 idx) {
             data |= cause.ce << 28;
             data |= cause.bd << 31;
             break;
-        case static_cast<u32>(COP0Reg::EPC ): data = epc; break;
-        case static_cast<u32>(COP0Reg::PRId): data = 0x1F; break; // Probably not correct, but good enough for the BIOS
+        case static_cast<u32>(COP0Reg::EPC ): return epc;
+        case static_cast<u32>(COP0Reg::PRId): return 0x1F; // Probably not correct, but good enough for the BIOS
         default:
             std::printf("[COP0:IOP  ] Unhandled register read @ %u\n", idx);
 
