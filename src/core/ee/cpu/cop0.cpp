@@ -116,8 +116,12 @@ u32 get32(u32 idx) {
             data |= cause.bd2 << 30;
             data |= cause.bd  << 31;
             break;
-        case static_cast<u32>(COP0Reg::EPC  ): return epc;
-        case static_cast<u32>(COP0Reg::PRId ): return (0x2E << 8) | 0x10; // Implementation number 0x2E, major version 1, minor version 0
+        case static_cast<u32>(COP0Reg::EPC     ): return epc;
+        case static_cast<u32>(COP0Reg::PRId    ): return (0x2E << 8) | 0x10; // Implementation number 0x2E, major version 1, minor version 0
+        case static_cast<u32>(COP0Reg::BadPAddr): return 0;
+        case static_cast<u32>(COP0Reg::Debug   ): return 0;
+        case static_cast<u32>(COP0Reg::Perf    ): return 0;
+        case static_cast<u32>(COP0Reg::ErrorEPC): return errorEPC;
         default:
             std::printf("[COP0:EE   ] Unhandled register read @ %u\n", idx);
 
@@ -163,6 +167,8 @@ void set32(u32 idx, u32 data) {
         case static_cast<u32>(COP0Reg::EPC   ):
             epc = data;
             break;
+        case static_cast<u32>(COP0Reg::Debug): break;
+        case static_cast<u32>(COP0Reg::Perf ): break;
         default:
             std::printf("[COP0:EE   ] Unhandled register write @ %u = 0x%08X\n", idx, data);
 
