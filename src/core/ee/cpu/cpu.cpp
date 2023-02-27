@@ -12,15 +12,18 @@
 #include "cop0.hpp"
 #include "fpu.hpp"
 #include "../vu/vu_int.hpp"
+#include "../../moestation.hpp"
 #include "../../bus/bus.hpp"
 
 namespace ps2::ee::cpu {
 
 /* --- EE Core constants --- */
 
+constexpr u32 EELOAD = 0x82000;
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
 constexpr auto doDisasm = false;
+constexpr auto doFastBoot = true;
 
 /* --- EE Core register definitions --- */
 
@@ -143,6 +146,8 @@ enum COP1Opcode {
 
 enum COP0Opcode {
     TLBWI = 0x02,
+    ERET  = 0x18,
+    DI    = 0x39,
 };
 
 enum MMIOpcode {
@@ -150,7 +155,12 @@ enum MMIOpcode {
     MULT1 = 0x18,
     DIV1  = 0x1A,
     DIVU1 = 0x1B,
+    MMI1  = 0x28,
     MMI3  = 0x29,
+};
+
+enum MMI1Opcode {
+    PADDUW = 0x10,
 };
 
 enum MMI3Opcode {
@@ -166,6 +176,7 @@ u32 pc, cpc, npc; // Program counters
 u8 sa; // Shift amount
 
 bool inDelaySlot[2]; // Branch delay helper
+bool isFastBootDone = false;
 
 u8 spram[0x4000]; // Scratchpad RAM
 
@@ -754,6 +765,15 @@ void iDADDU(u32 instr) {
     }
 }
 
+/* Disable Interrupts */
+void iDI() {
+    if (doDisasm) {
+        std::printf("[EE Core   ] DI\n");
+    }
+
+    if (cop0::isEDI()) cop0::setEIE(false);
+}
+
 /* DIVide */
 void iDIV(u32 instr) {
     const auto rs = getRs(instr);
@@ -919,6 +939,29 @@ void iDSRL32(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] DSRL32 %s, %s, %u; %s = 0x%016llX\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
+/* Exception RETurn */
+void iERET() {
+    if (doDisasm) {
+        std::printf("[EE Core   ] ERET\n");
+    }
+
+    if (cop0::isERL()) {
+        setPC(cop0::getErrorEPC());
+
+        cop0::setERL(false);
+    } else {
+        setPC(cop0::getEPC());
+
+        cop0::setEXL(false);
+    }
+
+    if (doFastBoot && (pc == EELOAD) && !isFastBootDone) {
+        ps2::fastBoot();
+
+        isFastBootDone = true;
     }
 }
 
@@ -1371,6 +1414,25 @@ void iORI(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] ORI %s, %s, 0x%llX; %s = 0x%016llX\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]._u64[0]);
+    }
+}
+
+/* Parallel saturating ADD, Unsigned Word */
+void iPADDUW(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    for (int i = 0; i < 4; i++) {
+        u64 res = (u64)regs[rs]._u32[i] + regs[rt]._u32[i];
+
+        if (res > UINT32_MAX) res = UINT32_MAX;
+
+        regs[rd]._u32[i] = res;
+    }
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PADDUW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
     }
 }
 
@@ -1876,6 +1938,8 @@ void decodeInstr(u32 instr) {
 
                             switch (funct) {
                                 case COP0Opcode::TLBWI: iTLBWI(); break;
+                                case COP0Opcode::ERET : iERET(); break;
+                                case COP0Opcode::DI   : iDI(); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled COP0 control instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
 
@@ -1943,7 +2007,20 @@ void decodeInstr(u32 instr) {
                     case MMIOpcode::MULT1: iMULT1(instr); break;
                     case MMIOpcode::DIV1 : iDIV1(instr); break;
                     case MMIOpcode::DIVU1: iDIVU1(instr); break;
-                    case MMIOpcode::MMI3 :
+                    case MMIOpcode::MMI1 :
+                        {
+                            const auto shamt = getShamt(instr);
+
+                            switch (shamt) {
+                                case MMI1Opcode::PADDUW: iPADDUW(instr); break;
+                                default:
+                                    std::printf("[EE Core   ] Unhandled MMI1 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
+
+                                    exit(0);
+                            }
+                        }
+                        break;
+                    case MMIOpcode::MMI3:
                         {
                             const auto shamt = getShamt(instr);
 
