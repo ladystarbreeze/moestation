@@ -14,13 +14,14 @@ namespace ps2::ee::vu {
 
 /* COP2 control registers */
 enum class ControlReg {
-    SF    = 16,
-    CF    = 18,
-    R     = 20,
-    I     = 21,
-    Q     = 22,
-    CMSAR = 27,
-    FBRST = 28,
+    SF      = 16,
+    CF      = 18,
+    R       = 20,
+    I       = 21,
+    Q       = 22,
+    CMSAR   = 27,
+    FBRST   = 28,
+    VPUSTAT = 29,
 };
 
 const f32 vf0Data[4] = {0.0, 0.0, 0.0, 1.0};
@@ -47,6 +48,9 @@ u32 VectorUnit::getControl(u32 idx) {
     switch (idx) {
         case static_cast<u32>(ControlReg::FBRST):
             std::printf("[VU%d       ] Read @ FBRST\n", vuID);
+            return 0;
+        case static_cast<u32>(ControlReg::VPUSTAT):
+            std::printf("[VU%d       ] Read @ VPU_STAT\n", vuID);
             return 0;
         default:
             std::printf("[VU%d       ] Unhandled control read @ %u\n", vuID, idx);
