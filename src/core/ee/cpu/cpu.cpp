@@ -264,9 +264,7 @@ void stepPC() {
 /* Translates a virtual address to a physical address */
 u32 translateAddr(u32 addr) {
     if (addr >= 0xFFFF8000) {
-        std::printf("[EE Core   ] Unhandled TLB mapped region @ 0x%08X\n", addr);
-
-        exit(0);
+        addr &= 0x7FFFF; // DECI2Call TLB mapped region
     } else {
         addr &= (1 << 29) - 1;
     }
