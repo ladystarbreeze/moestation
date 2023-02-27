@@ -18,6 +18,8 @@
 #include "../iop/timer/timer.hpp"
 #include "../../common/file.hpp"
 
+namespace ps2::bus {
+
 /* --- PS2 base addresses --- */
 
 enum class MemoryBase {
@@ -97,8 +99,6 @@ bool inRange(u64 addr, u64 base, u64 size) {
     return (addr >= base) && (addr < (base + size));
 }
 
-namespace ps2::bus {
-
 void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1) {
     ram.resize(static_cast<int>(MemorySize::RAM));
     iopRAM.resize(static_cast<int>(MemorySizeIOP::RAM));
@@ -109,6 +109,24 @@ void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1) {
     vif[1] = vif1;
 
     std::printf("[Bus       ] Init OK\n");
+}
+
+void setPathEELOAD(const char *path) {
+    static const char osdsysPath[] = "rom0:OSDSYS";
+
+    for (auto i = static_cast<int>(MemoryBase::EELOAD); i < (static_cast<int>(MemoryBase::EELOAD) + static_cast<int>(MemorySize::EELOAD)); i++) {
+        if (std::strncmp((char *)&ram[i], osdsysPath, sizeof(osdsysPath)) == 0) {
+            std::printf("[moestation] OSDSYS path found @ 0x%08X\n", i);
+
+            std::memcpy((char *)&ram[i], path, 23);
+
+            return;
+        }
+    }
+
+    std::printf("[moestation] Unable to find OSDSYS path\n");
+
+    exit(0);
 }
 
 /* Returns a byte from the EE bus */

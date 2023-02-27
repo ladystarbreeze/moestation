@@ -8,4 +8,6 @@ namespace ps2 {
 void init(const char *biosPath, const char *execPath);
 void run();
 
+void fastBoot();
+
 }

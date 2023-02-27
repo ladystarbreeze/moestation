@@ -28,6 +28,7 @@ set(SOURCES
     src/core/gs/gs.cpp
     src/core/iop/cop0.cpp
     src/core/iop/iop.cpp
+    src/core/iop/cdvd/cdvd.cpp
     src/core/iop/timer/timer.cpp
 )
 
@@ -53,6 +54,7 @@ set(HEADERS
     src/core/gs/gs.hpp
     src/core/iop/cop0.hpp
     src/core/iop/iop.hpp
+    src/core/iop/cdvd/cdvd.hpp
     src/core/iop/timer/timer.hpp
 )
 

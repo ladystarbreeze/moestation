@@ -13,6 +13,7 @@ using VectorInterface = ps2::ee::vif::VectorInterface;
 namespace ps2::bus {
 
 void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1);
+void setPathEELOAD(const char *path);
 
 u8   read8(u32 addr);
 u16  read16(u32 addr);
