@@ -39,6 +39,15 @@ enum class COP0Reg {
 
 /* --- COP0 registers --- */
 
+struct Cause {
+    u8   excode; // Exception code
+    u8   ip;     // Interrupt pending
+    u8   ercode; // Error code
+    u8   ce;     // Coprocessor error
+    bool bd2;    // Branch delay (level 2)
+    bool bd;     // Branch delay
+};
+
 struct Status {
     bool ie;       // Interrupt Enable
     bool exl, erl; // EXception/ERror Level
@@ -53,6 +62,7 @@ struct Status {
     u8   cu;       // Coprocessor Usable
 };
 
+Cause cause;
 Status status;
 
 u32 epc, errorEPC;
@@ -81,6 +91,14 @@ u32 get32(u32 idx) {
 
     switch (idx) {
         case static_cast<u32>(COP0Reg::Count): data = count; break;
+        case static_cast<u32>(COP0Reg::Cause):
+            data  = cause.excode << 2;
+            data |= cause.ip  << 10;
+            data |= cause.ercode << 16;
+            data |= cause.ce  << 28;
+            data |= cause.bd2 << 30;
+            data |= cause.bd  << 31;
+            break;
         case static_cast<u32>(COP0Reg::PRId ): data = (0x2E << 8) | 0x10; break; // Implementation number 0x2E, major version 1, minor version 0
         default:
             std::printf("[COP0:EE   ] Unhandled register read @ %u\n", idx);
@@ -134,6 +152,11 @@ void set32(u32 idx, u32 data) {
     }
 }
 
+/* Returns true if BEV is set */
+bool isBEV() {
+    return status.bev;
+}
+
 /* Returns true if EDI is set */
 bool isEDI() {
     return status.edi;
@@ -147,6 +170,11 @@ bool isERL() {
 /* Returns true if EXL is set */
 bool isEXL() {
     return status.exl;
+}
+
+/* Sets BD */
+void setBD(bool bd) {
+    cause.bd = bd;
 }
 
 /* Sets EIE */
@@ -172,6 +200,11 @@ u32 getEPC() {
 /* Returns ErrorEPC */
 u32 getErrorEPC() {
     return errorEPC;
+}
+
+/* Sets EPC */
+void setEPC(u32 pc) {
+    epc = pc;
 }
 
 }

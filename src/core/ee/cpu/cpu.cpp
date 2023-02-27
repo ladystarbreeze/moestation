@@ -17,6 +17,8 @@
 
 namespace ps2::ee::cpu {
 
+using Exception = cop0::Exception;
+
 /* --- EE Core constants --- */
 
 constexpr u32 EELOAD = 0x82000;
@@ -92,37 +94,38 @@ enum Opcode {
 };
 
 enum SPECIALOpcode {
-    SLL    = 0x00,
-    SRL    = 0x02,
-    SRA    = 0x03,
-    SLLV   = 0x04,
-    SRLV   = 0x06,
-    SRAV   = 0x07,
-    JR     = 0x08,
-    JALR   = 0x09,
-    MOVZ   = 0x0A,
-    MOVN   = 0x0B,
-    SYNC   = 0x0F,
-    MFHI   = 0x10,
-    MFLO   = 0x12,
-    DSLLV  = 0x14,
-    DSRAV  = 0x17,
-    MULT   = 0x18,
-    DIV    = 0x1A,
-    DIVU   = 0x1B,
-    ADDU   = 0x21,
-    SUBU   = 0x23,
-    AND    = 0x24,
-    OR     = 0x25,
-    NOR    = 0x27,
-    SLT    = 0x2A,
-    SLTU   = 0x2B,
-    DADDU  = 0x2D,
-    DSLL   = 0x38,
-    DSRL   = 0x3A,
-    DSLL32 = 0x3C,
-    DSRL32 = 0x3E,
-    DSRA32 = 0x3F,
+    SLL     = 0x00,
+    SRL     = 0x02,
+    SRA     = 0x03,
+    SLLV    = 0x04,
+    SRLV    = 0x06,
+    SRAV    = 0x07,
+    JR      = 0x08,
+    JALR    = 0x09,
+    MOVZ    = 0x0A,
+    MOVN    = 0x0B,
+    SYSCALL = 0x0C,
+    SYNC    = 0x0F,
+    MFHI    = 0x10,
+    MFLO    = 0x12,
+    DSLLV   = 0x14,
+    DSRAV   = 0x17,
+    MULT    = 0x18,
+    DIV     = 0x1A,
+    DIVU    = 0x1B,
+    ADDU    = 0x21,
+    SUBU    = 0x23,
+    AND     = 0x24,
+    OR      = 0x25,
+    NOR     = 0x27,
+    SLT     = 0x2A,
+    SLTU    = 0x2B,
+    DADDU   = 0x2D,
+    DSLL    = 0x38,
+    DSRL    = 0x3A,
+    DSLL32  = 0x3C,
+    DSRL32  = 0x3E,
+    DSRA32  = 0x3F,
 };
 
 enum REGIMMOpcode {
@@ -513,6 +516,37 @@ void doBranch(u32 target, bool isCond, u32 rd, bool isLikely) {
 
         inDelaySlot[1] = false;
     }
+}
+
+/* Raises a level 1 exception */
+void raiseLevel1Exception(Exception e) {
+    std::printf("[EE Core   ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
+
+    u32 vector;
+    if (cop0::isBEV()) { vector = 0xBFC00200; } else { vector = 0x80000000; }
+
+    if (e == Exception::Interrupt) {
+        vector += 0x200;
+    } else {
+        vector += 0x180;
+    }
+
+    if (!cop0::isEXL()) {
+        cop0::setBD(inDelaySlot[0]);
+
+        if (inDelaySlot[0]) {
+            cop0::setEPC(cpc - 4);
+        } else {
+            cop0::setEPC(cpc);
+        }
+    }
+
+    inDelaySlot[0] = false;
+    inDelaySlot[1] = true;
+
+    cop0::setEXL(true);
+
+    setPC(vector);
 }
 
 /* --- Instruction handlers --- */
@@ -1828,6 +1862,15 @@ void iSYNC(u32 instr) {
     }
 }
 
+/* SYSCALL */
+void iSYSCALL() {
+    if (doDisasm) {
+        std::printf("[EE Core   ] SYSCALL\n");
+    }
+
+    raiseLevel1Exception(Exception::SystemCall);
+}
+
 /* TLB Write Indexed */
 void iTLBWI() {
     /* TODO: implement the TLB? */
@@ -1860,37 +1903,38 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
-                    case SPECIALOpcode::SLL   : iSLL(instr); break;
-                    case SPECIALOpcode::SRL   : iSRL(instr); break;
-                    case SPECIALOpcode::SRA   : iSRA(instr); break;
-                    case SPECIALOpcode::SLLV  : iSLLV(instr); break;
-                    case SPECIALOpcode::SRLV  : iSRLV(instr); break;
-                    case SPECIALOpcode::SRAV  : iSRAV(instr); break;
-                    case SPECIALOpcode::JR    : iJR(instr); break;
-                    case SPECIALOpcode::JALR  : iJALR(instr); break;
-                    case SPECIALOpcode::MOVZ  : iMOVZ(instr); break;
-                    case SPECIALOpcode::MOVN  : iMOVN(instr); break;
-                    case SPECIALOpcode::SYNC  : iSYNC(instr); break;
-                    case SPECIALOpcode::MFHI  : iMFHI(instr); break;
-                    case SPECIALOpcode::MFLO  : iMFLO(instr); break;
-                    case SPECIALOpcode::DSLLV : iDSLLV(instr); break;
-                    case SPECIALOpcode::DSRAV : iDSRAV(instr); break;
-                    case SPECIALOpcode::MULT  : iMULT(instr); break;
-                    case SPECIALOpcode::DIV   : iDIV(instr); break;
-                    case SPECIALOpcode::DIVU  : iDIVU(instr); break;
-                    case SPECIALOpcode::ADDU  : iADDU(instr); break;
-                    case SPECIALOpcode::SUBU  : iSUBU(instr); break;
-                    case SPECIALOpcode::AND   : iAND(instr); break;
-                    case SPECIALOpcode::OR    : iOR(instr); break;
-                    case SPECIALOpcode::NOR   : iNOR(instr); break;
-                    case SPECIALOpcode::SLT   : iSLT(instr); break;
-                    case SPECIALOpcode::SLTU  : iSLTU(instr); break;
-                    case SPECIALOpcode::DADDU : iDADDU(instr); break;
-                    case SPECIALOpcode::DSLL  : iDSLL(instr); break;
-                    case SPECIALOpcode::DSRL  : iDSRL(instr); break;
-                    case SPECIALOpcode::DSLL32: iDSLL32(instr); break;
-                    case SPECIALOpcode::DSRL32: iDSRL32(instr); break;
-                    case SPECIALOpcode::DSRA32: iDSRA32(instr); break;
+                    case SPECIALOpcode::SLL    : iSLL(instr); break;
+                    case SPECIALOpcode::SRL    : iSRL(instr); break;
+                    case SPECIALOpcode::SRA    : iSRA(instr); break;
+                    case SPECIALOpcode::SLLV   : iSLLV(instr); break;
+                    case SPECIALOpcode::SRLV   : iSRLV(instr); break;
+                    case SPECIALOpcode::SRAV   : iSRAV(instr); break;
+                    case SPECIALOpcode::JR     : iJR(instr); break;
+                    case SPECIALOpcode::JALR   : iJALR(instr); break;
+                    case SPECIALOpcode::MOVZ   : iMOVZ(instr); break;
+                    case SPECIALOpcode::MOVN   : iMOVN(instr); break;
+                    case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
+                    case SPECIALOpcode::SYNC   : iSYNC(instr); break;
+                    case SPECIALOpcode::MFHI   : iMFHI(instr); break;
+                    case SPECIALOpcode::MFLO   : iMFLO(instr); break;
+                    case SPECIALOpcode::DSLLV  : iDSLLV(instr); break;
+                    case SPECIALOpcode::DSRAV  : iDSRAV(instr); break;
+                    case SPECIALOpcode::MULT   : iMULT(instr); break;
+                    case SPECIALOpcode::DIV    : iDIV(instr); break;
+                    case SPECIALOpcode::DIVU   : iDIVU(instr); break;
+                    case SPECIALOpcode::ADDU   : iADDU(instr); break;
+                    case SPECIALOpcode::SUBU   : iSUBU(instr); break;
+                    case SPECIALOpcode::AND    : iAND(instr); break;
+                    case SPECIALOpcode::OR     : iOR(instr); break;
+                    case SPECIALOpcode::NOR    : iNOR(instr); break;
+                    case SPECIALOpcode::SLT    : iSLT(instr); break;
+                    case SPECIALOpcode::SLTU   : iSLTU(instr); break;
+                    case SPECIALOpcode::DADDU  : iDADDU(instr); break;
+                    case SPECIALOpcode::DSLL   : iDSLL(instr); break;
+                    case SPECIALOpcode::DSRL   : iDSRL(instr); break;
+                    case SPECIALOpcode::DSLL32 : iDSLL32(instr); break;
+                    case SPECIALOpcode::DSRL32 : iDSRL32(instr); break;
+                    case SPECIALOpcode::DSRA32 : iDSRA32(instr); break;
                     default:
                         std::printf("[EE Core   ] Unhandled SPECIAL instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
 
