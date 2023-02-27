@@ -78,6 +78,7 @@ enum SPECIALOpcode {
     SRL     = 0x02,
     SRA     = 0x03,
     SLLV    = 0x04,
+    SRLV    = 0x06,
     JR      = 0x08,
     JALR    = 0x09,
     SYSCALL = 0x0C,
@@ -88,6 +89,7 @@ enum SPECIALOpcode {
     MULT    = 0x18,
     MULTU   = 0x19,
     DIVU    = 0x1B,
+    ADD     = 0x20,
     ADDU    = 0x21,
     SUBU    = 0x23,
     AND     = 0x24,
@@ -306,6 +308,30 @@ void raiseException(Exception e) {
 }
 
 /* --- Instruction handlers --- */
+
+/* ADD */
+void iADD(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = regs[rs] + regs[rt];
+
+    /* If rs and imm have the same sign and rs and the result have a different sign,
+     * an arithmetic overflow occurred
+     */
+    if (!((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
+        std::printf("[IOP       ] ADDI: Unhandled Arithmetic Overflow\n");
+
+        exit(0);
+    }
+
+    set(rt, res);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] ADD %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
 
 /* ADD Immediate */
 void iADDI(u32 instr) {
@@ -990,6 +1016,19 @@ void iSRL(u32 instr) {
     }
 }
 
+/* Shift Right Logical Variable */
+void iSRLV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, regs[rt] >> (regs[rs] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SRLV %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]);
+    }
+}
+
 /* SUBtract Unsigned */
 void iSUBU(u32 instr) {
     const auto rd = getRd(instr);
@@ -1067,6 +1106,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SRL    : iSRL(instr); break;
                     case SPECIALOpcode::SRA    : iSRA(instr); break;
                     case SPECIALOpcode::SLLV   : iSLLV(instr); break;
+                    case SPECIALOpcode::SRLV   : iSRLV(instr); break;
                     case SPECIALOpcode::JR     : iJR(instr); break;
                     case SPECIALOpcode::JALR   : iJALR(instr); break;
                     case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
@@ -1077,6 +1117,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::MULT   : iMULT(instr); break;
                     case SPECIALOpcode::MULTU  : iMULTU(instr); break;
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
+                    case SPECIALOpcode::ADD    : iADD(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
                     case SPECIALOpcode::SUBU   : iSUBU(instr); break;
                     case SPECIALOpcode::AND    : iAND(instr); break;
