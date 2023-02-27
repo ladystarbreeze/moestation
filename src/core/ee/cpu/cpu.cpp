@@ -118,6 +118,7 @@ enum SPECIALOpcode {
     AND     = 0x24,
     OR      = 0x25,
     NOR     = 0x27,
+    MFSA    = 0x28,
     SLT     = 0x2A,
     SLTU    = 0x2B,
     DADDU   = 0x2D,
@@ -154,6 +155,8 @@ enum COP0Opcode {
 };
 
 enum MMIOpcode {
+    MMI0  = 0x08,
+    MMI2  = 0x09,
     MFLO1 = 0x12,
     MULT1 = 0x18,
     DIV1  = 0x1A,
@@ -162,12 +165,23 @@ enum MMIOpcode {
     MMI3  = 0x29,
 };
 
+enum MMI0Opcode {
+    PEXTLW = 0x12,
+};
+
 enum MMI1Opcode {
     PADDUW = 0x10,
 };
 
+enum MMI2Opcode {
+    PMFHI  = 0x08,
+    PMFLO  = 0x09,
+    PCPYLD = 0x0E,
+};
+
 enum MMI3Opcode {
-    PAND = 0x12,
+    PCPYUD = 0x0E,
+    POR    = 0x12,
 };
 
 /* --- EE Core registers --- */
@@ -1322,6 +1336,17 @@ void iMFLO1(u32 instr) {
     }
 }
 
+/* Move From Shift Amount */
+void iMFSA(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set64(rd, sa);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MFSA %s; %s = 0x%016llX\n", regNames[rd], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* MOVe on Not equal */
 void iMOVN(u32 instr) {
     const auto rd = getRd(instr);
@@ -1468,18 +1493,90 @@ void iPADDUW(u32 instr) {
     }
 }
 
-/* Parallel AND */
-void iPAND(u32 instr) {
+/* Parallel CoPY Lower Doubleword */
+void iPCPYLD(u32 instr) {
     const auto rd = getRd(instr);
     const auto rs = getRs(instr);
     const auto rt = getRt(instr);
 
-    const auto res = u128{{regs[rs]._u64[0] & regs[rt]._u64[0], regs[rs]._u64[1] & regs[rt]._u64[1]}};
+    const auto res = u128{{regs[rt]._u64[0], regs[rs]._u64[0]}}; // rs[63:0] = 127:64, rt[63:0] = 63:0
 
     set128(rd, res);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] PAND %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+        std::printf("[EE Core   ] PCPYLD %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel CoPY Upper Doubleword */
+void iPCPYUD(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = u128{{regs[rs]._u64[1], regs[rt]._u64[1]}}; // rs[127:64] = 63:0, rt[127:64] = 127:64
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PCPYUD %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel EXTend Lower Word */
+void iPEXTLW(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    res._u32[0] = regs[rt]._u32[0];
+    res._u32[1] = regs[rs]._u32[0];
+    res._u32[2] = regs[rt]._u32[1];
+    res._u32[3] = regs[rs]._u32[1];
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PEXTLW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel Move From HI */
+void iPMFHI(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set128(rd, regs[CPUReg::HI]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PMFHI %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel Move From LO */
+void iPMFLO(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set128(rd, regs[CPUReg::LO]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PMFLO %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel OR */
+void iPOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = u128{{regs[rs]._u64[0] | regs[rt]._u64[0], regs[rs]._u64[1] | regs[rt]._u64[1]}};
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] POR %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
     }
 }
 
@@ -1925,6 +2022,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::AND    : iAND(instr); break;
                     case SPECIALOpcode::OR     : iOR(instr); break;
                     case SPECIALOpcode::NOR    : iNOR(instr); break;
+                    case SPECIALOpcode::MFSA   : iMFSA(instr); break;
                     case SPECIALOpcode::SLT    : iSLT(instr); break;
                     case SPECIALOpcode::SLTU   : iSLTU(instr); break;
                     case SPECIALOpcode::DADDU  : iDADDU(instr); break;
@@ -2045,6 +2143,34 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
+                    case MMIOpcode::MMI0:
+                        {
+                            const auto shamt = getShamt(instr);
+
+                            switch (shamt) {
+                                case MMI0Opcode::PEXTLW: iPEXTLW(instr); break;
+                                default:
+                                    std::printf("[EE Core   ] Unhandled MMI0 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
+
+                                    exit(0);
+                            }
+                        }
+                        break;
+                    case MMIOpcode::MMI2:
+                        {
+                            const auto shamt = getShamt(instr);
+
+                            switch (shamt) {
+                                case MMI2Opcode::PMFHI : iPMFHI(instr); break;
+                                case MMI2Opcode::PMFLO : iPMFLO(instr); break;
+                                case MMI2Opcode::PCPYLD: iPCPYLD(instr); break;
+                                default:
+                                    std::printf("[EE Core   ] Unhandled MMI2 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
+
+                                    exit(0);
+                            }
+                        }
+                        break;
                     case MMIOpcode::MFLO1: iMFLO1(instr); break;
                     case MMIOpcode::MULT1: iMULT1(instr); break;
                     case MMIOpcode::DIV1 : iDIV1(instr); break;
@@ -2067,7 +2193,8 @@ void decodeInstr(u32 instr) {
                             const auto shamt = getShamt(instr);
 
                             switch (shamt) {
-                                case MMI3Opcode::PAND: iPAND(instr); break;
+                                case MMI3Opcode::PCPYUD: iPCPYUD(instr); break;
+                                case MMI3Opcode::POR   : iPOR(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI3 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
