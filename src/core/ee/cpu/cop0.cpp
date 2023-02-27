@@ -55,7 +55,7 @@ struct Status {
 
 Status status;
 
-u32 epc;
+u32 epc, errorEPC;
 
 u32 count, compare;
 
@@ -64,6 +64,13 @@ void init() {
     status.bev = true;
 
     count = compare = 0;
+}
+
+/* Increments Count, checks for COMPARE interrupts */
+void incrementCount(i64 c) {
+    count += c;
+
+    /* TODO: COMPARE interrupts */
 }
 
 /* Returns a COP0 register (32-bit) */
@@ -127,11 +134,44 @@ void set32(u32 idx, u32 data) {
     }
 }
 
-/* Increments Count, checks for COMPARE interrupts */
-void incrementCount(i64 c) {
-    count += c;
+/* Returns true if EDI is set */
+bool isEDI() {
+    return status.edi;
+}
 
-    /* TODO: COMPARE interrupts */
+/* Returns true if ERL is set */
+bool isERL() {
+    return status.erl;
+}
+
+/* Returns true if EXL is set */
+bool isEXL() {
+    return status.exl;
+}
+
+/* Sets EIE */
+void setEIE(bool eie) {
+    status.eie = eie;
+}
+
+/* Sets ERL */
+void setERL(bool erl) {
+    status.erl = erl;
+}
+
+/* Sets EXL */
+void setEXL(bool exl) {
+    status.exl = exl;
+}
+
+/* Returns EPC */
+u32 getEPC() {
+    return epc;
+}
+
+/* Returns ErrorEPC */
+u32 getErrorEPC() {
+    return errorEPC;
 }
 
 }
