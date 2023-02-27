@@ -90,10 +90,27 @@ u32 get32(u32 idx) {
     u32 data;
 
     switch (idx) {
-        case static_cast<u32>(COP0Reg::Count): return count;
+        case static_cast<u32>(COP0Reg::BadVAddr): return 0;
+        case static_cast<u32>(COP0Reg::Count   ): return count;
+        case static_cast<u32>(COP0Reg::Status  ):
+            data  = status.ie;
+            data |= status.exl << 1;
+            data |= status.erl << 2;
+            data |= status.ksu << 3;
+            data |= (status.im & 3) << 10;
+            data |= status.bem << 12;
+            data |= (status.im & 4) << 13;
+            data |= status.eie << 16;
+            data |= status.edi << 17;
+            data |= status.ch  << 18;
+            data |= status.bev << 22;
+            data |= status.dev << 23;
+            data |= status.cu  << 28;
+            break;
         case static_cast<u32>(COP0Reg::Cause):
             data  = cause.excode << 2;
-            data |= cause.ip  << 10;
+            data |= (cause.ip & 3) << 10;
+            data |= (cause.ip & 4) << 13;
             data |= cause.ercode << 16;
             data |= cause.ce  << 28;
             data |= cause.bd2 << 30;
