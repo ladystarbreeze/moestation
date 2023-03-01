@@ -326,7 +326,7 @@ void iADD(u32 instr) {
         exit(0);
     }
 
-    set(rt, res);
+    set(rd, res);
 
     if (doDisasm) {
         std::printf("[IOP       ] ADD %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
@@ -873,7 +873,7 @@ void iSB(u32 instr) {
         std::printf("[IOP       ] SB %s, 0x%X(%s); [0x%08X] = 0x%02X\n", regNames[rt], imm, regNames[rs], addr, data);
     }
 
-    assert(!cop0::isCacheIsolated() || (addr >> 28));
+    if (cop0::isCacheIsolated()) return;
 
     write8(addr, data);
 }
@@ -892,13 +892,13 @@ void iSH(u32 instr) {
         std::printf("[IOP       ] SH %s, 0x%X(%s); [0x%08X] = 0x%04X\n", regNames[rt], imm, regNames[rs], addr, data);
     }
 
-    assert(!cop0::isCacheIsolated() || (addr >> 28));
-
     if (addr & 1) {
         std::printf("[IOP       ] SH: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
         exit(0);
     }
+
+    if (cop0::isCacheIsolated()) return;
 
     write16(addr, data);
 }
@@ -1056,17 +1056,13 @@ void iSW(u32 instr) {
         std::printf("[IOP       ] SW %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
     }
 
-    if (cop0::isCacheIsolated() && !(addr >> 28)) {
-        //std::printf("[IOP       ] Cache isolated\n");
-
-        return;
-    }
-
     if (addr & 3) {
         std::printf("[IOP       ] SW: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
 
         exit(0);
     }
+
+    if (cop0::isCacheIsolated()) return;
 
     write32(addr, data);
 }
