@@ -74,6 +74,23 @@ void init() {
     std::printf("[Timer:IOP ] Init OK\n");
 }
 
+u32 read32(u32 addr) {
+    // Get channel ID
+    const auto chn = getTimer(addr);
+
+    auto &timer = timers[chn];
+
+    switch ((addr & ~0xFF0) | (1 << 8)) {
+        case TimerReg::COUNT:
+            std::printf("[Timer:IOP ] Unhandled 32-bit read @ T%d_COUNT\n", chn);
+            return timer.count;
+        default:
+            std::printf("[Timer:IOP ] Unhandled 32-bit read @ 0x%08X\n", addr);
+
+            exit(0);
+    }
+}
+
 void write16(u32 addr, u16 data) {
     // Get channel ID
     const auto chn = getTimer(addr);

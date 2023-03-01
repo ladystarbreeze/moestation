@@ -203,14 +203,14 @@ u32 read32(u32 addr) {
     } else {
         switch (addr) {
             case 0x1000F000:
-                std::printf("[Bus:EE    ] 32-bit read @ INTC_STAT\n");
+                //std::printf("[Bus:EE    ] 32-bit read @ INTC_STAT\n");
                 return intc::readStat();
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit read @ INTC_MASK\n");
                 return intc::readMask();
             case 0x1000F520:
                 std::printf("[Bus:EE    ] 32-bit read @ D_ENABLER\n");
-                return 0x1201;
+                return ee::dmac::readEnable();
             case 0x1000F130:
             case 0x1000F400:
             case 0x1000F410:
@@ -313,8 +313,13 @@ u32 readIOP32(u32 addr) {
         std::memcpy(&data, &iopRAM[addr], sizeof(u32));
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SIF), static_cast<u32>(MemorySize::SIF))) {
         return sif::readIOP(addr);
-    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA)) ||
-               inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA0), static_cast<u32>(MemorySizeIOP::DMA))) {
+        std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X (DMA)\n", addr);
+        return 0;
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
+               inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
+        return iop::timer::read32(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X (DMA)\n", addr);
         return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
@@ -413,6 +418,9 @@ void write32(u32 addr, u32 data) {
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit write @ INTC_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
+            case 0x1000F520:
+                std::printf("[Bus:EE    ] 32-bit write @ D_ENABLEW = 0x%08X\n", data);
+                return ee::dmac::writeEnable(data);
             case 0x1000F100:
             case 0x1000F120:
             case 0x1000F140:
