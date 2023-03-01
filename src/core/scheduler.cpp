@@ -16,12 +16,13 @@ namespace ps2::scheduler {
 struct Event {
     u64 id;
 
+    int param;
     i64 cyclesUntilEvent;
 };
 
 std::deque<Event> events; // Event queue
 
-std::vector<std::function<void(i64)>> registeredFuncs;
+std::vector<std::function<void(int, i64)>> registeredFuncs;
 
 i64 cycleCount, cyclesUntilNextEvent;
 
@@ -41,7 +42,7 @@ void init() {
 }
 
 /* Registers an event, returns event ID */
-u64 registerEvent(std::function<void(i64)> func) {
+u64 registerEvent(std::function<void(int, i64)> func) {
     static u64 idPool;
 
     registeredFuncs.push_back(func);
@@ -50,12 +51,12 @@ u64 registerEvent(std::function<void(i64)> func) {
 }
 
 /* Adds a scheduler event */
-void addEvent(u64 id, i64 cyclesUntilEvent, bool doReschedule) {
+void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule) {
     assert(cyclesUntilEvent > 0);
 
     //std::printf("[Scheduler ] Adding event %llu, cycles until event: %lld\n", id, cyclesUntilEvent);
 
-    events.push_front(Event{id, cyclesUntilEvent});
+    events.push_front(Event{id, param, cyclesUntilEvent});
 
     if (doReschedule) reschedule();
 }
@@ -72,11 +73,12 @@ void processEvents(i64 elapsedCycles) {
 
         if (event->cyclesUntilEvent <= 0) {
             const auto id = event->id;
+            const auto param = event->param;
             const auto cyclesUntilEvent = event->cyclesUntilEvent;
 
             event = events.erase(event);
 
-            registeredFuncs[id](cyclesUntilEvent);
+            registeredFuncs[id](param, cyclesUntilEvent);
         } else {
             event++;
         }
