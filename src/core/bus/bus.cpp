@@ -15,6 +15,7 @@
 #include "../ee/timer/timer.hpp"
 #include "../gif/gif.hpp"
 #include "../gs/gs.hpp"
+#include "../iop/cdvd/cdvd.hpp"
 #include "../iop/timer/timer.hpp"
 #include "../../common/file.hpp"
 
@@ -267,8 +268,7 @@ u8 readIOP8(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         return iopRAM[addr];
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::CDVD), static_cast<u32>(MemorySizeIOP::CDVD))) {
-        std::printf("[Bus:IOP   ] Unhandled 8-bit read @ 0x%08X (CDVD)\n", addr);
-        return 0;
+        return iop::cdvd::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
