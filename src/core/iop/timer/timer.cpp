@@ -82,7 +82,7 @@ u32 read32(u32 addr) {
 
     switch ((addr & ~0xFF0) | (1 << 8)) {
         case TimerReg::COUNT:
-            std::printf("[Timer:IOP ] Unhandled 32-bit read @ T%d_COUNT\n", chn);
+            std::printf("[Timer:IOP ] 32-bit read @ T%d_COUNT\n", chn);
             return timer.count;
         default:
             std::printf("[Timer:IOP ] Unhandled 32-bit read @ 0x%08X\n", addr);
