@@ -192,6 +192,12 @@ u32 read(u32 addr) {
                     data |= chcr.tag << 16;
                 }
                 break;
+            case static_cast<u32>(ChannelReg::QWC):
+                std::printf("[DMAC:EE   ] 32-bit read @ D%u_QWC\n", chnID);
+                return chn.qwc;
+            case static_cast<u32>(ChannelReg::TADR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D%u_TADR\n", chnID);
+                return chn.tadr;
             default:
                 std::printf("[DMAC:EE   ] Unhandled 32-bit channel read @ 0x%08X\n", addr);
 
@@ -352,11 +358,13 @@ void write(u32 addr, u32 data) {
 }
 
 void writeEnable(u32 data) {
+    /*
     if (data & (1 << 16)) {
         std::printf("[DMAC:EE   ] Unhandled DMA suspension\n");
 
         exit(0);
     }
+    */
 
     enable = data;
 
