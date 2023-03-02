@@ -130,8 +130,10 @@ enum SPECIALOpcode {
 };
 
 enum REGIMMOpcode {
-    BLTZ = 0x00,
-    BGEZ = 0x01,
+    BLTZ  = 0x00,
+    BGEZ  = 0x01,
+    BLTZL = 0x02,
+    BGEZL = 0x03,
 };
 
 enum COPOpcode {
@@ -151,6 +153,7 @@ enum COP1Opcode {
 enum COP0Opcode {
     TLBWI = 0x02,
     ERET  = 0x18,
+    EI    = 0x38,
     DI    = 0x39,
 };
 
@@ -663,6 +666,20 @@ void iBGEZ(u32 instr) {
     }
 }
 
+/* Branch if Greater than or Equal Zero Likely */
+void iBGEZL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i64)regs[rs]._u64[0] >= 0, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BGEZL %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
+    }
+}
+
 /* Branch if Greater Than Zero */
 void iBGTZ(u32 instr) {
     const auto rs = getRs(instr);
@@ -702,6 +719,20 @@ void iBLTZ(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] BLTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
+    }
+}
+
+/* Branch if Less Than Zero Likely */
+void iBLTZL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i64)regs[rs]._u64[0] < 0, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BLTZL %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -988,6 +1019,15 @@ void iDSRL32(u32 instr) {
     if (doDisasm) {
         std::printf("[EE Core   ] DSRL32 %s, %s, %u; %s = 0x%016llX\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]._u64[0]);
     }
+}
+
+/* Enable Interrupts */
+void iEI() {
+    if (doDisasm) {
+        std::printf("[EE Core   ] EI\n");
+    }
+
+    if (cop0::isEDI()) cop0::setEIE(true);
 }
 
 /* Exception RETurn */
@@ -2049,8 +2089,10 @@ void decodeInstr(u32 instr) {
                 const auto rt = getRt(instr);
 
                 switch (rt) {
-                    case REGIMMOpcode::BLTZ: iBLTZ(instr); break;
-                    case REGIMMOpcode::BGEZ: iBGEZ(instr); break;
+                    case REGIMMOpcode::BLTZ : iBLTZ(instr); break;
+                    case REGIMMOpcode::BGEZ : iBGEZ(instr); break;
+                    case REGIMMOpcode::BLTZL: iBLTZL(instr); break;
+                    case REGIMMOpcode::BGEZL: iBGEZL(instr); break;
                     default:
                         std::printf("[EE Core   ] Unhandled REGIMM instruction 0x%02X (0x%08X) @ 0x%08X\n", rt, instr, cpc);
 
@@ -2085,6 +2127,7 @@ void decodeInstr(u32 instr) {
                             switch (funct) {
                                 case COP0Opcode::TLBWI: iTLBWI(); break;
                                 case COP0Opcode::ERET : iERET(); break;
+                                case COP0Opcode::EI   : iEI(); break;
                                 case COP0Opcode::DI   : iDI(); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled COP0 control instruction 0x%02X (0x%08X) @ 0x%08X\n", funct, instr, cpc);
