@@ -418,7 +418,7 @@ void write32(u32 addr, u32 data) {
             case 0x1000F010:
                 std::printf("[Bus:EE    ] 32-bit write @ INTC_MASK = 0x%08X\n", data);
                 return intc::writeMask(data);
-            case 0x1000F520:
+            case 0x1000F590:
                 std::printf("[Bus:EE    ] 32-bit write @ D_ENABLEW = 0x%08X\n", data);
                 return ee::dmac::writeEnable(data);
             case 0x1000F100:
