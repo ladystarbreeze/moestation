@@ -13,6 +13,7 @@
 #include "scheduler.hpp"
 #include "bus/bus.hpp"
 #include "ee/cpu/cpu.hpp"
+#include "ee/dmac/dmac.hpp"
 #include "ee/timer/timer.hpp"
 #include "ee/vif/vif.hpp"
 #include "gs/gs.hpp"
@@ -27,7 +28,7 @@ using VectorInterface = ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
-constexpr i64 EE_CYCLES = 32;
+constexpr i64 EE_CYCLES = 16;
 
 VectorInterface vif[2] = {VectorInterface(0, ee::cpu::getVU(0)), VectorInterface(1, ee::cpu::getVU(1))};
 
@@ -43,6 +44,7 @@ void init(const char *biosPath, const char *path) {
     bus::init(biosPath, &vif[0], &vif[1]);
 
     ee::cpu::init();
+    ee::dmac::init();
     ee::timer::init();
     
     gs::init();
