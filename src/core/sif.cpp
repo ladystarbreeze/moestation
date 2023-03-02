@@ -24,6 +24,8 @@ enum SIFReg {
 u32 mscom = 0, msflg = 0; // EE->IOP communication
 u32 smcom = 0, smflg = 0; // IOP->EE communication
 
+u32 bd6;
+
 u32 read(u32 addr) {
     switch (addr & 0xFF) {
         case SIFReg::MSCOM:
@@ -61,7 +63,7 @@ u32 readIOP(u32 addr) {
             return 0xF0000101; // ??
         case SIFReg::BD6:
             std::printf("[SIF:IOP   ] 32-bit read @ BD6\n");
-            return 0;
+            return bd6;
         default:
             std::printf("[SIF:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
@@ -86,6 +88,8 @@ void write(u32 addr, u32 data) {
             break;
         case SIFReg::BD6:
             std::printf("[SIF:EE    ] 32-bit write @ BD6 = 0x%08X\n", data);
+
+            bd6 = data;
             break;
         default:
             std::printf("[SIF:EE    ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
@@ -113,9 +117,6 @@ void writeIOP(u32 addr, u32 data) {
             break;
         case SIFReg::CTRL:
             std::printf("[SIF:IOP   ] 32-bit write @ CTRL = 0x%08X\n", data);
-            break;
-        case SIFReg::BD6:
-            std::printf("[SIF:IOP   ] 32-bit write @ BD6 = 0x%08X\n", data);
             break;
         default:
             std::printf("[SIF:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
