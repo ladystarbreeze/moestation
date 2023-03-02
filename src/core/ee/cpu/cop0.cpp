@@ -211,6 +211,11 @@ void setERL(bool erl) {
     status.erl = erl;
 }
 
+/* Sets EXCODE */
+void setEXCODE(Exception e) {
+    cause.excode = e;
+}
+
 /* Sets EXL */
 void setEXL(bool exl) {
     status.exl = exl;

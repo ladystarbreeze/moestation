@@ -35,6 +35,7 @@ bool isEXL();
 void setBD(bool bd);
 void setEIE(bool eie);
 void setERL(bool erl);
+void setEXCODE(Exception e);
 void setEXL(bool exl);
 
 u32 getEPC();

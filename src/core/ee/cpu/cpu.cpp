@@ -534,6 +534,8 @@ void doBranch(u32 target, bool isCond, u32 rd, bool isLikely) {
 void raiseLevel1Exception(Exception e) {
     std::printf("[EE Core   ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
 
+    cop0::setEXCODE(e);
+
     u32 vector;
     if (cop0::isBEV()) { vector = 0xBFC00200; } else { vector = 0x80000000; }
 
@@ -554,7 +556,7 @@ void raiseLevel1Exception(Exception e) {
     }
 
     inDelaySlot[0] = false;
-    inDelaySlot[1] = true;
+    inDelaySlot[1] = false;
 
     cop0::setEXL(true);
 
@@ -1004,7 +1006,7 @@ void iERET() {
         cop0::setEXL(false);
     }
 
-    if (doFastBoot && (pc == EELOAD) && !isFastBootDone) {
+    if (doFastBoot && !isFastBootDone && (pc == EELOAD)) {
         ps2::fastBoot();
 
         isFastBootDone = true;
@@ -1480,13 +1482,17 @@ void iPADDUW(u32 instr) {
     const auto rs = getRs(instr);
     const auto rt = getRt(instr);
 
+    u128 res;
+
     for (int i = 0; i < 4; i++) {
-        u64 res = (u64)regs[rs]._u32[i] + regs[rt]._u32[i];
+        u64 res_ = (u64)regs[rs]._u32[i] + regs[rt]._u32[i];
 
-        if (res > UINT32_MAX) res = UINT32_MAX;
+        if (res_ > UINT32_MAX) res_ = UINT32_MAX;
 
-        regs[rd]._u32[i] = res;
+        res._u32[i] = res_;
     }
+
+    set128(rd, res);
 
     if (doDisasm) {
         std::printf("[EE Core   ] PADDUW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
