@@ -12,9 +12,23 @@
 
 namespace ps2::iop::cdvd {
 
+/* --- CDVD registers --- */
+
+enum CDVDReg {
+    NCMDSTAT = 0x1F402005,
+};
+
+enum NCMDStatus {
+    ERROR = 1 << 0,
+    READY = 1 << 6,
+    BUSY  = 1 << 7,
+};
+
 const char *isoPath = NULL;
 
 std::ifstream file;
+
+u8 ncmdstat = NCMDStatus::READY;
 
 void init(const char *path) {
     isoPath = path;
@@ -26,6 +40,18 @@ void init(const char *path) {
         std::printf("[CDVD      ] Unable to open file \"%s\"\n", isoPath);
 
         exit(0);
+    }
+}
+
+u8 read(u32 addr) {
+    switch (addr) {
+        case CDVDReg::NCMDSTAT:
+            std::printf("[CDVD      ] 8-bit read @ NCMDSTAT\n");
+            return ncmdstat;
+        default:
+            std::printf("[CDVD      ] Unhandled 8-bit read @ 0x%08X\n", addr);
+
+            exit(0);
     }
 }
 

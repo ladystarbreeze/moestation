@@ -11,6 +11,8 @@ namespace ps2::iop::cdvd {
 
 void init(const char *path);
 
+u8 read(u32 addr);
+
 void getExecPath(char *path);
 
 }
