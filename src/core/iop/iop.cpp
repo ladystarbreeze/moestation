@@ -21,6 +21,7 @@ using Exception = cop0::Exception;
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
 constexpr auto doDisasm = false;
+constexpr auto doPrintf = true;
 
 /* --- IOP register definitions --- */
 
@@ -302,7 +303,7 @@ void raiseException(Exception e) {
     }
 
     inDelaySlot[0] = false;
-    inDelaySlot[1] = true;
+    inDelaySlot[1] = false;
 
     setPC(vector);
 }
@@ -1213,6 +1214,16 @@ void init() {
 void step(i64 c) {
     for (int i = c; i != 0; i--) {
         cpc = pc; // Save current PC
+
+        if (doPrintf && ((cpc == 0x12C48) || (cpc == 0x1420C) || (cpc == 0x1430C))) {
+            auto ptr = regs[5];
+
+            for (auto ctr = regs[6]; ctr > 0; ctr--) {
+                std::printf("%c", read8(ptr & 0x1FFFFF));
+
+                ptr++;
+            }
+        }
 
         // Advance delay slot helper
         inDelaySlot[0] = inDelaySlot[1];
