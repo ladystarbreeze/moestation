@@ -5,14 +5,33 @@
 
 #include "dmac.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 
+#include "../../scheduler.hpp"
+#include "../../sif.hpp"
+#include "../../bus/bus.hpp"
+#include "../../iop/dmac/dmac.hpp"
+
 namespace ps2::ee::dmac {
+
+using IOPChannel = iop::dmac::Channel;
 
 const char *chnNames[10] = {
     "VIF0", "VIF1", "PATH3", "IPU_FROM", "IPU_TO", "SIF0", "SIF1", "SIF2", "SPR_FROM", "SPR_TO"
+};
+
+enum Mode {
+    Normal,
+    Chain,
+    Interleave,
+};
+
+/* Source chain tags */
+enum STag {
+    REFE, CNT, NEXT, REF, REFS, CALL, RET, END,
 };
 
 /* --- DMAC registers --- */
@@ -60,8 +79,8 @@ struct PCR {
 struct STAT {
     u16  cis;  // Channel interrupt status
     bool sis;  // Stall interrupt status
-    bool meis; // MFIFP empty interrupt status
-    bool beis; // Buss error interrupt status
+    bool meis; // MFIFO empty interrupt status
+    bool beis; // Bus error interrupt status
     u16  cim;  // Channel interrupt mask
     bool sim;  // Stall interrupt mask
     bool meim; // MFIFO empty interrupt mask
@@ -77,26 +96,6 @@ struct ChannelControl {
     bool str; // Start
     u16  tag;
 };
-
-/* Returns DMA channel from address */
-Channel getChannel(u32 addr) {
-    switch ((addr >> 8) & 0xFF) {
-        case 0x80: return Channel::VIF0;
-        case 0x90: return Channel::VIF1;
-        case 0xA0: return Channel::PATH3;
-        case 0xB0: return Channel::IPUFROM;
-        case 0xB4: return Channel::IPUTO;
-        case 0xC0: return Channel::SIF0;
-        case 0xC4: return Channel::SIF1;
-        case 0xC8: return Channel::SIF2;
-        case 0xD0: return Channel::SPRFROM;
-        case 0xD4: return Channel::SPRTO;
-        default:
-            std::printf("[DMAC:EE   ] Invalid channel\n");
-
-            exit(0);
-    }
-}
 
 /* DMA channel */
 struct DMAChannel {
@@ -118,21 +117,163 @@ STAT stat; // D_STAT
 
 u32 enable = 0x1201; // D_ENABLE
 
+/* DMAC scheduler event IDs */
+u32 idTransferEnd, idSIF1Start;
+
+void checkInterrupt();
+
+void transferEndEvent(int chnID) {
+    auto &chn  = channels[chnID];
+    auto &chcr = channels[chnID].chcr;
+
+    std::printf("[DMAC:EE   ] %s transfer end\n", chnNames[chnID]);
+    
+    chn.hasTag = false;
+    chn.isTagEnd = false;
+
+    chcr.str = false;
+
+    /* Set interrupt pending flag, check for interrupts */
+
+    stat.cis |= 1 << chnID;
+
+    checkInterrupt();
+}
+
+void sif1StartEvent() {
+    iop::dmac::setDRQ(IOPChannel::SIF1, true);
+}
+
+/* Returns DMA channel from address */
+Channel getChannel(u32 addr) {
+    switch ((addr >> 8) & 0xFF) {
+        case 0x80: return Channel::VIF0;
+        case 0x90: return Channel::VIF1;
+        case 0xA0: return Channel::PATH3;
+        case 0xB0: return Channel::IPUFROM;
+        case 0xB4: return Channel::IPUTO;
+        case 0xC0: return Channel::SIF0;
+        case 0xC4: return Channel::SIF1;
+        case 0xC8: return Channel::SIF2;
+        case 0xD0: return Channel::SPRFROM;
+        case 0xD4: return Channel::SPRTO;
+        default:
+            std::printf("[DMAC:EE   ] Invalid channel\n");
+
+            exit(0);
+    }
+}
+
+/* Reads and decodes a source chain tag */
+void readSourceTag(Channel chnID) {
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    /* Read DMAtag from memory */
+    auto dmaTag = bus::readDMAC128(chn.tadr);
+
+    /* Set QWC and TAG */
+    chn.qwc  = dmaTag._u16[0];
+    chcr.tag = dmaTag._u16[1];
+
+    std::printf("[DMAC:EE   ] New DMAtag = 0x%016llX%016llX, QWC = %u\n", dmaTag._u64[1], dmaTag._u64[0], chn.qwc);
+
+    /* Get tag ID */
+    const auto tag = (STag)((dmaTag._u16[1] >> 12) & 3);
+
+    switch (tag) {
+        case STag::REFE:
+            chn.madr  = dmaTag._u32[1];
+            chn.tadr += 16;
+
+            chn.isTagEnd = true;
+
+            std::printf("[DMAC:EE   ] REFE; MADR = 0x%08X, TADR = 0x%08X\n", chn.madr, chn.tadr);
+            break;
+        default:
+            std::printf("[DMAC:EE   ] Unhandled Source Chain tag %d\n", tag);
+
+            exit(0);
+    }
+}
+
+/* Performs SIF1 DMA */
+void doSIF1() {
+    const auto chnID = Channel::SIF1;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:EE   ] SIF1 transfer\n");
+
+    /* SIF1 is always from RAM, in Chain mode */
+    assert(chcr.mod == Mode::Chain);
+
+    if (!chn.qwc) { // Same as `if (!chn.hasTag)` because SIF1 only runs in Chain mode
+        /* Read and decode DMAtag */
+        readSourceTag(chnID);
+
+        assert(!chcr.tte); // No tag transfers?
+        assert(chn.qwc);
+    }
+
+    /* Transfer up to 8 quadwords at a time */
+
+    auto qwc  = std::min((u16)((32 - sif::getSIF1Size()) / 4), std::min(chn.qwc, (u16)8));
+    auto madr = chn.madr;
+
+    assert(qwc);
+
+    for (u16 i = 0; i < qwc; i++) {
+        sif::writeSIF1(bus::readDMAC128(madr + 16 * i));
+    }
+
+    /* Update channel registers */
+    chn.qwc  -= qwc;
+    chn.madr += 16 * qwc;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    scheduler::addEvent(idSIF1Start, 0, 4 * qwc, true);
+
+    if (!chn.qwc && chn.isTagEnd) {
+        /* NOTE: no need to reschedule because the SIF1 Start event happens at the same time */
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, false);
+    }
+}
+
+void startDMA(Channel chn) {
+    switch (chn) {
+        case Channel::SIF1: doSIF1(); break;
+        default:
+            std::printf("[DMAC:EE   ] Unhandled channel %d DMA transfer\n", chn);
+
+            exit(0);
+    }
+}
+
+void checkInterrupt() {
+    if (stat.cim & stat.cis) {
+        std::printf("[DMAC:EE   ] Unhandled DMA interrupt\n");
+
+        exit(0);
+    }
+}
+
 void checkRunning(Channel chn) {
-    std::printf("[DMAC:EE   ] Channel %d check\n", chn);
+    const auto chnID = static_cast<int>(chn);
+
+    std::printf("[DMAC:EE   ] Channel %d check\n", chnID);
 
     if ((enable & (1 << 16)) || !ctrl.dmae) {
         std::printf("[DMAC:EE   ] D_ENABLE = 0x%08X, D_CTRL.DMAE = %d\n", enable, ctrl.dmae);
         return;
     }
 
-    if (channels[chn].drq && channels[chn].chcr.str) {
-        std::printf("[DMAC:EE   ] Unhandled channel %d DMA transfer\n", chn);
+    std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", chnID, channels[chnID].drq, pcr.pce, chnID, pcr.cde & (1 << chnID), chnID, channels[chnID].chcr.str);
 
-        exit(0);
-    }
-
-    std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", chn, channels[chn].drq, pcr.pce, chn, pcr.cde & (1 << chn), chn, channels[chn].chcr.str);
+    if (channels[chnID].drq && (!pcr.pce || (pcr.cde & (1 << chnID))) && channels[chnID].chcr.str) startDMA(chn);
 }
 
 void checkRunningAll() {
@@ -142,13 +283,9 @@ void checkRunningAll() {
     }
 
     for (int i = 0; i < 10; i++) {
-        if (channels[i].drq && (!pcr.pce || (pcr.cde & (1 << i))) && channels[i].chcr.str) {
-            std::printf("[DMAC:EE   ] Unhandled channel %d DMA transfer\n", i);
-
-            exit(0);
-        }
-
         std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", i, channels[i].drq, pcr.pce, i, pcr.cde & (1 << i), i, channels[i].chcr.str);
+
+        if (channels[i].drq && (!pcr.pce || (pcr.cde & (1 << i))) && channels[i].chcr.str) startDMA((Channel)i);
     }
 }
 
@@ -156,23 +293,26 @@ void init() {
     std::memset(&channels, 0, 10 * sizeof(DMAChannel));
 
     /* Set initial DRQs */
-    channels[Channel::VIF0   ].drq = true;
-    channels[Channel::VIF1   ].drq = true;
-    channels[Channel::PATH3  ].drq = true;
-    channels[Channel::IPUTO  ].drq = true;
-    channels[Channel::SIF1   ].drq = true;
-    channels[Channel::SIF2   ].drq = true;
-    channels[Channel::SPRFROM].drq = true;
-    channels[Channel::SPRTO  ].drq = true;
+    channels[static_cast<int>(Channel::VIF0   )].drq = true;
+    channels[static_cast<int>(Channel::VIF1   )].drq = true;
+    channels[static_cast<int>(Channel::PATH3  )].drq = true;
+    channels[static_cast<int>(Channel::IPUTO  )].drq = true;
+    channels[static_cast<int>(Channel::SIF1   )].drq = true;
+    channels[static_cast<int>(Channel::SIF2   )].drq = true;
+    channels[static_cast<int>(Channel::SPRFROM)].drq = true;
+    channels[static_cast<int>(Channel::SPRTO  )].drq = true;
 
-    /* TODO: set initial DMA requests, register scheduler events */
+    /* Register scheduler events */
+
+    idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
+    idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
 }
 
 u32 read(u32 addr) {
     u32 data;
 
     if (addr < static_cast<u32>(ControlReg::CTRL)) {
-        const auto chnID = getChannel(addr);
+        const auto chnID = static_cast<int>(getChannel(addr));
 
         auto &chn = channels[chnID];
 
@@ -249,7 +389,7 @@ u32 readEnable() {
 
 void write(u32 addr, u32 data) {
     if (addr < static_cast<u32>(ControlReg::CTRL)) {
-        const auto chnID = getChannel(addr);
+        const auto chnID = static_cast<int>(getChannel(addr));
 
         auto &chn = channels[chnID];
 
@@ -268,7 +408,7 @@ void write(u32 addr, u32 data) {
                     chcr.str = data & (1 << 8);
                 }
 
-                checkRunning(chnID);
+                checkRunning(static_cast<Channel>(chnID));
                 break;
             case static_cast<u32>(ChannelReg::MADR):
                 std::printf("[DMAC:EE   ] 32-bit write @ D%u_MADR = 0x%08X\n", chnID, data);
@@ -373,7 +513,7 @@ void writeEnable(u32 data) {
 
 /* Sets DRQ, runs channel if enabled */
 void setDRQ(Channel chn, bool drq) {
-    channels[chn].drq = drq;
+    channels[static_cast<int>(chn)].drq = drq;
 
     checkRunning(chn);
 }

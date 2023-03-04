@@ -7,8 +7,12 @@
 
 #include <cassert>
 #include <cstdio>
+#include <queue>
 
 namespace ps2::sif {
+
+/* --- SIF constants --- */
+constexpr int FIFO_SIZE = 32;
 
 /* --- SIF registers --- */
 
@@ -20,6 +24,9 @@ enum SIFReg {
     CTRL  = 0x40,
     BD6   = 0x60,
 };
+
+/* SIF FIFOs */
+std::queue<u32> sif0FIFO, sif1FIFO;
 
 u32 mscom = 0, msflg = 0; // EE->IOP communication
 u32 smcom = 0, smflg = 0; // IOP->EE communication
@@ -69,6 +76,16 @@ u32 readIOP(u32 addr) {
 
             exit(0);
     }
+}
+
+u32 readSIF1() {
+    assert(sif1FIFO.size() > 0);
+
+    const auto data = sif1FIFO.front();
+
+    sif1FIFO.pop();
+
+    return data;
 }
 
 void write(u32 addr, u32 data) {
@@ -128,6 +145,20 @@ void writeIOP(u32 addr, u32 data) {
 
             exit(0);
     }
+}
+
+void writeSIF1(const u128 &data) {
+    assert(sif1FIFO.size() <= (FIFO_SIZE - 4));
+
+    sif1FIFO.push(data._u32[0]);
+    sif1FIFO.push(data._u32[1]);
+    sif1FIFO.push(data._u32[2]);
+    sif1FIFO.push(data._u32[3]);
+}
+
+/* Returns size of SIF1 FIFO */
+int getSIF1Size() {
+    return sif1FIFO.size();
 }
 
 }

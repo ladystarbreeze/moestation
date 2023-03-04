@@ -10,7 +10,7 @@
 namespace ps2::ee::dmac {
 
 /* DMA channels */
-enum Channel {
+enum class Channel {
     VIF0,    // Vector Interface 0
     VIF1,    // Vector Interface 1
     PATH3,   // Graphics Interface (PATH3)
