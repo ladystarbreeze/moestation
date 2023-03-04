@@ -350,6 +350,19 @@ u32 readIOP32(u32 addr) {
     return data;
 }
 
+
+
+/* Reads a word from the IOP bus (DMA) */
+u32 readDMAC32(u32 addr) {
+    assert(addr < 0x200000);
+
+    u32 data;
+
+    memcpy(&data, &iopRAM[addr], sizeof(u32));
+
+    return data;
+}
+
 /* Returns a quadword from the EE bus (DMAC) */
 u128 readDMAC128(u32 addr) {
     assert(!(addr & 15));

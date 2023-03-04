@@ -78,6 +78,20 @@ u32 readIOP(u32 addr) {
     }
 }
 
+u128 readSIF0() {
+    assert(sif0FIFO.size() > 3);
+
+    u128 data;
+
+    for (int i = 0; i < 4; i++) {
+        data._u32[i] = sif0FIFO.front();
+
+        sif0FIFO.pop();
+    }
+
+    return data;
+}
+
 u32 readSIF1() {
     assert(sif1FIFO.size() > 0);
 
@@ -147,6 +161,12 @@ void writeIOP(u32 addr, u32 data) {
     }
 }
 
+void writeSIF0(u32 data) {
+    assert(sif0FIFO.size() != FIFO_SIZE);
+
+    sif0FIFO.push(data);
+}
+
 void writeSIF1(const u128 &data) {
     assert(sif1FIFO.size() <= (FIFO_SIZE - 4));
 
@@ -154,6 +174,11 @@ void writeSIF1(const u128 &data) {
     sif1FIFO.push(data._u32[1]);
     sif1FIFO.push(data._u32[2]);
     sif1FIFO.push(data._u32[3]);
+}
+
+/* Returns size of SIF0 FIFO */
+int getSIF0Size() {
+    return sif0FIFO.size();
 }
 
 /* Returns size of SIF1 FIFO */

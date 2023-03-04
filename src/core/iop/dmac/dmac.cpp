@@ -109,7 +109,7 @@ bool cie = true;  // Channel interrupt enable
 bool mid = false; // Master interrupt disable
 
 /* DMAC scheduler event IDs */
-u32 idTransferEnd, idSIF1Start;
+u32 idTransferEnd, idSIF0Start, idSIF1Start;
 
 void checkInterrupt();
 
@@ -132,6 +132,10 @@ void transferEndEvent(int chnID) {
     }
 
     checkInterrupt();
+}
+
+void sif0StartEvent() {
+    ee::dmac::setDRQ(EEChannel::SIF0, true);
 }
 
 void sif1StartEvent() {
@@ -158,6 +162,68 @@ Channel getChannel(u32 addr) {
             std::printf("[DMAC:IOP  ] Unknown channel\n");
 
             return Channel::Unknown;
+    }
+}
+
+/* Performs SIF0 DMA */
+void doSIF0() {
+    const auto chnID = Channel::SIF0;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] SIF0 transfer\n");
+
+    //assert(chcr.mod == Mode::Chain);
+
+    assert(!chcr.dec);
+    assert(chcr.tte);
+
+    if (!chn.len) {
+        auto dmaTag = (u64)bus::readDMAC32(chn.tadr) | ((u64)bus::readDMAC32(chn.tadr + 4) << 32);
+
+        std::printf("[DMAC:IOP  ] New DMAtag = 0x%016llX\n", dmaTag);
+
+        /* Transfer EEtag */
+
+        sif::writeSIF0(bus::readDMAC32(chn.tadr + 8));
+        sif::writeSIF0(bus::readDMAC32(chn.tadr + 12));
+
+        chn.tadr += 16;
+
+        /* Decode tag */
+
+        chn.madr = dmaTag & 0xFFFFFC;
+        chn.len  = (dmaTag >> 32) & 0xFFFFF;
+
+        if (chn.len & 3) chn.len = (chn.len | 3) + 1; // Forcefully round up len
+
+        chn.isTagEnd = dmaTag & (3 << 30);
+
+        std::printf("[DMAC:IOP  ] MADR = 0x%06X, len = %u, isTagEnd = %d\n", chn.madr, chn.len, chn.isTagEnd);
+    }
+
+    /* Transfer up to 32 words at a time */
+    const auto len = std::min((u32)(32 - sif::getSIF0Size()), std::min(chn.len, (u32)32));
+
+    assert(len);
+
+    for (u16 i = 0; i < len; i++) {
+        sif::writeSIF0(bus::readDMAC32(chn.madr + 4 * i));
+    }
+
+    /* Update channel registers */
+    chn.len  -= len;
+    chn.madr += 4 * len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    scheduler::addEvent(idSIF0Start, 0, 16 * len, true);
+
+    if (!chn.len && chn.isTagEnd) {
+        /* NOTE: no need to reschedule because the SIF0 Start event happens at the same time */
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, false);
     }
 }
 
@@ -198,7 +264,7 @@ void doSIF1() {
     }
 
     /* Transfer up to 32 words at a time */
-    const auto len = std::min((u32)sif::getSIF1Size(), std::min(chn.len, (u32)8));
+    const auto len = std::min((u32)sif::getSIF1Size(), std::min(chn.len, (u32)32));
 
     assert(len);
 
@@ -223,6 +289,7 @@ void doSIF1() {
 
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::SIF0: doSIF0(); break;
         case Channel::SIF1: doSIF1(); break;
         default:
             std::printf("[DMAC:IOP  ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
@@ -288,6 +355,7 @@ void init() {
     /* Register scheduler events */
 
     idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
+    idSIF0Start = scheduler::registerEvent([](int, i64) { sif0StartEvent(); });
     idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
 }
 
@@ -295,9 +363,33 @@ u32 read32(u32 addr) {
     u32 data;
 
     if ((addr < static_cast<u32>(ControlReg::DPCR)) || ((addr > static_cast<u32>(ControlReg::DICR)) && (addr < static_cast<u32>(ControlReg::DPCR2)))) {
-        std::printf("[DMAC:IOP  ] Unhandled 32-bit channel read @ 0x%08X\n", addr);
+        const auto chnID = static_cast<int>(getChannel(addr));
 
-        exit(0);
+        auto &chn = channels[chnID];
+
+        switch (addr & ~(0xFF0)) {
+            case static_cast<u32>(ChannelReg::CHCR):
+                {
+                    auto &chcr = chn.chcr;
+
+                    std::printf("[DMAC:IOP  ] 32-bit read @ D%d_CHCR\n", chnID);
+
+                    data  = chcr.dir;
+                    data |= chcr.dec << 1;
+                    data |= chcr.tte << 8;
+                    data |= chcr.mod << 9;
+                    data |= chcr.cpd << 16;
+                    data |= chcr.cpc << 20;
+                    data |= chcr.str << 24;
+                    data |= chcr.fst << 28;
+                    data |= chcr.spf << 30;
+                }
+                break;
+            default:
+                std::printf("[DMAC:IOP  ] Unhandled 32-bit channel read @ 0x%08X\n", addr);
+
+                exit(0);
+        }
     } else {
         switch (addr) {
             case static_cast<u32>(ControlReg::DPCR):
@@ -393,7 +485,7 @@ void write32(u32 addr, u32 data) {
                 {
                     auto &chcr = chn.chcr;
 
-                    std::printf("[DMAC:IOP  ] 32-bit write @ D%u_MADR = 0x%08X\n", chnID, data);
+                    std::printf("[DMAC:IOP  ] 32-bit write @ D%u_CHCR = 0x%08X\n", chnID, data);
 
                     assert(!(data & (1 << 29)));
 
@@ -408,7 +500,7 @@ void write32(u32 addr, u32 data) {
                     chcr.spf = data & (1 << 30);
                 }
 
-                //checkRunning(static_cast<Channel>(chnID));
+                checkRunning(static_cast<Channel>(chnID));
                 break;
             case static_cast<u32>(ChannelReg::TADR):
                 std::printf("[DMAC:IOP  ] 32-bit write @ D%u_TADR = 0x%08X\n", chnID, data);

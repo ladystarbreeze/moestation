@@ -25,6 +25,7 @@ u8  readIOP8(u32 addr);
 u16 readIOP16(u32 addr);
 u32 readIOP32(u32 addr);
 
+u32  readDMAC32(u32 addr);
 u128 readDMAC128(u32 addr);
 
 void write8(u32 addr, u8 data);
