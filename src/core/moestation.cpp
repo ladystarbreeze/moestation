@@ -19,6 +19,7 @@
 #include "gs/gs.hpp"
 #include "iop/iop.hpp"
 #include "iop/cdvd/cdvd.hpp"
+#include "iop/dmac/dmac.hpp"
 #include "iop/timer/timer.hpp"
 #include "../common/types.hpp"
 
@@ -51,6 +52,7 @@ void init(const char *biosPath, const char *path) {
 
     iop::init();
     iop::cdvd::init(execPath);
+    iop::dmac::init();
     iop::timer::init();
 }
 
