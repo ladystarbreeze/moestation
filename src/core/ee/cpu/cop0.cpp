@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+#include "cpu.hpp"
+
 namespace ps2::ee::cpu::cop0 {
 
 /* --- COP0 register definitions --- */
@@ -68,6 +70,10 @@ Status status;
 u32 epc, errorEPC;
 
 u32 count, compare;
+
+void checkInterrupt() {
+    if (status.ie && status.eie && !status.erl && !status.exl && (status.im & cause.ip)) cpu::doInterrupt();
+}
 
 void init() {
     status.erl = true;
@@ -162,6 +168,8 @@ void set32(u32 idx, u32 data) {
             status.bev = data & (1 << 22);
             status.dev = data & (1 << 23);
             status.cu  = (data >> 28) & 0xF;
+
+            checkInterrupt();
             break;
         case static_cast<u32>(COP0Reg::Config): break;
         case static_cast<u32>(COP0Reg::EPC   ):
@@ -174,6 +182,14 @@ void set32(u32 idx, u32 data) {
 
             exit(0);
     }
+}
+
+/* Sets DMAC IRQ bit in Cause, optionally triggers interrupt */
+void setInterruptPendingDMAC(bool irq) {
+    cause.ip &= ~2;
+    cause.ip |= irq << 1;
+
+    checkInterrupt();
 }
 
 /* Returns true if BEV is set */
@@ -204,11 +220,15 @@ void setBD(bool bd) {
 /* Sets EIE */
 void setEIE(bool eie) {
     status.eie = eie;
+
+    checkInterrupt();
 }
 
 /* Sets ERL */
 void setERL(bool erl) {
     status.erl = erl;
+
+    checkInterrupt();
 }
 
 /* Sets EXCODE */
@@ -219,6 +239,8 @@ void setEXCODE(Exception e) {
 /* Sets EXL */
 void setEXL(bool exl) {
     status.exl = exl;
+
+    checkInterrupt();
 }
 
 /* Returns EPC */

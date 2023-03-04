@@ -27,6 +27,8 @@ u32 get32(u32 idx);
 
 void set32(u32 idx, u32 data);
 
+void setInterruptPendingDMAC(bool irq);
+
 bool isBEV();
 bool isEDI();
 bool isERL();

@@ -2308,6 +2308,16 @@ void step(i64 c) {
     cop0::incrementCount(c);
 }
 
+void doInterrupt() {
+    /* Set CPC and advance delay slot */
+    cpc = pc;
+
+    inDelaySlot[0] = inDelaySlot[1];
+    inDelaySlot[1] = false;
+
+    raiseLevel1Exception(Exception::Interrupt);
+}
+
 /* Returns pointer to vector unit */
 VectorUnit *getVU(int vuID) {
     return &vus[vuID];
