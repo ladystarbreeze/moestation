@@ -11,7 +11,8 @@ namespace ps2::sif {
 
 u32  read(u32 addr);
 u32  readIOP(u32 addr);
-u128 readSIF0();
+u64  readSIF0_64();
+u128 readSIF0_128();
 u32  readSIF1();
 
 void write(u32 addr, u32 data);

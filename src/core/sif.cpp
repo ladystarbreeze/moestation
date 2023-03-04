@@ -78,7 +78,21 @@ u32 readIOP(u32 addr) {
     }
 }
 
-u128 readSIF0() {
+u64 readSIF0_64() {
+    assert(sif0FIFO.size() > 1);
+
+    u64 data = 0;
+
+    for (int i = 0; i < 2; i++) {
+        data |= (u64)sif0FIFO.front() << (32 * i);
+
+        sif0FIFO.pop();
+    }
+
+    return data;
+}
+
+u128 readSIF0_128() {
     assert(sif0FIFO.size() > 3);
 
     u128 data;

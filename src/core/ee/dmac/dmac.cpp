@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <cstring>
 
+#include "../cpu/cop0.hpp"
 #include "../../scheduler.hpp"
 #include "../../sif.hpp"
 #include "../../bus/bus.hpp"
@@ -30,8 +31,13 @@ enum Mode {
 };
 
 /* Source chain tags */
-enum STag {
+enum class STag {
     REFE, CNT, NEXT, REF, REFS, CALL, RET, END,
+};
+
+/* Destination chain tags */
+enum class DTag {
+    CNT, CNTS, END = 7,
 };
 
 /* --- DMAC registers --- */
@@ -118,7 +124,7 @@ STAT stat; // D_STAT
 u32 enable = 0x1201; // D_ENABLE
 
 /* DMAC scheduler event IDs */
-u32 idTransferEnd, idSIF1Start;
+u32 idTransferEnd, idSIF0Start, idSIF1Start;
 
 void checkInterrupt();
 
@@ -138,6 +144,10 @@ void transferEndEvent(int chnID) {
     stat.cis |= 1 << chnID;
 
     checkInterrupt();
+}
+
+void sif0StartEvent() {
+    iop::dmac::setDRQ(IOPChannel::SIF0, true);
 }
 
 void sif1StartEvent() {
@@ -183,7 +193,7 @@ void readSourceTag(Channel chnID) {
 
     switch (tag) {
         case STag::REFE:
-            chn.madr  = dmaTag._u32[1];
+            chn.madr  = dmaTag._u32[1] & ~15;
             chn.tadr += 16;
 
             chn.isTagEnd = true;
@@ -194,6 +204,83 @@ void readSourceTag(Channel chnID) {
             std::printf("[DMAC:EE   ] Unhandled Source Chain tag %d\n", tag);
 
             exit(0);
+    }
+}
+
+/* Decodes a destination chain tag */
+void decodeDestinationTag(Channel chnID, u64 dmaTag) {
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    /* Set QWC and TAG */
+    chn.qwc  = dmaTag & 0xFFFF;
+    chcr.tag = (dmaTag >> 16) & 0xFFFF;
+
+    std::printf("[DMAC:EE   ] New DMAtag = 0x%016llX, QWC = %u\n", dmaTag, chn.qwc);
+
+    /* Get tag ID */
+    const auto tag = (DTag)((dmaTag >> 28) & 3);
+
+    switch (tag) {
+        case DTag::CNTS:
+            chn.madr = (dmaTag >> 32) & ~15;
+
+            chn.isTagEnd = dmaTag & (1 << 31) && chcr.tie;
+
+            std::printf("[DMAC:EE   ] CNTS; MADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.isTagEnd);
+            break;
+        default:
+            std::printf("[DMAC:EE   ] Unhandled Destination Chain tag %d\n", tag);
+
+            exit(0);
+    }
+}
+
+/* Performs SIF0 DMA */
+void doSIF0() {
+    const auto chnID = Channel::SIF0;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:EE   ] SIF0 transfer\n");
+
+    /* SIF0 is always to RAM, in Chain mode */
+    assert(chcr.mod == Mode::Chain);
+    assert(!chcr.tte);
+
+    if (!chn.qwc) { // Same as `if (!chn.hasTag)` because SIF0 only runs in Chain mode
+        /* Read and decode DMAtag */
+        const auto dmaTag = sif::readSIF0_64();
+
+        decodeDestinationTag(chnID, dmaTag);
+
+        assert(chn.qwc);
+    }
+
+    /* Transfer up to 8 quadwords at a time */
+
+    auto qwc  = std::min((u16)(sif::getSIF0Size() / 4), std::min(chn.qwc, (u16)8));
+    auto madr = chn.madr;
+
+    assert(qwc);
+
+    for (u16 i = 0; i < qwc; i++) {
+        bus::writeDMAC128(madr + 16 * i, sif::readSIF0_128());
+    }
+
+    /* Update channel registers */
+    chn.qwc  -= qwc;
+    chn.madr += 16 * qwc;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    scheduler::addEvent(idSIF0Start, 0, 4 * qwc, true);
+
+    if (!chn.qwc && chn.isTagEnd) {
+        /* NOTE: no need to reschedule because the SIF0 Start event happens at the same time */
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, false);
     }
 }
 
@@ -245,6 +332,7 @@ void doSIF1() {
 
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::SIF0: doSIF0(); break;
         case Channel::SIF1: doSIF1(); break;
         default:
             std::printf("[DMAC:EE   ] Unhandled channel %d DMA transfer\n", chn);
@@ -254,11 +342,9 @@ void startDMA(Channel chn) {
 }
 
 void checkInterrupt() {
-    if (stat.cim & stat.cis) {
-        std::printf("[DMAC:EE   ] Unhandled DMA interrupt\n");
+    std::printf("[DMAC:EE   ] STAT.CIM = 0x%03X, STAT.CIS = 0x%03X\n", stat.cim, stat.cis);
 
-        exit(0);
-    }
+    ee::cpu::cop0::setInterruptPendingDMAC(stat.cim & stat.cis);
 }
 
 void checkRunning(Channel chn) {
@@ -305,6 +391,7 @@ void init() {
     /* Register scheduler events */
 
     idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
+    idSIF0Start = scheduler::registerEvent([](int, i64) { sif0StartEvent(); });
     idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
 }
 
@@ -470,6 +557,8 @@ void write(u32 addr, u32 data) {
                 if (data & (1 << 15)) stat.beis = false;
                 if (data & (1 << 29)) stat.sim  = !stat.sim;
                 if (data & (1 << 30)) stat.meim = !stat.meim;
+
+                checkInterrupt();
                 break;
             case static_cast<u32>(ControlReg::PCR):
                 std::printf("[DMAC:EE   ] 32-bit write @ D_PCR = 0x%08X\n", data);

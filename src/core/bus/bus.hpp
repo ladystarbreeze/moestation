@@ -39,5 +39,6 @@ void writeIOP16(u32 addr, u16 data);
 void writeIOP32(u32 addr, u32 data);
 
 void writeDMAC32(u32 addr, u32 data);
+void writeDMAC128(u32 addr, const u128 &data);
 
 }

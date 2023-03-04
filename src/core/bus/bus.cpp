@@ -637,4 +637,18 @@ void writeDMAC32(u32 addr, u32 data) {
     memcpy(&iopRAM[addr], &data, sizeof(u32));
 }
 
+/* Writes a word to the EE bus (DMA) */
+void writeDMAC128(u32 addr, const u128 &data) {
+    if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
+        memcpy(&ram[addr], &data, sizeof(u128));
+    } else {
+        switch (addr) {
+            default:
+                std::printf("[Bus:EE    ] Unhandled 128-bit DMAC write @ 0x%08X = 0x%016llX%016llX\n", addr, data._u64[1], data._u64[0]);
+
+                exit(0);
+        }
+    }
+}
+
 }
