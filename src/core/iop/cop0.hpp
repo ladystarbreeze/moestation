@@ -11,6 +11,7 @@ namespace ps2::iop::cop0 {
 
 /* Exception codes */
 enum Exception {
+    Interrupt  = 0x0,
     SystemCall = 0x8,
 };
 
@@ -26,6 +27,8 @@ void set(u32 idx, u32 data);
 
 void enterException(Exception e);
 void leaveException();
+
+void setInterruptPending(bool irq);
 
 bool isBEV();
 bool isCacheIsolated();

@@ -8,7 +8,30 @@
 #include <cassert>
 #include <cstdio>
 
+#include "iop/cop0.hpp"
+
 namespace ps2::intc {
+
+/* IOP interrupt sources */
+const char *iopIntNames[] = {
+    "VBLANK Start",
+    "GPU",
+    "CDVD",
+    "DMA",
+    "Timer 0", "Timer 1", "Timer 2", /* IOP timer interrupts */
+    "SIO0", "SIO1", /* Serial I/O interrupts */
+    "SPU2",
+    "PIO",
+    "VBLANK End",
+    "DVD",
+    "PCMCIA",
+    "Timer 3", "Timer 4", "Timer 5", /* IOP timer interrupts */
+    "SIO2",
+    "HTR0", "HTR1", "HTR2", "HTR3",
+    "USB",
+    "EXTR",
+    "FireWire", "FDMA", /* FireWire interrupts */
+};
 
 /* --- INTC registers --- */
 
@@ -18,6 +41,8 @@ u16 intcMASK = 0, intcSTAT = 0;
 /* IOP interrupt registers */
 u32 iMASK = 0, iSTAT = 0;
 bool iCTRL = false;
+
+void checkInterruptIOP();
 
 /* Returns INTC_MASK */
 u16 readMask() {
@@ -46,6 +71,8 @@ u32 readCtrlIOP() {
     /* Reading I_CTRL turns off interrupts */
     iCTRL = false;
 
+    checkInterruptIOP();
+
     return oldCTRL;
 }
 
@@ -62,16 +89,36 @@ void writeStat(u16 data) {
 /* Writes I_MASK */
 void writeMaskIOP(u32 data) {
     iMASK = data & 0x3FFFFFF;
+
+    checkInterruptIOP();
 }
 
 /* Writes I_STAT */
 void writeStatIOP(u32 data) {
-    iSTAT = (iSTAT & ~data) & 0x3FFFFFF;
+    iSTAT = iSTAT & data;
+
+    checkInterruptIOP();
 }
 
 /* Writes I_CTRL */
 void writeCtrlIOP(u32 data) {
     iCTRL = data & 1;
+
+    checkInterruptIOP();
+}
+
+void sendInterruptIOP(IOPInterrupt i) {
+    std::printf("[INTC:IOP  ] %s interrupt request\n", iopIntNames[static_cast<int>(i)]);
+
+    iSTAT |= 1 << static_cast<int>(i);
+
+    checkInterruptIOP();
+}
+
+void checkInterruptIOP() {
+    //std::printf("[INTC:IOP  ] I_CTRL = %d, I_STAT = 0x%07X, I_MASK = 0x%07X\n", iCTRL, iSTAT, iMASK);
+
+    iop::cop0::setInterruptPending(iCTRL && (iSTAT & iMASK));
 }
 
 }

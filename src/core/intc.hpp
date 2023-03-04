@@ -9,6 +9,27 @@
 
 namespace ps2::intc {
 
+/* IOP interrupt sources */
+enum class IOPInterrupt {
+    VBLANKStart,
+    GPU,
+    CDVD,
+    DMA,
+    Timer0, Timer1, Timer2, /* IOP timer interrupts */
+    SIO0, SIO1, /* Serial I/O interrupts */
+    SPU2,
+    PIO,
+    VBLANKEnd,
+    DVD,
+    PCMCIA,
+    Timer3, Timer4, Timer5, /* IOP timer interrupts */
+    SIO2,
+    HTR0, HTR1, HTR2, HTR3,
+    USB,
+    EXTR,
+    FWRE, FDMA, /* FireWire interrupts */
+};
+
 u16 readMask();
 u16 readStat();
 
@@ -22,5 +43,7 @@ void writeStat(u16 data);
 void writeMaskIOP(u32 data);
 void writeStatIOP(u32 data);
 void writeCtrlIOP(u32 data);
+
+void sendInterruptIOP(IOPInterrupt i);
 
 }

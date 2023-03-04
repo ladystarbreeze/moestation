@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+#include "iop.hpp"
+
 namespace ps2::iop::cop0 {
 
 /* --- COP0 register definitions --- */
@@ -58,6 +60,10 @@ Cause cause;
 Status status;
 
 u32 epc; // Exception program counter
+
+void checkInterrupt() {
+    if (status.cie && (status.im & cause.ip)) iop::doInterrupt();
+}
 
 void init() {
     status.bev = true;
@@ -131,9 +137,13 @@ void set(u32 idx, u32 data) {
             status.bev = data & (1 << 22);
             status.re  = data & (1 << 25);
             status.cu  = (data >> 28) & 0xF;
+
+            checkInterrupt();
             break;
         case static_cast<u32>(COP0Reg::Cause):
             cause.ip = (data >> 8) & 0xF;
+
+            checkInterrupt();
             break;
         default:
             std::printf("[COP0:IOP  ] Unhandled register write @ %u = 0x%08X\n", idx, data);
@@ -168,6 +178,16 @@ void leaveException() {
     status.cku = status.pku;
     status.pku = status.oku;
     status.oku = false;
+
+    checkInterrupt();
+}
+
+/* Sets IP bit in Cause, optionally triggers an interrupt */
+void setInterruptPending(bool irq) {
+    cause.ip &= ~(1 << 2);
+    cause.ip |= irq << 2;
+
+    checkInterrupt();
 }
 
 /* Returns true if BEV is set */

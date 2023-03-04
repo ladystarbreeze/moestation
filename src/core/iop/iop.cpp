@@ -1233,4 +1233,14 @@ void step(i64 c) {
     }
 }
 
+void doInterrupt() {
+    /* Set CPC and advance delay slot */
+    cpc = pc;
+
+    inDelaySlot[0] = inDelaySlot[1];
+    inDelaySlot[1] = false;
+
+    raiseException(Exception::Interrupt);
+}
+
 }

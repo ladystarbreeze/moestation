@@ -12,4 +12,6 @@ namespace ps2::iop {
 void init();
 void step(i64 c);
 
+void doInterrupt();
+
 }
