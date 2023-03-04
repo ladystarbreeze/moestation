@@ -5,6 +5,7 @@
 
 #include "cpu.hpp"
 
+#include <bit>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -107,7 +108,9 @@ enum SPECIALOpcode {
     SYSCALL = 0x0C,
     SYNC    = 0x0F,
     MFHI    = 0x10,
+    MTHI    = 0x11,
     MFLO    = 0x12,
+    MTLO    = 0x13,
     DSLLV   = 0x14,
     DSRAV   = 0x17,
     MULT    = 0x18,
@@ -119,6 +122,7 @@ enum SPECIALOpcode {
     OR      = 0x25,
     NOR     = 0x27,
     MFSA    = 0x28,
+    MTSA    = 0x29,
     SLT     = 0x2A,
     SLTU    = 0x2B,
     DADDU   = 0x2D,
@@ -158,9 +162,13 @@ enum COP0Opcode {
 };
 
 enum MMIOpcode {
+    PLZCW = 0x04,
     MMI0  = 0x08,
     MMI2  = 0x09,
+    MFHI1 = 0x10,
+    MTHI1 = 0x11,
     MFLO1 = 0x12,
+    MTLO1 = 0x13,
     MULT1 = 0x18,
     DIV1  = 0x1A,
     DIVU1 = 0x1B,
@@ -871,7 +879,7 @@ void iDIV(u32 instr) {
     }
 }
 
-/* DIVide (logical pipeline 1) */
+/* DIVide (to LO1/HI1) */
 void iDIV1(u32 instr) {
     const auto rs = getRs(instr);
     const auto rt = getRt(instr);
@@ -885,7 +893,7 @@ void iDIV1(u32 instr) {
     regs[CPUReg::HI]._u64[1] = n % d;
 
     if (doDisasm) {
-        std::printf("[EE Core   ] DIV1 %s, %s; LO = 0x%016llX, HI = 0x%016llX\n", regNames[rs], regNames[rt], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
+        std::printf("[EE Core   ] DIV1 %s, %s; LO1 = 0x%016llX, HI1 = 0x%016llX\n", regNames[rs], regNames[rt], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
     }
 }
 
@@ -907,7 +915,7 @@ void iDIVU(u32 instr) {
     }
 }
 
-/* DIVide Unsigned (logical pipeline 1) */
+/* DIVide Unsigned (to LO1/HI1) */
 void iDIVU1(u32 instr) {
     const auto rs = getRs(instr);
     const auto rt = getRt(instr);
@@ -921,7 +929,7 @@ void iDIVU1(u32 instr) {
     regs[CPUReg::HI]._u64[1] = (i32)(n % d);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] DIVU1 %s, %s; LO = 0x%016llX, HI = 0x%016llX\n", regNames[rs], regNames[rt], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
+        std::printf("[EE Core   ] DIVU1 %s, %s; LO1 = 0x%016llX, HI1 = 0x%016llX\n", regNames[rs], regNames[rt], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
     }
 }
 
@@ -1356,6 +1364,17 @@ void iMFHI(u32 instr) {
     }
 }
 
+/* Move From HI1 */
+void iMFHI1(u32 instr) {
+    const auto rd = getRd(instr);
+
+    set64(rd, regs[CPUReg::HI]._u64[1]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MFHI1 %s; %s = 0x%016llX\n", regNames[rd], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* Move From LO */
 void iMFLO(u32 instr) {
     const auto rd = getRd(instr);
@@ -1367,7 +1386,7 @@ void iMFLO(u32 instr) {
     }
 }
 
-/* Move From LO (logical pipeline 1) */
+/* Move From LO1 */
 void iMFLO1(u32 instr) {
     const auto rd = getRd(instr);
 
@@ -1440,6 +1459,61 @@ void iMTC(int copN, u32 instr) {
     }
 }
 
+/* Move To HI */
+void iMTHI(u32 instr) {
+    const auto rs = getRs(instr);
+    
+    regs[CPUReg::HI]._u64[0] = regs[rs]._u64[0];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MTHI %s; HI = 0x%016llX\n", regNames[rs], regs[CPUReg::HI]._u64[0]);
+    }
+}
+
+/* Move To HI1 */
+void iMTHI1(u32 instr) {
+    const auto rs = getRs(instr);
+    
+    regs[CPUReg::HI]._u64[1] = regs[rs]._u64[0];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MTHI1 %s; HI1 = 0x%016llX\n", regNames[rs], regs[CPUReg::HI]._u64[1]);
+    }
+}
+
+/* Move To LO */
+void iMTLO(u32 instr) {
+    const auto rs = getRs(instr);
+    
+    regs[CPUReg::LO]._u64[0] = regs[rs]._u64[0];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MTLO %s; LO = 0x%016llX\n", regNames[rs], regs[CPUReg::LO]._u64[0]);
+    }
+}
+
+/* Move To LO1 */
+void iMTLO1(u32 instr) {
+    const auto rs = getRs(instr);
+    
+    regs[CPUReg::LO]._u64[1] = regs[rs]._u64[0];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MTLO1 %s; LO1 = 0x%016llX\n", regNames[rs], regs[CPUReg::LO]._u64[1]);
+    }
+}
+
+/* Move To Shift Amount */
+void iMTSA(u32 instr) {
+    const auto rs = getRs(instr);
+
+    sa = regs[rs]._u64[0];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MTSA %s; SA = %u\n", regNames[rs], sa);
+    }
+}
+
 /* MULTiply */
 void iMULT(u32 instr) {
     const auto rd = getRd(instr);
@@ -1458,7 +1532,7 @@ void iMULT(u32 instr) {
     }
 }
 
-/* MULTiply (logical pipeline 1) */
+/* MULTiply (to LO1/HI1) */
 void iMULT1(u32 instr) {
     const auto rd = getRd(instr);
     const auto rs = getRs(instr);
@@ -1472,7 +1546,7 @@ void iMULT1(u32 instr) {
     set64(rd, regs[CPUReg::LO]._u64[1]);
 
     if (doDisasm) {
-        std::printf("[EE Core   ] MULT1 %s, %s, %s; %s/LO = 0x%016llX, HI = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
+        std::printf("[EE Core   ] MULT1 %s, %s, %s; %s/LO1 = 0x%016llX, HI1 = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[CPUReg::LO]._u64[1], regs[CPUReg::HI]._u64[1]);
     }
 }
 
@@ -1586,6 +1660,34 @@ void iPEXTLW(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] PEXTLW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel Leading Zeroes or ones Count Word */
+void iPLZCW(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+
+    u64 res;
+
+    /* If rs[31] == 1, count leading 1s, else count leading 0s */
+    if (regs[rs]._u32[0] & (1 << 31)) {
+        res = std::__countl_one(regs[rs]._u32[0]) - 1;
+    } else {
+        res = std::__countl_zero(regs[rs]._u32[0]) - 1;
+    }
+
+    /* If rs[63] == 1, count leading 1s, else count leading 0s */
+    if (regs[rs]._u32[1] & (1 << 31)) {
+        res |= (u64)(std::__countl_one(regs[rs]._u32[1]) - 1) << 32;
+    } else {
+        res |= (u64)(std::__countl_zero(regs[rs]._u32[1]) - 1) << 32;
+    }
+
+    set64(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PLZCW %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rd], regs[rd]._u64[0]);
     }
 }
 
@@ -2057,7 +2159,9 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
                     case SPECIALOpcode::SYNC   : iSYNC(instr); break;
                     case SPECIALOpcode::MFHI   : iMFHI(instr); break;
+                    case SPECIALOpcode::MTHI   : iMTHI(instr); break;
                     case SPECIALOpcode::MFLO   : iMFLO(instr); break;
+                    case SPECIALOpcode::MTLO   : iMTLO(instr); break;
                     case SPECIALOpcode::DSLLV  : iDSLLV(instr); break;
                     case SPECIALOpcode::DSRAV  : iDSRAV(instr); break;
                     case SPECIALOpcode::MULT   : iMULT(instr); break;
@@ -2069,6 +2173,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::OR     : iOR(instr); break;
                     case SPECIALOpcode::NOR    : iNOR(instr); break;
                     case SPECIALOpcode::MFSA   : iMFSA(instr); break;
+                    case SPECIALOpcode::MTSA   : iMTSA(instr); break;
                     case SPECIALOpcode::SLT    : iSLT(instr); break;
                     case SPECIALOpcode::SLTU   : iSLTU(instr); break;
                     case SPECIALOpcode::DADDU  : iDADDU(instr); break;
@@ -2192,7 +2297,8 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
-                    case MMIOpcode::MMI0:
+                    case MMIOpcode::PLZCW: iPLZCW(instr); break;
+                    case MMIOpcode::MMI0 :
                         {
                             const auto shamt = getShamt(instr);
 
@@ -2220,7 +2326,10 @@ void decodeInstr(u32 instr) {
                             }
                         }
                         break;
+                    case MMIOpcode::MFHI1: iMFHI1(instr); break;
+                    case MMIOpcode::MTHI1: iMTHI1(instr); break;
                     case MMIOpcode::MFLO1: iMFLO1(instr); break;
+                    case MMIOpcode::MTLO1: iMTLO1(instr); break;
                     case MMIOpcode::MULT1: iMULT1(instr); break;
                     case MMIOpcode::DIV1 : iDIV1(instr); break;
                     case MMIOpcode::DIVU1: iDIVU1(instr); break;
