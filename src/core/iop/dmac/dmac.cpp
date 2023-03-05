@@ -208,7 +208,7 @@ void doSIF0() {
 
     assert(len);
 
-    for (u16 i = 0; i < len; i++) {
+    for (u32 i = 0; i < len; i++) {
         sif::writeSIF0(bus::readDMAC32(chn.madr + 4 * i));
     }
 
@@ -268,7 +268,7 @@ void doSIF1() {
 
     assert(len);
 
-    for (u16 i = 0; i < len; i++) {
+    for (u32 i = 0; i < len; i++) {
         bus::writeDMAC32(chn.madr + 4 * i, sif::readSIF1());
     }
 
@@ -302,7 +302,7 @@ void startDMA(Channel chn) {
 void checkInterrupt() {
     const auto oldMIF = dicr.mif;
 
-    dicr.mif = cie && (dicr.bef || (dicr.mie && (dicr.ip || dicr2.ip)));
+    dicr.mif = cie && (dicr.bef || (dicr.mie && ((dicr.im & dicr.ip) || (dicr2.im & dicr2.ip))));
     
     std::printf("[DMAC:IOP  ] MIF = %d\n", dicr.mif);
 
@@ -524,11 +524,11 @@ void write32(u32 addr, u32 data) {
             case static_cast<u32>(ControlReg::DICR):
                 std::printf("[DMAC:IOP  ] 32-bit write @ DICR = 0x%08X\n", data);
 
-                dicr.sie = data & 0x3F;
+                dicr.sie = data & 0x7F;
                 dicr.bef = data & (1 << 15); // Is this correct???
-                dicr.im  = (data >> 16) & 0x3F;
+                dicr.im  = (data >> 16) & 0x7F;
                 dicr.mie = data & (1 << 23);
-                dicr.ip  = (dicr.ip & ~(data >> 24)) & 0x3F;
+                dicr.ip  = (dicr.ip & ~(data >> 24)) & 0x7F;
 
                 checkInterrupt();
                 break;
@@ -543,8 +543,8 @@ void write32(u32 addr, u32 data) {
                 std::printf("[DMAC:IOP  ] 32-bit write @ DICR2 = 0x%08X\n", data);
 
                 dicr2.tie = data & 0x610; // Only bits 4, 9 and 10 can be set
-                dicr2.im  = (data >> 16) & 0x1F;
-                dicr2.ip  = (dicr.ip & ~(data >> 24)) & 0x1F;
+                dicr2.im  = (data >> 16) & 0x3F;
+                dicr2.ip  = (dicr2.ip & ~(data >> 24)) & 0x3F;
 
                 checkInterrupt();
                 break;
