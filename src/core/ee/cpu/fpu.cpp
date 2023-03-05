@@ -18,6 +18,7 @@ constexpr auto doDisasm = true;
 
 enum FPUOpcode {
     ADDA = 0x18,
+    MADD = 0x1C,
 };
 
 /* --- FPU registers --- */
@@ -58,8 +59,33 @@ void iADDA(u32 instr) {
     setAcc(get(fs) + get(ft));
 }
 
+/* Multiply-ADD */
+void iMADD(u32 instr) {
+    const auto fd = getFd(instr);
+    const auto fs = getFs(instr);
+    const auto ft = getFt(instr);
+
+    if (doDisasm) {
+        std::printf("[FPU       ] MADD $%u, $%u, $%u\n", fd, fs, ft);
+    }
+
+    set(fd, get(fs) * get(ft) + acc);
+}
+
 f32 get(u32 idx) {
     return fprs[idx];
+}
+
+u32 getControl(u32 idx) {
+    switch (idx) {
+        case 31:
+            std::printf("[FPU       ] Control read @ FCR31\n");
+            return 0;
+        default:
+            std::printf("[FPU       ] Unhandled control read @ %u\n", idx);
+
+            exit(0);
+    }
 }
 
 void set(u32 idx, f32 data) {
@@ -85,6 +111,7 @@ void executeSingle(u32 instr) {
 
     switch (opcode) {
         case FPUOpcode::ADDA: iADDA(instr); break;
+        case FPUOpcode::MADD: iMADD(instr); break;
         default:
             std::printf("[FPU       ] Unhandled Single instruction 0x%02X (0x%08X)\n", opcode, instr);
 
