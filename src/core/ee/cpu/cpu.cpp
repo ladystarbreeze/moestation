@@ -90,7 +90,10 @@ enum Opcode {
     SW      = 0x2B,
     SDL     = 0x2C,
     SDR     = 0x2D,
+    CACHE   = 0x2F,
+    LWC1    = 0x31,
     LD      = 0x37,
+    SWC1    = 0x39,
     SD      = 0x3F,
 };
 
@@ -786,6 +789,7 @@ void iCFC(int copN, u32 instr) {
     u32 data;
 
     switch (copN) {
+        case 1: data = fpu::getControl(rd); break;
         case 2: data = vus[0].getControl(rd); break;
         default:
             std::printf("[EE Core   ] CFC: Unhandled coprocessor %d\n", copN);
@@ -2253,6 +2257,7 @@ void decodeInstr(u32 instr) {
                 const auto rs = getRs(instr);
 
                 switch (rs) {
+                    case COPOpcode::CF: iCFC(1, instr); break;
                     case COPOpcode::MT: iMTC(1, instr); break;
                     case COPOpcode::CT: iCTC(1, instr); break;
                     case COP1Opcode::S:
@@ -2367,23 +2372,24 @@ void decodeInstr(u32 instr) {
                 }
             }
             break;
-        case Opcode::LQ : iLQ(instr); break;
-        case Opcode::SQ : iSQ(instr); break;
-        case Opcode::LB : iLB(instr); break;
-        case Opcode::LH : iLH(instr); break;
-        case Opcode::LW : iLW(instr); break;
-        case Opcode::LBU: iLBU(instr); break;
-        case Opcode::LHU: iLHU(instr); break;
-        case Opcode::LWU: iLWU(instr); break;
-        case Opcode::SB : iSB(instr); break;
-        case Opcode::SH : iSH(instr); break;
-        case Opcode::SW : iSW(instr); break;
-        case Opcode::SDL: iSDL(instr); break;
-        case Opcode::SDR: iSDR(instr); break;
-        case 0x2F       : break; // CACHE
-        case Opcode::LD : iLD(instr); break;
-        case 0x39       : break; // SWC1
-        case Opcode::SD : iSD(instr); break;
+        case Opcode::LQ   : iLQ(instr); break;
+        case Opcode::SQ   : iSQ(instr); break;
+        case Opcode::LB   : iLB(instr); break;
+        case Opcode::LH   : iLH(instr); break;
+        case Opcode::LW   : iLW(instr); break;
+        case Opcode::LBU  : iLBU(instr); break;
+        case Opcode::LHU  : iLHU(instr); break;
+        case Opcode::LWU  : iLWU(instr); break;
+        case Opcode::SB   : iSB(instr); break;
+        case Opcode::SH   : iSH(instr); break;
+        case Opcode::SW   : iSW(instr); break;
+        case Opcode::SDL  : iSDL(instr); break;
+        case Opcode::SDR  : iSDR(instr); break;
+        case Opcode::CACHE: break; // CACHE
+        case Opcode::LWC1 : break;
+        case Opcode::LD   : iLD(instr); break;
+        case Opcode::SWC1 : break;
+        case Opcode::SD   : iSD(instr); break;
         default:
             std::printf("[EE Core   ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
