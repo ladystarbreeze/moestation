@@ -89,6 +89,7 @@ enum SPECIALOpcode {
     MTLO    = 0x13,
     MULT    = 0x18,
     MULTU   = 0x19,
+    DIV     = 0x1A,
     DIVU    = 0x1B,
     ADD     = 0x20,
     ADDU    = 0x21,
@@ -496,6 +497,24 @@ void iBNE(u32 instr) {
 
     if (doDisasm) {
         std::printf("[IOP       ] BNE %s, %s, 0x%08X; %s = 0x%08X, %s = 0x%08X\n", regNames[rs], regNames[rt], target, regNames[rs], regs[rs], regNames[rt], regs[rt]);
+    }
+}
+
+/* DIVide */
+void iDIV(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto n = (i32)regs[rs];
+    const auto d = (i32)regs[rt];
+
+    assert((d != 0) && !((n == INT32_MIN) && (d == -1)));
+
+    regs[CPUReg::LO] = n / d;
+    regs[CPUReg::HI] = n % d;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] DIV %s, %s; LO = 0x%08X, HI = 0x%08X\n", regNames[rs], regNames[rt], regs[CPUReg::LO], regs[CPUReg::HI]);
     }
 }
 
@@ -1113,6 +1132,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::MTLO   : iMTLO(instr); break;
                     case SPECIALOpcode::MULT   : iMULT(instr); break;
                     case SPECIALOpcode::MULTU  : iMULTU(instr); break;
+                    case SPECIALOpcode::DIV    : iDIV(instr); break;
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
                     case SPECIALOpcode::ADD    : iADD(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
