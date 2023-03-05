@@ -129,6 +129,7 @@ enum SPECIALOpcode {
     SLT     = 0x2A,
     SLTU    = 0x2B,
     DADDU   = 0x2D,
+    DSUBU   = 0x2F,
     DSLL    = 0x38,
     DSRL    = 0x3A,
     DSLL32  = 0x3C,
@@ -1030,6 +1031,19 @@ void iDSRL32(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] DSRL32 %s, %s, %u; %s = 0x%016llX\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
+/* Doubleword SUBtract Unsigned */
+void iDSUBU(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set64(rd, regs[rs]._u64[0] - regs[rt]._u64[0]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] DSUBU %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[0]);
     }
 }
 
@@ -2181,6 +2195,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SLT    : iSLT(instr); break;
                     case SPECIALOpcode::SLTU   : iSLTU(instr); break;
                     case SPECIALOpcode::DADDU  : iDADDU(instr); break;
+                    case SPECIALOpcode::DSUBU  : iDSUBU(instr); break;
                     case SPECIALOpcode::DSLL   : iDSLL(instr); break;
                     case SPECIALOpcode::DSRL   : iDSRL(instr); break;
                     case SPECIALOpcode::DSLL32 : iDSLL32(instr); break;
