@@ -200,6 +200,14 @@ void readSourceTag(Channel chnID) {
 
             std::printf("[DMAC:EE   ] REFE; MADR = 0x%08X, TADR = 0x%08X\n", chn.madr, chn.tadr);
             break;
+        case STag::REF:
+            chn.madr  = dmaTag._u32[1] & ~15;
+            chn.tadr += 16;
+
+            chn.isTagEnd = (dmaTag._u32[0] & (1 << 31)) && chcr.tie;
+
+            std::printf("[DMAC:EE   ] REF; MADR = 0x%08X, TADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.tadr, chn.isTagEnd);
+            break;
         default:
             std::printf("[DMAC:EE   ] Unhandled Source Chain tag %d\n", tag);
 
@@ -225,7 +233,7 @@ void decodeDestinationTag(Channel chnID, u64 dmaTag) {
         case DTag::CNTS:
             chn.madr = (dmaTag >> 32) & ~15;
 
-            chn.isTagEnd = dmaTag & (1 << 31) && chcr.tie;
+            chn.isTagEnd = (dmaTag & (1 << 31)) && chcr.tie;
 
             std::printf("[DMAC:EE   ] CNTS; MADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.isTagEnd);
             break;
