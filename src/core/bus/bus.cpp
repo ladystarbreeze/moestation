@@ -141,7 +141,10 @@ u8 read8(u32 addr) {
         return 0;
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
         return iopRAM[addr - static_cast<u32>(MemoryBase::IOPRAM)];
-    } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
+    }else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::CDVD), static_cast<u32>(MemorySizeIOP::CDVD))) {
+        std::printf("[Bus:EE    ] CDVD access from EE\n");
+        return iop::cdvd::read(addr);
+    }  else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         return bios[addr - static_cast<u32>(MemoryBase::BIOS)];
     } else {
         std::printf("[Bus:EE    ] Unhandled 8-bit read @ 0x%08X\n", addr);
