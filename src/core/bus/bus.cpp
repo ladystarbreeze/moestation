@@ -536,6 +536,8 @@ void write128(u32 addr, const u128 &data) {
 void writeIOP8(u32 addr, u8 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         iopRAM[addr] = data;
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::CDVD), static_cast<u32>(MemorySizeIOP::CDVD))) {
+        return iop::cdvd::write(addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         iopSPRAM[addr] = data;
     } else {

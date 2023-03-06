@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdio>
 
+#include "../cdvd/cdvd.hpp"
 #include "../../intc.hpp"
 #include "../../scheduler.hpp"
 #include "../../sif.hpp"
@@ -165,6 +166,42 @@ Channel getChannel(u32 addr) {
     }
 }
 
+/* Performs CDVD DMA */
+void doCDVD() {
+    const auto chnID = Channel::CDVD;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] CDVD transfer\n");
+
+    assert(chcr.mod == Mode::Slice);
+
+    assert(!chcr.dec);
+
+    /* Transfer one sector at a time */
+    const auto len = cdvd::getSectorSize() / 4;
+
+    for (u32 i = 0; i < len; i++) {
+        bus::writeDMAC32(chn.madr + 4 * i, cdvd::readDMAC());
+    }
+
+    /* Update channel registers */
+    chn.len  -= len;
+    chn.madr += 4 * len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    if (!chn.len) {
+        /* Clear BCR */
+        chn.count = 0;
+        chn.size  = 0;
+
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+    }
+}
+
 /* Performs SIF0 DMA */
 void doSIF0() {
     const auto chnID = Channel::SIF0;
@@ -289,6 +326,7 @@ void doSIF1() {
 
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::CDVD: doCDVD(); break;
         case Channel::SIF0: doSIF0(); break;
         case Channel::SIF1: doSIF1(); break;
         default:
