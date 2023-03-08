@@ -235,7 +235,7 @@ void doSIF0() {
 
         if (chn.len & 3) chn.len = (chn.len | 3) + 1; // Forcefully round up len
 
-        chn.isTagEnd = dmaTag & (3 << 30);
+        chn.isTagEnd = dmaTag & (3u << 30);
 
         std::printf("[DMAC:IOP  ] MADR = 0x%06X, len = %u, isTagEnd = %d\n", chn.madr, chn.len, chn.isTagEnd);
     }
@@ -295,7 +295,7 @@ void doSIF1() {
 
         assert(!(chn.len & 3));
 
-        chn.isTagEnd = dmaTag & (3 << 30);
+        chn.isTagEnd = dmaTag & (3u << 30);
 
         std::printf("[DMAC:IOP  ] MADR = 0x%06X, len = %u, isTagEnd = %d\n", chn.madr, chn.len, chn.isTagEnd);
     }
