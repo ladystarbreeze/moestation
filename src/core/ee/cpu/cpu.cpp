@@ -1196,7 +1196,7 @@ void iLDL(u32 instr) {
     }
 
     const auto shift = 56 - 8 * (addr & 7);
-    const auto mask = ~(~0 << shift);
+    const auto mask = ~(~0ull << shift);
 
     set64(rt, (regs[rt]._u64[0] & mask) | (read64(addr & ~7) << shift));
 }
@@ -1215,7 +1215,7 @@ void iLDR(u32 instr) {
     }
 
     const auto shift = 8 * (addr & 7);
-    const auto mask = ~(~0 >> shift);
+    const auto mask = ~(~0ull >> shift);
 
     set64(rt, (regs[rt]._u64[0] & mask) | (read64(addr & ~7) >> shift));
 }
@@ -1861,7 +1861,7 @@ void iSDL(u32 instr) {
     const auto addr = regs[rs]._u32[0] + imm;
 
     const auto shift = 56 - 8 * (addr & 7);
-    const auto mask  = ~(~0 >> shift);
+    const auto mask  = ~(~0ull >> shift);
 
     const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] >> shift);
 
@@ -1882,7 +1882,7 @@ void iSDR(u32 instr) {
     const auto addr = regs[rs]._u32[0] + imm;
 
     const auto shift = 8 * (addr & 7);
-    const auto mask  = ~(~0 << shift);
+    const auto mask  = ~(~0ull << shift);
 
     const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] << shift);
 
