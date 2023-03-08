@@ -179,8 +179,8 @@ void doCDVD() {
 
     assert(!chcr.dec);
 
-    /* Transfer one sector at a time */
-    const auto len = cdvd::getSectorSize() / 4;
+    /* Transfer up to one sector at a time */
+    const auto len = std::min(chn.len, (u32)cdvd::getSectorSize() / 4);
 
     for (u32 i = 0; i < len; i++) {
         bus::writeDMAC32(chn.madr + 4 * i, cdvd::readDMAC());
@@ -241,7 +241,7 @@ void doSIF0() {
     }
 
     /* Transfer up to 32 words at a time */
-    const auto len = std::min((u32)(32 - sif::getSIF0Size()), std::min(chn.len, (u32)32));
+    const auto len = std::min((u32)(32 - sif::getSIF0Size()), chn.len);
 
     assert(len);
 
@@ -301,7 +301,7 @@ void doSIF1() {
     }
 
     /* Transfer up to 32 words at a time */
-    const auto len = std::min((u32)sif::getSIF1Size(), std::min(chn.len, (u32)32));
+    const auto len = std::min((u32)sif::getSIF1Size(), chn.len);
 
     assert(len);
 
@@ -362,7 +362,7 @@ void checkRunning(Channel chn) {
 
     std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
 
-    if (channels[chnID].drq && cde && channels[chnID].chcr.str) startDMA(static_cast<Channel>(chnID));
+    if ((channels[chnID].drq || channels[chnID].chcr.fst) && cde && channels[chnID].chcr.str) startDMA(static_cast<Channel>(chnID));
 }
 
 void checkRunningAll() {
@@ -410,7 +410,7 @@ u32 read32(u32 addr) {
                 {
                     auto &chcr = chn.chcr;
 
-                    std::printf("[DMAC:IOP  ] 32-bit read @ D%d_CHCR\n", chnID);
+                    //std::printf("[DMAC:IOP  ] 32-bit read @ D%d_CHCR\n", chnID);
 
                     data  = chcr.dir;
                     data |= chcr.dec << 1;
