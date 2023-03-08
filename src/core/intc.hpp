@@ -9,6 +9,19 @@
 
 namespace ps2::intc {
 
+/* EE interrupt sources */
+enum class Interrupt {
+    GS,
+    SBUS,
+    VBLANKStart, VBLANKEnd,
+    VIF0, VIF1,
+    VU0, VU1,
+    IPU,
+    Timer0, Timer1, Timer2, Timer3, /* EE timer interrupts */
+    SFIFO,
+    VU0Watchdog,
+};
+
 /* IOP interrupt sources */
 enum class IOPInterrupt {
     VBLANKStart,
@@ -44,6 +57,7 @@ void writeMaskIOP(u32 data);
 void writeStatIOP(u32 data);
 void writeCtrlIOP(u32 data);
 
+void sendInterrupt(Interrupt i);
 void sendInterruptIOP(IOPInterrupt i);
 
 }

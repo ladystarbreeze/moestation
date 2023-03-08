@@ -12,6 +12,19 @@
 
 namespace ps2::intc {
 
+/* EE interrupt sources */
+const char *intNames[] = {
+    "GS",
+    "SBUS",
+    "VBLANK Start", "VBLANK End",
+    "VIF0", "VIF1",
+    "VU0", "VU1",
+    "IPU",
+    "Timer 0", "Timer 1", "Timer 2", "Timer 3", /* EE timer interrupts */
+    "SFIFO",
+    "VU0 Watchdog",
+};
+
 /* IOP interrupt sources */
 const char *iopIntNames[] = {
     "VBLANK Start",
@@ -105,6 +118,14 @@ void writeCtrlIOP(u32 data) {
     iCTRL = data & 1;
 
     checkInterruptIOP();
+}
+
+void sendInterrupt(Interrupt i) {
+    std::printf("[INTC:EE   ] %s interrupt request\n", intNames[static_cast<int>(i)]);
+
+    intcSTAT |= 1 << static_cast<int>(i);
+
+    assert(!(intcSTAT & intcMASK));
 }
 
 void sendInterruptIOP(IOPInterrupt i) {

@@ -8,16 +8,20 @@
 #include <cassert>
 #include <cstdio>
 
+#include "../intc.hpp"
 #include "../scheduler.hpp"
 #include "../ee/timer/timer.hpp"
 
 namespace ps2::gs {
 
+using Interrupt = intc::Interrupt;
+using IOPInterrupt = intc::IOPInterrupt;
+
 /* --- GS constants --- */
 
 constexpr i64 CYCLES_PER_SCANLINE = 2 * 9370; // NTSC, converted to EE clock
-//constexpr i64 SCANLINES_PER_VDRAW = 240;
-//constexpr i64 SCANLINES_PER_FRAME = 262;
+constexpr i64 SCANLINES_PER_VDRAW = 240;
+constexpr i64 SCANLINES_PER_FRAME = 262;
 
 /* --- GS privileged registers --- */
 enum PrivReg {
@@ -30,12 +34,26 @@ enum PrivReg {
     CSR    = 0x12001000,
 };
 
+i64 lineCounter = 0;
+
 /* GS scheduler event IDs */
 u64 idHBLANK;
 
 /* Handles HBLANK events */
 void hblankEvent(i64 c) {
     ee::timer::stepHBLANK();
+
+    ++lineCounter;
+
+    if (lineCounter == SCANLINES_PER_VDRAW) {
+        intc::sendInterrupt(Interrupt::VBLANKStart);
+        intc::sendInterruptIOP(IOPInterrupt::VBLANKStart);
+    } else if (lineCounter == SCANLINES_PER_FRAME) {
+        intc::sendInterrupt(Interrupt::VBLANKEnd);
+        intc::sendInterruptIOP(IOPInterrupt::VBLANKEnd);
+
+        lineCounter = 0;
+    }
     
     scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE + c, false);
 }
