@@ -195,11 +195,15 @@ void doReadCD() {
 
     const auto size = seekParam.size;
 
-    file.seekg(seekParam.pos * size + seekParam.sectorNum * size, std::ios_base::beg);
+    const auto seekPos = size * (seekParam.pos + seekParam.sectorNum);
+
+    file.seekg(seekPos, std::ios_base::beg);
 
     /* Read sector into buffer */
 
     file.read((char *)readBuf, size);
+
+    readIdx = 0;
 }
 
 /* Performs a CD style read */
@@ -288,13 +292,15 @@ void init(const char *path) {
     isoPath = path;
 
     // Open file
-    file.open(isoPath, std::ios::binary);
+    file.open(isoPath, std::ios::in | std::ios::binary);
 
     if (!file.is_open()) {
         std::printf("[CDVD      ] Unable to open file \"%s\"\n", isoPath);
 
         exit(0);
     }
+
+    file.unsetf(std::ios::skipws);
 
     /* Register CDVD events */
     idFinishSeek = scheduler::registerEvent([](int, i64) { finishSeekEvent(); });
@@ -329,15 +335,15 @@ u8 read(u32 addr) {
             return scmdstat;
         case CDVDReg::SCMDDATA:
             {
-            std::printf("[CDVD      ] 8-bit read @ SCMDDATA\n");
+                std::printf("[CDVD      ] 8-bit read @ SCMDDATA\n");
 
-            const auto data = scmdData.front();
+                const auto data = scmdData.front();
 
-            scmdData.pop();
+                scmdData.pop();
 
-            if (!scmdData.size()) scmdstat |= static_cast<u8>(SCMDStatus::NODATA); // All data has been read
+                if (!scmdData.size()) scmdstat |= static_cast<u8>(SCMDStatus::NODATA); // All data has been read
 
-            return data;
+                return data;
             }
         default:
             std::printf("[CDVD      ] Unhandled 8-bit read @ 0x%08X\n", addr);
@@ -352,13 +358,12 @@ u32 readDMAC() {
         size = seekParam.size;
     }
 
-    const auto data = *(u32 *)&readBuf[readIdx];
+    u32 data;
+    std::memcpy(&data, &readBuf[readIdx], 4);
 
     readIdx += 4;
 
     if (readIdx == size) {
-        dmac::setDRQ(Channel::CDVD, false);
-
         seekParam.oldSectorNum = seekParam.pos + seekParam.sectorNum;
 
         seekParam.sectorNum++;
@@ -370,8 +375,6 @@ u32 readDMAC() {
         } else {
             finishSeekEvent();
         }
-
-        readIdx = 0;
     }
 
     return data;
@@ -420,7 +423,7 @@ void getExecPath(char *path) {
 
     // Check the beginning of the first 512 DVD sectors for the BOOT2 string
     for (int i = 0; i < 512; i++) {
-        file.seekg(2048 * i);
+        file.seekg(2048 * i, std::ios_base::beg);
         file.read(buf, sizeof(buf));
 
         if (std::strncmp(buf, boot2Str, 16) != 0) continue;
