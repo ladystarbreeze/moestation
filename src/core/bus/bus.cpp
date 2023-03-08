@@ -301,6 +301,9 @@ u16 readIOP16(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySizeIOP::RAM))) {
         std::memcpy(&data, &iopRAM[addr], sizeof(u16));
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
+               inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
+        return iop::timer::read16(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
