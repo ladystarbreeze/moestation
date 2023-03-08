@@ -78,12 +78,12 @@ u32 readCtrlIOP() {
 
 /* Writes INTC_MASK */
 void writeMask(u16 data) {
-    intcMASK = (intcMASK ^ data) & 0x7FFF;
+    intcMASK ^= (data & 0x7FFF);
 }
 
 /* Writes INTC_STAT */
 void writeStat(u16 data) {
-    intcSTAT = (intcSTAT & ~data) & 0x7FFF;
+    intcSTAT &= (~data & 0x7FFF);
 }
 
 /* Writes I_MASK */
@@ -95,7 +95,7 @@ void writeMaskIOP(u32 data) {
 
 /* Writes I_STAT */
 void writeStatIOP(u32 data) {
-    iSTAT = iSTAT & data;
+    iSTAT &= data;
 
     checkInterruptIOP();
 }
