@@ -9,7 +9,11 @@
 #include <cstdio>
 #include <cstring>
 
+#include "../../intc.hpp"
+
 namespace ps2::iop::timer {
+
+using IOPInterrupt = intc::IOPInterrupt;
 
 /* --- IOP timer registers --- */
 
@@ -66,12 +70,74 @@ int getTimer(u32 addr) {
     }
 }
 
+void sendInterrupt(int tmID) {
+    auto &mode = timers[tmID].mode;
+
+    if (mode.intf) {
+        if (tmID < 3) {
+            intc::sendInterruptIOP(static_cast<IOPInterrupt>(tmID + 4));
+        } else {
+            intc::sendInterruptIOP(static_cast<IOPInterrupt>(tmID + 11));
+        }
+    }
+
+    if (mode.rept && mode.levl) {
+        mode.intf = !mode.intf;
+    } else {
+        mode.intf = false;
+    }
+}
+
 void init() {
     memset(&timers, 0, 4 * sizeof(Timer));
 
     for (auto &i : timers) i.prescaler = 1;
 
     std::printf("[Timer:IOP ] Init OK\n");
+}
+
+u16 read16(u32 addr) {
+    u16 data;
+
+    // Get channel ID
+    const auto chn = getTimer(addr);
+
+    auto &timer = timers[chn];
+
+    switch ((addr & ~0xFF0) | (1 << 8)) {
+        case TimerReg::MODE:
+            {
+                std::printf("[Timer:IOP ] 16-bit read @ T%d_MODE\n", chn);
+                
+                auto &mode = timer.mode;
+
+                data  = mode.gate;
+                data |= mode.gats << 1;
+                data |= mode.zret << 3;
+                data |= mode.cmpe << 4;
+                data |= mode.ovfe << 5;
+                data |= mode.rept << 6;
+                data |= mode.levl << 7;
+                data |= mode.clks << 8;
+                data |= mode.pre2 << 9;
+                data |= mode.intf << 10;
+                data |= mode.equf << 11;
+                data |= mode.ovff << 12;
+                data |= mode.pre4 << 13;
+
+                /* Clear interrupt flags */
+
+                mode.equf = false;
+                mode.ovff = false;
+            }
+            break;
+        default:
+            std::printf("[Timer:IOP ] Unhandled 32-bit read @ 0x%08X\n", addr);
+
+            exit(0);
+    }
+
+    return data;
 }
 
 u32 read32(u32 addr) {
@@ -202,7 +268,7 @@ void step(i64 c) {
                     // Checking OVFF is necessary because timer IRQs are edge-triggered
                     timer.mode.ovff = true;
 
-                    if (timer.mode.intf) assert(false);
+                    sendInterrupt(i);
                 }
             }
 
@@ -213,7 +279,7 @@ void step(i64 c) {
                     // Checking EQUF is necessary because timer IRQs are edge-triggered
                     timer.mode.equf = true;
 
-                    if (timer.mode.intf) assert(false);
+                    sendInterrupt(i);
                 }
 
                 if (timer.mode.zret) timer.count = 0;
