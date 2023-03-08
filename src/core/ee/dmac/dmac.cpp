@@ -233,7 +233,7 @@ void decodeDestinationTag(Channel chnID, u64 dmaTag) {
         case DTag::CNTS:
             chn.madr = (dmaTag >> 32) & ~15;
 
-            chn.isTagEnd = (dmaTag & (1 << 31)) && chcr.tie;
+            chn.isTagEnd = (dmaTag & (1u << 31)) && chcr.tie;
 
             std::printf("[DMAC:EE   ] CNTS; MADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.isTagEnd);
             break;
@@ -268,12 +268,12 @@ void doSIF0() {
 
     /* Transfer up to 8 quadwords at a time */
 
-    auto qwc  = std::min((u16)(sif::getSIF0Size() / 4), std::min(chn.qwc, (u16)8));
+    auto qwc  = std::min((u16)(sif::getSIF0Size() / 4), chn.qwc);
     auto madr = chn.madr;
 
     assert(qwc);
 
-    for (u16 i = 0; i < qwc; i++) {
+    for (u32 i = 0; i < qwc; i++) {
         bus::writeDMAC128(madr + 16 * i, sif::readSIF0_128());
     }
 
@@ -314,12 +314,12 @@ void doSIF1() {
 
     /* Transfer up to 8 quadwords at a time */
 
-    auto qwc  = std::min((u16)((32 - sif::getSIF1Size()) / 4), std::min(chn.qwc, (u16)8));
+    auto qwc  = std::min((u16)((32 - sif::getSIF1Size()) / 4), chn.qwc);
     auto madr = chn.madr;
 
     assert(qwc);
 
-    for (u16 i = 0; i < qwc; i++) {
+    for (u32 i = 0; i < qwc; i++) {
         sif::writeSIF1(bus::readDMAC128(madr + 16 * i));
     }
 
@@ -557,14 +557,13 @@ void write(u32 addr, u32 data) {
             case static_cast<u32>(ControlReg::STAT):
                 std::printf("[DMAC:EE   ] 32-bit write @ D_STAT = 0x%08X\n", data);
 
-                stat.cis = (stat.cis & ~data) & 0x3FF;
-                stat.cim = (stat.cim ^ (data >> 16)) & 0x3FF;
-
-                if (data & (1 << 13)) stat.sis  = false;
-                if (data & (1 << 14)) stat.meis = false;
-                if (data & (1 << 15)) stat.beis = false;
-                if (data & (1 << 29)) stat.sim  = !stat.sim;
-                if (data & (1 << 30)) stat.meim = !stat.meim;
+                stat.cis &= (~data & 0x3FF);
+                stat.sis  = data & (1 << 13);
+                stat.meis = data & (1 << 14);
+                stat.beis = data & (1 << 15);
+                stat.cim ^= ((data >> 16) & 0x3FF);
+                stat.sim  = data & (1 << 29);
+                stat.meim = data & (1 << 30);
 
                 checkInterrupt();
                 break;
