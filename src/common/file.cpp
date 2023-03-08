@@ -15,3 +15,19 @@ std::vector<u8> loadBinary(const char *path) {
 
     return {std::istream_iterator<u8>{file}, {}};
 }
+
+void saveBinary(const char *path, u8 *data, u64 size) {
+    std::ofstream file;
+
+    file.open(path, std::ios::binary);
+
+    if (!file.is_open()) {
+        std::printf("[moestation] Unable to open file \"%s\"\n", path);
+
+        exit(0);
+    }
+
+    file.write((char *)data, size);
+
+    file.close();
+}

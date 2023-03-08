@@ -15,6 +15,8 @@ namespace ps2::bus {
 void init(const char *biosPath, VectorInterface *vif0, VectorInterface *vif1);
 void setPathEELOAD(const char *path);
 
+void saveRAM();
+
 u8   read8(u32 addr);
 u16  read16(u32 addr);
 u32  read32(u32 addr);
