@@ -66,12 +66,16 @@ enum Opcode {
     COP0    = 0x10,
     LB      = 0x20,
     LH      = 0x21,
+    LWL     = 0x22,
     LW      = 0x23,
     LBU     = 0x24,
     LHU     = 0x25,
+    LWR     = 0x26,
     SB      = 0x28,
     SH      = 0x29,
+    SWL     = 0x2A,
     SW      = 0x2B,
+    SWR     = 0x2E,
 };
 
 enum SPECIALOpcode {
@@ -706,6 +710,44 @@ void iLW(u32 instr) {
     set(rt, read32(addr));
 }
 
+/* Load Word Left */
+void iLWL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LWL %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 24 - 8 * (addr & 3);
+    const auto mask = ~(~0 << shift);
+
+    set(rt, (regs[rt] & mask) | (read32(addr & ~3) << shift));
+}
+
+/* Load Word Right */
+void iLWR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    if (doDisasm) {
+        std::printf("[IOP       ] LWR %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 8 * (addr & 3);
+    const auto mask = ~(~0 >> shift);
+
+    set(rt, (regs[rt] & mask) | (read32(addr & ~3) >> shift));
+}
+
 /* Move From Coprocessor */
 void iMFC(int copN, u32 instr) {
     assert((copN >= 0) && (copN < 4));
@@ -1087,6 +1129,48 @@ void iSW(u32 instr) {
     write32(addr, data);
 }
 
+/* Store Word Left */
+void iSWL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    const auto shift = 24 - 8 * (addr & 3);
+    const auto mask  = ~(~0 >> shift);
+
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt] >> shift);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SWL %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write32(addr & ~3, data);
+}
+
+/* Store Word Right */
+void iSWR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs] + imm;
+
+    const auto shift = 8 * (addr & 3);
+    const auto mask  = ~(~0 << shift);
+
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt] << shift);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SWR %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write32(addr & ~3, data);
+}
+
 /* SYStem CALL */
 void iSYSCALL() {
     if (doDisasm) {
@@ -1206,12 +1290,16 @@ void decodeInstr(u32 instr) {
             break;
         case Opcode::LB : iLB(instr); break;
         case Opcode::LH : iLH(instr); break;
+        case Opcode::LWL: iLWL(instr); break;
         case Opcode::LW : iLW(instr); break;
         case Opcode::LBU: iLBU(instr); break;
         case Opcode::LHU: iLHU(instr); break;
+        case Opcode::LWR: iLWR(instr); break;
         case Opcode::SB : iSB(instr); break;
         case Opcode::SH : iSH(instr); break;
+        case Opcode::SWL: iSWL(instr); break;
         case Opcode::SW : iSW(instr); break;
+        case Opcode::SWR: iSWR(instr); break;
         default:
             std::printf("[IOP       ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
 
