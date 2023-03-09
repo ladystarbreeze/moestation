@@ -123,7 +123,8 @@ void finishSeekEvent() {
         doReadCD();
     }
 
-    scheduler::addEvent(idRequestDMA, 0, 8 * getBlockTiming(isDVD), false);
+    //scheduler::addEvent(idRequestDMA, 0, getBlockTiming(isDVD), false);
+    scheduler::addEvent(idRequestDMA, 0, getBlockTiming(isDVD), false); // Speed hack
 }
 
 void requestDMAEvent() {
