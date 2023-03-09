@@ -61,6 +61,8 @@ void init() {
 }
 
 u32 read32(u32 addr) {
+    u32 data;
+
     // Get channel ID
     const auto chn = (addr >> 11) & 3;
 
@@ -70,11 +72,31 @@ u32 read32(u32 addr) {
         case TimerReg::COUNT:
             std::printf("[Timer:EE  ] 32-bit read @ T%u_COUNT\n", chn);
             return timer.count;
+        case TimerReg::MODE:
+            {
+                std::printf("[Timer:EE  ] 32-bit read @ T%u_MODE\n", chn);
+
+                auto &mode = timer.mode;
+
+                data  = mode.clks;
+                data |= mode.gate << 2;
+                data |= mode.gats << 3;
+                data |= mode.gatm << 4;
+                data |= mode.zret << 6;
+                data |= mode.cue  << 7;
+                data |= mode.cmpe << 8;
+                data |= mode.ovfe << 9;
+                data |= mode.equf << 10;
+                data |= mode.ovff << 11;
+            }
+            break;
         default:
             std::printf("[Timer:EE  ] Unhandled 32-bit read @ 0x%08X\n", addr);
 
             exit(0);
     }
+
+    return data;
 }
 
 void write32(u32 addr, u32 data) {
