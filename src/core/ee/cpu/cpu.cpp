@@ -73,6 +73,7 @@ enum Opcode {
     COP2    = 0x12,
     BEQL    = 0x14,
     BNEL    = 0x15,
+    BLEZL   = 0x16,
     DADDIU  = 0x19,
     LDL     = 0x1A,
     LDR     = 0x1B,
@@ -195,6 +196,8 @@ enum MMI2Opcode {
 };
 
 enum MMI3Opcode {
+    PMTHI  = 0x08,
+    PMTLO  = 0x09,
     PCPYUD = 0x0E,
     POR    = 0x12,
 };
@@ -547,7 +550,7 @@ void doBranch(u32 target, bool isCond, u32 rd, bool isLikely) {
 
 /* Raises a level 1 exception */
 void raiseLevel1Exception(Exception e) {
-    std::printf("[EE Core   ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
+    //std::printf("[EE Core   ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
 
     cop0::setEXCODE(e);
 
@@ -717,6 +720,20 @@ void iBLEZ(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] BLEZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
+    }
+}
+
+/* Branch if Less than or Equal Zero Likely */
+void iBLEZL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i64)regs[rs]._u64[0] <= 0, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BLEZL %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -1731,6 +1748,28 @@ void iPMFLO(u32 instr) {
     }
 }
 
+/* Parallel Move To HI */
+void iPMTHI(u32 instr) {
+    const auto rs = getRs(instr);
+
+    regs[CPUReg::HI] = regs[rs];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PMTHI %s; HI = 0x%016llX%016llX\n", regNames[rs], regs[rs]._u64[1], regs[rs]._u64[0]);
+    }
+}
+
+/* Parallel Move To LO */
+void iPMTLO(u32 instr) {
+    const auto rs = getRs(instr);
+
+    regs[CPUReg::LO] = regs[rs];
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PMTLO %s; LO = 0x%016llX%016llX\n", regNames[rs], regs[rs]._u64[1], regs[rs]._u64[0]);
+    }
+}
+
 /* Parallel OR */
 void iPOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -2309,6 +2348,7 @@ void decodeInstr(u32 instr) {
             break;
         case Opcode::BEQL  : iBEQL(instr); break;
         case Opcode::BNEL  : iBNEL(instr); break;
+        case Opcode::BLEZL : iBLEZL(instr); break;
         case Opcode::DADDIU: iDADDIU(instr); break;
         case Opcode::LDL   : iLDL(instr); break;
         case Opcode::LDR   : iLDR(instr); break;
@@ -2371,6 +2411,8 @@ void decodeInstr(u32 instr) {
                             const auto shamt = getShamt(instr);
 
                             switch (shamt) {
+                                case MMI3Opcode::PMTHI : iPMTHI(instr); break;
+                                case MMI3Opcode::PMTLO : iPMTLO(instr); break;
                                 case MMI3Opcode::PCPYUD: iPCPYUD(instr); break;
                                 case MMI3Opcode::POR   : iPOR(instr); break;
                                 default:
