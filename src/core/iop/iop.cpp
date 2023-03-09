@@ -84,6 +84,7 @@ enum SPECIALOpcode {
     SRA     = 0x03,
     SLLV    = 0x04,
     SRLV    = 0x06,
+    SRAV    = 0x07,
     JR      = 0x08,
     JALR    = 0x09,
     SYSCALL = 0x0C,
@@ -1064,6 +1065,19 @@ void iSRA(u32 instr) {
     }
 }
 
+/* Shift Right Arithmetic Variable */
+void iSRAV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set(rd, (i32)regs[rt] >> (regs[rs] & 0x1F));
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SRAV %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]);
+    }
+}
+
 /* Shift Right Logical */
 void iSRL(u32 instr) {
     const auto rd = getRd(instr);
@@ -1207,6 +1221,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::SRA    : iSRA(instr); break;
                     case SPECIALOpcode::SLLV   : iSLLV(instr); break;
                     case SPECIALOpcode::SRLV   : iSRLV(instr); break;
+                    case SPECIALOpcode::SRAV   : iSRAV(instr); break;
                     case SPECIALOpcode::JR     : iJR(instr); break;
                     case SPECIALOpcode::JALR   : iJALR(instr); break;
                     case SPECIALOpcode::SYSCALL: iSYSCALL(); break;
