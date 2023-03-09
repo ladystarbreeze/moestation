@@ -175,8 +175,11 @@ void set32(u32 idx, u32 data) {
         case static_cast<u32>(COP0Reg::EPC   ):
             epc = data;
             break;
-        case static_cast<u32>(COP0Reg::Debug): break;
-        case static_cast<u32>(COP0Reg::Perf ): break;
+        case static_cast<u32>(COP0Reg::Debug   ): break;
+        case static_cast<u32>(COP0Reg::Perf    ): break;
+        case static_cast<u32>(COP0Reg::ErrorEPC):
+            errorEPC = data;
+            break;
         default:
             std::printf("[COP0:EE   ] Unhandled register write @ %u = 0x%08X\n", idx, data);
 
