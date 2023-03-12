@@ -208,6 +208,7 @@ enum MMI3Opcode {
     PCPYUD = 0x0E,
     POR    = 0x12,
     PNOR   = 0x13,
+    PCPYH  = 0x1B,
 };
 
 /* --- EE Core registers --- */
@@ -1747,6 +1748,25 @@ void iPAND(u32 instr) {
     }
 }
 
+/* Parallel CoPY Halfword */
+void iPCPYH(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 4; i++) {
+        res._u16[i + 0] = regs[rt]._u16[0];
+        res._u16[i + 4] = regs[rt]._u16[4];
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PCPYH %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Parallel CoPY Lower Doubleword */
 void iPCPYLD(u32 instr) {
     const auto rd = getRd(instr);
@@ -2630,6 +2650,7 @@ void decodeInstr(u32 instr) {
                                 case MMI3Opcode::PCPYUD: iPCPYUD(instr); break;
                                 case MMI3Opcode::POR   : iPOR(instr); break;
                                 case MMI3Opcode::PNOR  : iPNOR(instr); break;
+                                case MMI3Opcode::PCPYH : iPCPYH(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI3 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
