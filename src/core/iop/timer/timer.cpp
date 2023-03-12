@@ -263,7 +263,7 @@ void step(i64 c) {
         while (timer.subcount > timer.prescaler) {
             timer.count++;
 
-            if (timer.count & (1 << (16 + 2 * (i > 2)))) { // 1 << 16 for timer 0-2, 1 << 32 for timer 3-5
+            if (timer.count & (1ull << (16 + 16 * (i > 2)))) { // 1 << 16 for timer 0-2, 1 << 32 for timer 3-5
                 if (timer.mode.ovfe && !timer.mode.ovff) {
                     // Checking OVFF is necessary because timer IRQs are edge-triggered
                     timer.mode.ovff = true;
