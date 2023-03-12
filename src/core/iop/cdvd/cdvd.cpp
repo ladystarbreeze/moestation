@@ -53,7 +53,13 @@ enum class NCMDStatus {
 };
 
 enum SCMD {
+    Subcommand        = 0x03,
     UpdateStickyFlags = 0x05,
+    ReadRTC           = 0x08,
+};
+
+enum SubSCMD {
+    MechaconVersion = 0x00,
 };
 
 enum class SCMDStatus {
@@ -97,6 +103,7 @@ std::queue<u8> ncmdParam;
 u8 scmdstat = static_cast<u8>(SCMDStatus::NODATA);
 u8 scmd;
 std::queue<u8> scmdData;
+std::queue<u8> scmdParam;
 
 u8 drivestat = static_cast<u8>(DriveStatus::PAUSED), sdrivestat = static_cast<u8>(DriveStatus::PAUSED);
 
@@ -142,9 +149,9 @@ void setDriveStatus(u8 stat) {
 void sendInterrupt() {
     setDriveStatus(static_cast<u8>(DriveStatus::PAUSED) | static_cast<u8>(DriveStatus::SPINNING));
 
-    ncmdstat &= ~static_cast<u8>(NCMDStatus::BUSY);
+    ncmdstat = static_cast<u8>(NCMDStatus::READY);
 
-    istat = 3;
+    istat |= 3;
 
     intc::sendInterruptIOP(Interrupt::CDVD);
 }
@@ -256,7 +263,7 @@ void ncmdReadCD() {
 
 /* Executes an N command */
 void doNCMD() {
-    ncmdstat |= static_cast<u8>(NCMDStatus::BUSY);
+    ncmdstat = static_cast<u8>(NCMDStatus::BUSY);
 
     switch (ncmd) {
         case NCMD::ReadCD: ncmdReadCD(); break;
@@ -265,6 +272,33 @@ void doNCMD() {
 
             exit(0);
     }
+}
+
+void scmdMechaconVersion() {
+    std::printf("[CDVD      ] MechaconVersion\n");
+
+    scmdData.push(0x03);
+    scmdData.push(0x06);
+    scmdData.push(0x02);
+    scmdData.push(0x00);
+
+    scmdstat &= ~static_cast<u8>(SCMDStatus::NODATA); // There is data now
+}
+
+void scmdReadRTC() {
+    std::printf("[CDVD      ] ReadRTC\n");
+
+    scmdData.push(0);
+    scmdData.push(0);
+    scmdData.push(0);
+    scmdData.push(0);
+
+    scmdData.push(0);
+    scmdData.push(1);
+    scmdData.push(0);
+    scmdData.push(0);
+
+    scmdstat &= ~static_cast<u8>(SCMDStatus::NODATA); // There is data now
 }
 
 void scmdUpdateStickyFlags() {
@@ -281,7 +315,23 @@ void scmdUpdateStickyFlags() {
 /* Executes an S command */
 void doSCMD() {
     switch (scmd) {
+        case SCMD::Subcommand:
+            {
+                const auto subcommand = scmdParam.front();
+
+                scmdParam.pop();
+
+                switch (subcommand) {
+                    case SubSCMD::MechaconVersion: scmdMechaconVersion(); break;
+                    default:
+                        std::printf("[CDVD      ] Unhandled S subcommand 0x%02X\n", subcommand);
+
+                        exit(0);
+                }
+            }
+            break;
         case SCMD::UpdateStickyFlags: scmdUpdateStickyFlags(); break;
+        case SCMD::ReadRTC          : scmdReadRTC(); break;
         default:
             std::printf("[CDVD      ] Unhandled S command 0x%02X\n", scmd);
 
@@ -314,7 +364,7 @@ u8 read(u32 addr) {
             std::printf("[CDVD      ] 8-bit read @ NCMD\n");
             return ncmd;
         case CDVDReg::NCMDSTAT:
-            std::printf("[CDVD      ] 8-bit read @ NCMDSTAT\n");
+            //std::printf("[CDVD      ] 8-bit read @ NCMDSTAT\n");
             return ncmdstat;
         case CDVDReg::CDVDERROR:
             std::printf("[CDVD      ] 8-bit read @ CDVDERROR\n");
@@ -409,6 +459,11 @@ void write(u32 addr, u8 data) {
             scmd = data;
 
             doSCMD();
+            break;
+        case CDVDReg::SCMDSTAT:
+            std::printf("[CDVD      ] 8-bit write @ SCMDPARAM = 0x%02X\n", data);
+
+            scmdParam.push(data);
             break;
         default:
             std::printf("[CDVD      ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
