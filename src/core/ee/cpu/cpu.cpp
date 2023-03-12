@@ -143,6 +143,7 @@ enum REGIMMOpcode {
     BGEZ  = 0x01,
     BLTZL = 0x02,
     BGEZL = 0x03,
+    MTSAH = 0x19,
 };
 
 enum COPOpcode {
@@ -213,6 +214,8 @@ u8 sa; // Shift amount
 bool inDelaySlot[2]; // Branch delay helper
 bool isFastBootDone = false;
 
+bool inBIFCO = false;
+
 u8 spram[0x4000]; // Scratchpad RAM
 
 VectorUnit vus[2] = {VectorUnit(0, &vus[1]), VectorUnit(1, &vus[0])}; // Vector units VU0 and VU1
@@ -261,6 +264,12 @@ void setPC(u32 addr) {
         std::printf("[EE Core   ] Misaligned PC: 0x%08X\n", addr);
 
         exit(0);
+    }
+
+    if (inBIFCO && !((addr >= 0x81FC0) && (addr < 0x81FDC))) {
+        std::printf("[EE Core   ] Leaving BIFCO loop\n");
+
+        inBIFCO = false;
     }
 
     pc  = addr;
@@ -1340,6 +1349,36 @@ void iLW(u32 instr) {
     set32(rt, read32(addr));
 }
 
+/* Load Word Coprocessor */
+void iLWC(int copN, u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LWC%d %d, 0x%X(%s); %d = [0x%08X]\n", copN, rt, imm, regNames[rs], rt, addr);
+    }
+
+    if (addr & 3) {
+        std::printf("[EE Core   ] LWC: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    const auto data = read32(addr);
+
+    switch (copN) {
+        case 1: fpu::set(rt, *(f32 *)&data); break;
+        default:
+            std::printf("[EE Core   ] LWC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+}
+
 /* Load Word Unsigned */
 void iLWU(u32 instr) {
     const auto rs = getRs(instr);
@@ -2153,6 +2192,43 @@ void iSW(u32 instr) {
     write32(addr, data);
 }
 
+/* Store Word Coprocessor */
+void iSWC(int copN, u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    u32 data;
+    switch (copN) {
+        case 1:
+            {
+                const auto fpr = fpu::get(rt);
+
+                data = *(u32 *)&fpr;
+            }
+            break;
+        default:
+            std::printf("[EE Core   ] SWC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SWC%d %d, 0x%X(%s); [0x%08X] = 0x%08X\n", copN, rt, imm, regNames[rs], addr, data);
+    }
+
+    if (addr & 3) {
+        std::printf("[EE Core   ] SWC: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    write32(addr, data);
+}
+
 /* SYNChronize */
 void iSYNC(u32 instr) {
     const auto stype = getShamt(instr);
@@ -2443,9 +2519,9 @@ void decodeInstr(u32 instr) {
         case Opcode::SDL  : iSDL(instr); break;
         case Opcode::SDR  : iSDR(instr); break;
         case Opcode::CACHE: break; // CACHE
-        case Opcode::LWC1 : break;
+        case Opcode::LWC1 : iLWC(1, instr); break;
         case Opcode::LD   : iLD(instr); break;
-        case Opcode::SWC1 : break;
+        case Opcode::SWC1 : iSWC(1, instr); break;
         case Opcode::SD   : iSD(instr); break;
         default:
             std::printf("[EE Core   ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
@@ -2469,6 +2545,12 @@ void init() {
 void step(i64 c) {
     for (int i = c; i != 0; i--) {
         cpc = pc; // Save current PC
+
+        if ((cpc == 0x81FC0) && !inBIFCO) {
+            std::printf("[EE Core   ] Entering BIFCO loop\n");
+
+            inBIFCO = true;
+        }
 
         // Advance delay slot helper
         inDelaySlot[0] = inDelaySlot[1];
