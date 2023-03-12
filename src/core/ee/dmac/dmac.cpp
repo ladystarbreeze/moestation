@@ -251,7 +251,7 @@ void doSIF0() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC:EE   ] SIF0 transfer\n");
+    //std::printf("[DMAC:EE   ] SIF0 transfer\n");
 
     /* SIF0 is always to RAM, in Chain mode */
     assert(chcr.mod == Mode::Chain);
@@ -299,7 +299,7 @@ void doSIF1() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC:EE   ] SIF1 transfer\n");
+    //std::printf("[DMAC:EE   ] SIF1 transfer\n");
 
     /* SIF1 is always from RAM, in Chain mode */
     assert(chcr.mod == Mode::Chain);
@@ -358,26 +358,26 @@ void checkInterrupt() {
 void checkRunning(Channel chn) {
     const auto chnID = static_cast<int>(chn);
 
-    std::printf("[DMAC:EE   ] Channel %d check\n", chnID);
+    //std::printf("[DMAC:EE   ] Channel %d check\n", chnID);
 
     if ((enable & (1 << 16)) || !ctrl.dmae) {
-        std::printf("[DMAC:EE   ] D_ENABLE = 0x%08X, D_CTRL.DMAE = %d\n", enable, ctrl.dmae);
+        //std::printf("[DMAC:EE   ] D_ENABLE = 0x%08X, D_CTRL.DMAE = %d\n", enable, ctrl.dmae);
         return;
     }
 
-    std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", chnID, channels[chnID].drq, pcr.pce, chnID, pcr.cde & (1 << chnID), chnID, channels[chnID].chcr.str);
+    //std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", chnID, channels[chnID].drq, pcr.pce, chnID, pcr.cde & (1 << chnID), chnID, channels[chnID].chcr.str);
 
     if (channels[chnID].drq && (!pcr.pce || (pcr.cde & (1 << chnID))) && channels[chnID].chcr.str) startDMA(chn);
 }
 
 void checkRunningAll() {
     if ((enable & (1 << 16)) || !ctrl.dmae) {
-        std::printf("[DMAC:EE   ] D_ENABLE = 0x%08X, D_CTRL.DMAE = %d\n", enable, ctrl.dmae);
+        //std::printf("[DMAC:EE   ] D_ENABLE = 0x%08X, D_CTRL.DMAE = %d\n", enable, ctrl.dmae);
         return;
     }
 
     for (int i = 0; i < 10; i++) {
-        std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", i, channels[i].drq, pcr.pce, i, pcr.cde & (1 << i), i, channels[i].chcr.str);
+        //std::printf("[DMAC:EE   ] D%d.DRQ = %d, PCR.PCE = %d, PCR.CDE%d = %d, D%d_CHCR.STR = %d\n", i, channels[i].drq, pcr.pce, i, pcr.cde & (1 << i), i, channels[i].chcr.str);
 
         if (channels[i].drq && (!pcr.pce || (pcr.cde & (1 << i))) && channels[i].chcr.str) startDMA((Channel)i);
     }

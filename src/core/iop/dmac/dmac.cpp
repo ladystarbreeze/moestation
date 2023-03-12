@@ -209,7 +209,7 @@ void doSIF0() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC:IOP  ] SIF0 transfer\n");
+    //std::printf("[DMAC:IOP  ] SIF0 transfer\n");
 
     //assert(chcr.mod == Mode::Chain);
 
@@ -271,7 +271,7 @@ void doSIF1() {
     auto &chn  = channels[static_cast<int>(chnID)];
     auto &chcr = chn.chcr;
 
-    std::printf("[DMAC:IOP  ] SIF1 transfer\n");
+    //std::printf("[DMAC:IOP  ] SIF1 transfer\n");
 
     //assert(chcr.mod == Mode::Chain);
 
@@ -350,24 +350,24 @@ void checkInterrupt() {
 void checkRunning(Channel chn) {
     const auto chnID = static_cast<int>(chn);
 
-    std::printf("[DMAC:IOP  ] Channel %d check\n", chnID);
+    //std::printf("[DMAC:IOP  ] Channel %d check\n", chnID);
 
     if (!dmacen) {
-        std::printf("[DMAC:IOP  ] DMACEN = %d\n", dmacen);
+        //std::printf("[DMAC:IOP  ] DMACEN = %d\n", dmacen);
         return;
     }
 
     bool cde;
     if (chnID < 7) { cde = dpcr & (1 << (4 * chnID + 3)); } else { cde = dpcr2 & (1 << (4 * (chnID - 7) + 3)); }
 
-    std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
+    //std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", chnID, channels[chnID].drq, chnID, cde, chnID, channels[chnID].chcr.str, chnID, channels[chnID].chcr.fst);
 
     if ((channels[chnID].drq || channels[chnID].chcr.fst) && cde && channels[chnID].chcr.str) startDMA(static_cast<Channel>(chnID));
 }
 
 void checkRunningAll() {
     if (!dmacen) {
-        std::printf("[DMAC:IOP  ] DMACEN = %d\n", dmacen);
+        //std::printf("[DMAC:IOP  ] DMACEN = %d\n", dmacen);
         return;
     }
 
@@ -375,7 +375,7 @@ void checkRunningAll() {
         bool cde;
         if (i < 7) { cde = dpcr & (1 << (4 * i + 3)); } else { cde = dpcr2 & (1 << (4 * (i - 7) + 3)); }
 
-        std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
+        //std::printf("[DMAC:IOP  ] D%d.DRQ = %d, DPCR.CDE%d = %d, D%d_CHCR.STR = %d, D%d_CHCR.FST = %d\n", i, channels[i].drq, i, cde, i, channels[i].chcr.str, i, channels[i].chcr.fst);
 
         if ((channels[i].drq || channels[i].chcr.fst) && cde && channels[i].chcr.str) return startDMA(static_cast<Channel>(i));
     }
