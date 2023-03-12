@@ -82,15 +82,19 @@ enum Opcode {
     SQ      = 0x1F,
     LB      = 0x20,
     LH      = 0x21,
+    LWL     = 0x22,
     LW      = 0x23,
     LBU     = 0x24,
     LHU     = 0x25,
+    LWR     = 0x26,
     LWU     = 0x27,
     SB      = 0x28,
     SH      = 0x29,
+    SWL     = 0x2A,
     SW      = 0x2B,
     SDL     = 0x2C,
     SDR     = 0x2D,
+    SWR     = 0x2E,
     CACHE   = 0x2F,
     LWC1    = 0x31,
     LD      = 0x37,
@@ -183,6 +187,7 @@ enum MMIOpcode {
 };
 
 enum MMI0Opcode {
+    PSUBB  = 0x09,
     PEXTLW = 0x12,
 };
 
@@ -194,6 +199,7 @@ enum MMI2Opcode {
     PMFHI  = 0x08,
     PMFLO  = 0x09,
     PCPYLD = 0x0E,
+    PAND   = 0x12,
 };
 
 enum MMI3Opcode {
@@ -201,6 +207,7 @@ enum MMI3Opcode {
     PMTLO  = 0x09,
     PCPYUD = 0x0E,
     POR    = 0x12,
+    PNOR   = 0x13,
 };
 
 /* --- EE Core registers --- */
@@ -1379,6 +1386,44 @@ void iLWC(int copN, u32 instr) {
     }
 }
 
+/* Load Word Left */
+void iLWL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LWL %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 24 - 8 * (addr & 3);
+    const auto mask = ~(~0 << shift);
+
+    set32(rt, (regs[rt]._u32[0] & mask) | (read32(addr & ~3) << shift));
+}
+
+/* Load Word Right */
+void iLWR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LWR %s, 0x%X(%s); %s = [0x%08X]\n", regNames[rt], imm, regNames[rs], regNames[rt], addr);
+    }
+
+    const auto shift = 8 * (addr & 3);
+    const auto mask = ~(~0 >> shift);
+
+    set32(rt, (regs[rt]._u32[0] & mask) | (read32(addr & ~3) >> shift));
+}
+
 /* Load Word Unsigned */
 void iLWU(u32 instr) {
     const auto rs = getRs(instr);
@@ -1687,6 +1732,21 @@ void iPADDUW(u32 instr) {
     }
 }
 
+/* Parallel AND */
+void iPAND(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = u128{{regs[rs]._u64[0] & regs[rt]._u64[0], regs[rs]._u64[1] & regs[rt]._u64[1]}};
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PAND %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Parallel CoPY Lower Doubleword */
 void iPCPYLD(u32 instr) {
     const auto rd = getRd(instr);
@@ -1809,6 +1869,21 @@ void iPMTLO(u32 instr) {
     }
 }
 
+/* Parallel NOR */
+void iPNOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = u128{{~(regs[rs]._u64[0] | regs[rt]._u64[0]), ~(regs[rs]._u64[1] | regs[rt]._u64[1])}};
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PNOR %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Parallel OR */
 void iPOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -1821,6 +1896,25 @@ void iPOR(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] POR %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel SUBtract, Byte */
+void iPSUBB(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 16; i++) {
+        res._u8[i] = regs[rs]._u8[i] - regs[rt]._u8[i];
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PSUBB %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
     }
 }
 
@@ -2229,6 +2323,48 @@ void iSWC(int copN, u32 instr) {
     write32(addr, data);
 }
 
+/* Store Word Left */
+void iSWL(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    const auto shift = 24 - 8 * (addr & 3);
+    const auto mask  = ~(~0 >> shift);
+
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt]._u32[0] >> shift);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SWL %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write32(addr & ~3, data);
+}
+
+/* Store Word Right */
+void iSWR(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    const auto shift = 8 * (addr & 3);
+    const auto mask  = ~(~0 << shift);
+
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt]._u32[0] << shift);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SWR %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
+    }
+
+    write32(addr & ~3, data);
+}
+
 /* SYNChronize */
 void iSYNC(u32 instr) {
     const auto stype = getShamt(instr);
@@ -2439,6 +2575,7 @@ void decodeInstr(u32 instr) {
                             const auto shamt = getShamt(instr);
 
                             switch (shamt) {
+                                case MMI0Opcode::PSUBB : iPSUBB(instr); break;
                                 case MMI0Opcode::PEXTLW: iPEXTLW(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI0 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
@@ -2455,6 +2592,7 @@ void decodeInstr(u32 instr) {
                                 case MMI2Opcode::PMFHI : iPMFHI(instr); break;
                                 case MMI2Opcode::PMFLO : iPMFLO(instr); break;
                                 case MMI2Opcode::PCPYLD: iPCPYLD(instr); break;
+                                case MMI2Opcode::PAND  : iPAND(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI2 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
@@ -2491,6 +2629,7 @@ void decodeInstr(u32 instr) {
                                 case MMI3Opcode::PMTLO : iPMTLO(instr); break;
                                 case MMI3Opcode::PCPYUD: iPCPYUD(instr); break;
                                 case MMI3Opcode::POR   : iPOR(instr); break;
+                                case MMI3Opcode::PNOR  : iPNOR(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI3 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
@@ -2509,15 +2648,19 @@ void decodeInstr(u32 instr) {
         case Opcode::SQ   : iSQ(instr); break;
         case Opcode::LB   : iLB(instr); break;
         case Opcode::LH   : iLH(instr); break;
+        case Opcode::LWL  : iLWL(instr); break;
         case Opcode::LW   : iLW(instr); break;
         case Opcode::LBU  : iLBU(instr); break;
         case Opcode::LHU  : iLHU(instr); break;
+        case Opcode::LWR  : iLWR(instr); break;
         case Opcode::LWU  : iLWU(instr); break;
         case Opcode::SB   : iSB(instr); break;
         case Opcode::SH   : iSH(instr); break;
+        case Opcode::SWL  : iSWL(instr); break;
         case Opcode::SW   : iSW(instr); break;
         case Opcode::SDL  : iSDL(instr); break;
         case Opcode::SDR  : iSDR(instr); break;
+        case Opcode::SWR  : iSWR(instr); break;
         case Opcode::CACHE: break; // CACHE
         case Opcode::LWC1 : iLWC(1, instr); break;
         case Opcode::LD   : iLD(instr); break;
