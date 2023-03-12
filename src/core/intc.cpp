@@ -92,11 +92,15 @@ u32 readCtrlIOP() {
 /* Writes INTC_MASK */
 void writeMask(u16 data) {
     intcMASK ^= (data & 0x7FFF);
+
+    assert(!(intcSTAT & intcMASK));
 }
 
 /* Writes INTC_STAT */
 void writeStat(u16 data) {
     intcSTAT &= (~data & 0x7FFF);
+
+    assert(!(intcSTAT & intcMASK));
 }
 
 /* Writes I_MASK */
