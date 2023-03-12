@@ -52,7 +52,7 @@ u64 registerEvent(std::function<void(int, i64)> func) {
 
 /* Adds a scheduler event */
 void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule) {
-    assert(cyclesUntilEvent > 0);
+    assert(cyclesUntilEvent >= 0);
 
     //std::printf("[Scheduler ] Adding event %llu, cycles until event: %lld\n", id, cyclesUntilEvent);
 
