@@ -34,6 +34,7 @@ enum CDVDReg {
     NCMDSTAT   = 0x1F402005,
     CDVDERROR  = 0x1F402006,
     CDVDISTAT  = 0x1F402008,
+    DRIVESTAT  = 0x1F40200A,
     SDRIVESTAT = 0x1F40200B,
     DISCTYPE   = 0x1F40200F,
     SCMD       = 0x1F402016,
@@ -115,7 +116,9 @@ SeekParam seekParam;
 u64 idFinishSeek, idRequestDMA;
 
 i64 getBlockTiming(bool);
+
 void doReadCD();
+void doReadDVD();
 
 void finishSeekEvent() {
     //std::printf("[CDVD      ] Finished seeking\n");
@@ -123,9 +126,7 @@ void finishSeekEvent() {
     const auto isDVD = ncmd == NCMD::ReadDVD;
 
     if (isDVD) {
-        std::printf("[CDVD      ] Unhandled DVD style reads\n");
-        
-        exit(0);
+        doReadDVD();
     } else {
         doReadCD();
     }
@@ -214,6 +215,48 @@ void doReadCD() {
     readIdx = 0;
 }
 
+void doReadDVD() {
+    std::printf("[CDVD      ] Reading DVD sector %lld\n", seekParam.pos + seekParam.sectorNum);
+
+    setDriveStatus(static_cast<u8>(DriveStatus::READING));
+
+    /* Seek to sector */
+
+    const auto size = seekParam.size;
+
+    const auto seekPos = size * (seekParam.pos + seekParam.sectorNum);
+
+    file.seekg(seekPos, std::ios_base::beg);
+
+    /* Read sector into buffer */
+
+    file.read((char *)&readBuf[12], size);
+
+    readIdx = 0;
+
+    /* Write DVD metadata */
+
+    const auto layerSectorNum = seekParam.pos + seekParam.sectorNum + 0x30000;
+
+    readBuf[0x0] = 0x20;
+    readBuf[0x1] = layerSectorNum >> 16;
+    readBuf[0x2] = layerSectorNum >> 8;
+    readBuf[0x3] = layerSectorNum;
+    readBuf[0x4] = 0;
+    readBuf[0x5] = 0;
+    readBuf[0x6] = 0;
+    readBuf[0x7] = 0;
+    readBuf[0x8] = 0;
+    readBuf[0x9] = 0;
+    readBuf[0xA] = 0;
+    readBuf[0xB] = 0;
+
+    readBuf[2060] = 0;
+    readBuf[2061] = 0;
+    readBuf[2062] = 0;
+    readBuf[2063] = 0;
+}
+
 /* Performs a CD style read */
 void ncmdReadCD() {
     std::printf("[CDVD      ] ReadCD\n");
@@ -246,7 +289,7 @@ void ncmdReadCD() {
     ncmdParam.pop(); // Unused
     ncmdParam.pop(); // Unused
 
-    // POS = NCMDPARAM[10]
+    // SIZE = NCMDPARAM[10]
     u8 size = ncmdParam.front();
     switch (size) {
         case 0: seekParam.size = 2048; break;
@@ -261,12 +304,53 @@ void ncmdReadCD() {
     doSeek();
 }
 
+/* Performs a DVD style read */
+void ncmdReadDVD() {
+    /* TODO: handle dual layer DVDs */
+
+    std::printf("[CDVD      ] ReadDVD\n");
+
+    // POS = NCMDPARAM[3:0]
+    u32 pos = 0;
+    for (u32 i = 0; i < 4; i++) {
+        pos |= (u32)ncmdParam.front() << (8 * i);
+
+        ncmdParam.pop();
+    }
+
+    seekParam.pos = (i32)pos;
+
+    assert(seekParam.pos >= 0); // Negative positions are possible, we don't handle those yet though
+
+    // NUM = NCMDPARAM[7:4]
+    u32 num = 0;
+    for (u32 i = 0; i < 4; i++) {
+        num |= (u32)ncmdParam.front() << (8 * i);
+
+        ncmdParam.pop();
+    }
+
+    seekParam.num = num;
+
+    assert(seekParam.num);
+
+    // UNUSED = NCMDPARAM[10:8]
+    ncmdParam.pop(); // Unused
+    ncmdParam.pop(); // Unused
+    ncmdParam.pop(); // Unused
+
+    seekParam.size = 2048;
+
+    doSeek();
+}
+
 /* Executes an N command */
 void doNCMD() {
     ncmdstat = static_cast<u8>(NCMDStatus::BUSY);
 
     switch (ncmd) {
-        case NCMD::ReadCD: ncmdReadCD(); break;
+        case NCMD::ReadCD : ncmdReadCD(); break;
+        case NCMD::ReadDVD: ncmdReadDVD(); break;
         default:
             std::printf("[CDVD      ] Unhandled N command 0x%02X\n", ncmd);
 
@@ -372,12 +456,18 @@ u8 read(u32 addr) {
         case CDVDReg::CDVDISTAT:
             std::printf("[CDVD      ] 8-bit read @ CDVDISTAT\n");
             return istat;
+        case CDVDReg::DRIVESTAT:
+            std::printf("[CDVD      ] 8-bit read @ DRIVESTAT\n");
+            return drivestat;
         case CDVDReg::SDRIVESTAT:
             std::printf("[CDVD      ] 8-bit read @ SDRIVESTAT\n");
             return sdrivestat;
         case CDVDReg::DISCTYPE:
             std::printf("[CDVD      ] 8-bit read @ DISCTYPE\n");
             return 0x14; // PS2 DVD
+        case 0x1F402013:
+            std::printf("[CDVD      ] 8-bit read @ 0x1F402013\n");
+            return 4; // Dunno what this is. DobieStation returns 4
         case CDVDReg::SCMD:
             std::printf("[CDVD      ] 8-bit read @ SCMD\n");
             return scmd;
