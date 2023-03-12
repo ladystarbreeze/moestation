@@ -129,7 +129,7 @@ void write(u32 addr, u32 data) {
             msflg |= data;
             break;
         case SIFReg::SMFLG:
-            std::printf("[SIF:EE    ] 32-bit write @ SMFLAG = 0x%08X\n", data);
+            std::printf("[SIF:EE    ] 32-bit write @ SMFLG = 0x%08X\n", data);
 
             smflg &= ~data;
             break;
