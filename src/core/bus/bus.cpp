@@ -17,6 +17,7 @@
 #include "../gs/gs.hpp"
 #include "../iop/cdvd/cdvd.hpp"
 #include "../iop/dmac/dmac.hpp"
+#include "../iop/sio2/sio2.hpp"
 #include "../iop/timer/timer.hpp"
 #include "../../common/file.hpp"
 
@@ -339,6 +340,8 @@ u32 readIOP32(u32 addr) {
         return iop::timer::read32(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         return iop::dmac::read32(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SIO2), static_cast<u32>(MemorySizeIOP::SIO2))) {
+        return iop::sio2::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u32));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -609,6 +612,8 @@ void writeIOP32(u32 addr, u32 data) {
         return iop::timer::write32(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         return iop::dmac::write32(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SIO2), static_cast<u32>(MemorySizeIOP::SIO2))) {
+        return iop::sio2::write(addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u32));
     } else {

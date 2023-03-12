@@ -30,6 +30,7 @@ set(SOURCES
     src/core/iop/iop.cpp
     src/core/iop/cdvd/cdvd.cpp
     src/core/iop/dmac/dmac.cpp
+    src/core/iop/sio2/sio2.cpp
     src/core/iop/timer/timer.cpp
 )
 
@@ -57,6 +58,7 @@ set(HEADERS
     src/core/iop/iop.hpp
     src/core/iop/cdvd/cdvd.hpp
     src/core/iop/dmac/dmac.hpp
+    src/core/iop/sio2/sio2.hpp
     src/core/iop/timer/timer.hpp
 )
 
