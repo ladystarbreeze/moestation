@@ -21,7 +21,9 @@ using Exception = cop0::Exception;
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
 constexpr auto doDisasm = false;
-constexpr auto doPrintf = true;
+constexpr auto doPrintf = false;
+
+bool doNewPrintf = false;
 
 /* --- IOP register definitions --- */
 
@@ -62,6 +64,7 @@ enum Opcode {
     SLTIU   = 0x0B,
     ANDI    = 0x0C,
     ORI     = 0x0D,
+    XORI    = 0x0E,
     LUI     = 0x0F,
     COP0    = 0x10,
     LB      = 0x20,
@@ -129,6 +132,8 @@ u32 regs[34]; // 32 GPRs, LO, HI
 u32 pc, cpc, npc; // Program counters
 
 bool inDelaySlot[2]; // Branch delay helper
+
+u32 msgAddr;
 
 /* --- Register accessors --- */
 
@@ -214,7 +219,11 @@ u32 fetchInstr() {
 }
 
 /* Writes a byte to memory */
-void write8(u32 addr, u32 data) {
+void write8(u32 addr, u8 data) {
+    if (doNewPrintf && (addr >= msgAddr)) {
+        std::printf("%c", data);
+    }
+
     return bus::writeIOP8(addr & 0x1FFFFFFF, data); // Masking the address like this should be fine
 }
 
@@ -1207,6 +1216,20 @@ void iXOR(u32 instr) {
     }
 }
 
+/* XOR Immediate */
+void iXORI(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = getImm(instr);
+
+    set(rt, regs[rs] ^ imm);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] XORI %s, %s, 0x%X; %s = 0x%08X\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]);
+    }
+}
+
 void decodeInstr(u32 instr) {
     const auto opcode = getOpcode(instr);
 
@@ -1275,6 +1298,7 @@ void decodeInstr(u32 instr) {
         case Opcode::SLTIU: iSLTIU(instr); break;
         case Opcode::ANDI : iANDI(instr); break;
         case Opcode::ORI  : iORI(instr); break;
+        case Opcode::XORI : iXORI(instr); break;
         case Opcode::LUI  : iLUI(instr); break;
         case Opcode::COP0 :
             {
@@ -1337,6 +1361,14 @@ void init() {
 void step(i64 c) {
     for (int i = c; i != 0; i--) {
         cpc = pc; // Save current PC
+
+        if (cpc == 0x8EE0) {
+            doNewPrintf = true;
+
+            msgAddr = regs[CPUReg::SP] + 0x14;
+        } else if (cpc == 0x9664) {
+            doNewPrintf = false;
+        }
 
         if (doPrintf && ((cpc == 0x12C48) || (cpc == 0x1420C) || (cpc == 0x1430C))) {
             auto ptr = regs[5];
