@@ -124,9 +124,10 @@ STAT stat; // D_STAT
 u32 enable = 0x1201; // D_ENABLE
 
 /* DMAC scheduler event IDs */
-u32 idTransferEnd, idSIF0Start, idSIF1Start;
+u32 idTransferEnd, idRestart, idSIF0Start, idSIF1Start;
 
 void checkInterrupt();
+void checkRunning(Channel);
 
 void transferEndEvent(int chnID) {
     auto &chn  = channels[chnID];
@@ -144,6 +145,10 @@ void transferEndEvent(int chnID) {
     stat.cis |= 1 << chnID;
 
     checkInterrupt();
+}
+
+void restartEvent(int chnID) {
+    checkRunning(static_cast<Channel>(chnID));
 }
 
 void sif0StartEvent() {
@@ -199,6 +204,14 @@ void readSourceTag(Channel chnID) {
             chn.isTagEnd = true;
 
             std::printf("[DMAC:EE   ] REFE; MADR = 0x%08X, TADR = 0x%08X\n", chn.madr, chn.tadr);
+            break;
+        case STag::NEXT:
+            chn.madr = chn.tadr + 16;
+            chn.tadr = dmaTag._u32[1] & ~15;
+
+            chn.isTagEnd = (dmaTag._u32[0] & (1 << 31)) && chcr.tie;
+
+            std::printf("[DMAC:EE   ] NEXT; MADR = 0x%08X, TADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.tadr, chn.isTagEnd);
             break;
         case STag::REF:
             chn.madr  = dmaTag._u32[1] & ~15;
@@ -309,7 +322,12 @@ void doSIF1() {
         readSourceTag(chnID);
 
         assert(!chcr.tte); // No tag transfers?
-        assert(chn.qwc);
+        
+        if (!chn.qwc) {
+            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1, true);
+
+            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1, true);
+        }
     }
 
     /* Transfer up to 8 quadwords at a time */
@@ -399,6 +417,7 @@ void init() {
     /* Register scheduler events */
 
     idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
+    idRestart   = scheduler::registerEvent([](int chnID, i64) { restartEvent(chnID); });
     idSIF0Start = scheduler::registerEvent([](int, i64) { sif0StartEvent(); });
     idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
 }
