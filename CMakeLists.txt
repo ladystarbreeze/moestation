@@ -4,7 +4,7 @@ project(moestation CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_compile_options(-Wall -Wextra)
+add_compile_options(-O3 -Wall -Wextra)
 
 set(SOURCES
     src/main.cpp
@@ -31,6 +31,7 @@ set(SOURCES
     src/core/iop/cdvd/cdvd.cpp
     src/core/iop/dmac/dmac.cpp
     src/core/iop/sio2/sio2.cpp
+    src/core/iop/spu2/spu2.cpp
     src/core/iop/timer/timer.cpp
 )
 
@@ -59,6 +60,7 @@ set(HEADERS
     src/core/iop/cdvd/cdvd.hpp
     src/core/iop/dmac/dmac.hpp
     src/core/iop/sio2/sio2.hpp
+    src/core/iop/spu2/spu2.hpp
     src/core/iop/timer/timer.hpp
 )
 

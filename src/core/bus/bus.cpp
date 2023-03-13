@@ -18,6 +18,7 @@
 #include "../iop/cdvd/cdvd.hpp"
 #include "../iop/dmac/dmac.hpp"
 #include "../iop/sio2/sio2.hpp"
+#include "../iop/spu2/spu2.hpp"
 #include "../iop/timer/timer.hpp"
 #include "../../common/file.hpp"
 
@@ -305,6 +306,8 @@ u16 readIOP16(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
                inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
         return iop::timer::read16(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU2), static_cast<u32>(MemorySizeIOP::SPU2))) {
+        return iop::spu2::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
         std::memcpy(&data, &bios[addr - static_cast<u32>(MemoryBase::BIOS)], sizeof(u16));
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -358,7 +361,7 @@ u32 readIOP32(u32 addr) {
                 //std::printf("[Bus:IOP   ] 32-bit read @ I_CTRL\n");
                 return intc::readCtrlIOP();
             case 0x1F80100C:
-            case 0x1F801010:
+            case 0x1F801010: case 0x1F801014:
             case 0x1F801400:
             case 0x1F801450:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
@@ -587,6 +590,8 @@ void writeIOP16(u32 addr, u16 data) {
         return iop::timer::write16(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         return iop::dmac::write16(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU2), static_cast<u32>(MemorySizeIOP::SPU2))) {
+        return iop::spu2::write(addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u16));
     } else {
