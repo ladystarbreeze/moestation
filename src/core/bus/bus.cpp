@@ -289,6 +289,8 @@ u8 readIOP8(u32 addr) {
         return iopSPRAM[addr - spramStart];
     } else {
         switch (addr) {
+            case 0x1F808264:
+                return iop::sio2::readFIFO();
             default:
                 std::printf("[Bus:IOP   ] Unhandled 8-bit read @ 0x%08X\n", addr);
 
@@ -568,6 +570,8 @@ void writeIOP8(u32 addr, u8 data) {
         iopSPRAM[addr] = data;
     } else {
         switch (addr) {
+            case 0x1F808260:
+                return iop::sio2::writeFIFO(data);
             case 0x1F802070:
                 std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
                 break;

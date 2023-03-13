@@ -10,7 +10,9 @@
 namespace ps2::iop::sio2 {
 
 u32 read(u32 addr);
+u8 readFIFO();
 
 void write(u32 addr, u32 data);
+void writeFIFO(u8 data);
 
 }
