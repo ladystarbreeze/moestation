@@ -200,6 +200,7 @@ enum MMI2Opcode {
     PMFLO  = 0x09,
     PCPYLD = 0x0E,
     PAND   = 0x12,
+    PXOR   = 0x13,
 };
 
 enum MMI3Opcode {
@@ -1938,6 +1939,21 @@ void iPSUBB(u32 instr) {
     }
 }
 
+/* Parallel XOR */
+void iPXOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = u128{{regs[rs]._u64[0] ^ regs[rt]._u64[0], regs[rs]._u64[1] ^ regs[rt]._u64[1]}};
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PXOR %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Quadword Move From Coprocessor */
 void iQMFC(int copN, u32 instr) {
     assert(copN == 2); // VU0/COP2 only?
@@ -2613,6 +2629,7 @@ void decodeInstr(u32 instr) {
                                 case MMI2Opcode::PMFLO : iPMFLO(instr); break;
                                 case MMI2Opcode::PCPYLD: iPCPYLD(instr); break;
                                 case MMI2Opcode::PAND  : iPAND(instr); break;
+                                case MMI2Opcode::PXOR  : iPXOR(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI2 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
