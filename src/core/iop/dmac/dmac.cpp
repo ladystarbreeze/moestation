@@ -10,6 +10,7 @@
 #include <cstdio>
 
 #include "../cdvd/cdvd.hpp"
+#include "../spu2/spu2.hpp"
 #include "../../intc.hpp"
 #include "../../scheduler.hpp"
 #include "../../sif.hpp"
@@ -123,6 +124,11 @@ void transferEndEvent(int chnID) {
     chn.isTagEnd = false;
 
     chcr.str = false;
+
+    /* Clear SPU2 busy flags */
+    if ((chnID == static_cast<int>(Channel::SPU1)) || (chnID == static_cast<int>(Channel::SPU2))) {
+        spu2::transferEnd((int)(chnID == static_cast<int>(Channel::SPU2)));
+    }
 
     /* Set interrupt pending flag, check for interrupts */
 
@@ -324,9 +330,43 @@ void doSIF1() {
     }
 }
 
+/* Performs SPU1 (core 0) DMA */
+void doSPU1() {
+    const auto chnID = Channel::SPU1;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] SPU1 transfer\n");
+
+    assert(chcr.mod == Mode::Slice);
+
+    assert(!chcr.dec);
+
+    /* TODO: transfer data to SPU1 */
+
+    const auto len = chn.len;
+
+    /* Update channel registers */
+    chn.len  -= len;
+    chn.madr += 4 * len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    if (!chn.len) {
+        /* Clear BCR */
+        chn.count = 0;
+        chn.size  = 0;
+
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+    }
+}
+
 void startDMA(Channel chn) {
     switch (chn) {
         case Channel::CDVD: doCDVD(); break;
+        case Channel::SPU1: doSPU1(); break;
         case Channel::SIF0: doSIF0(); break;
         case Channel::SIF1: doSIF1(); break;
         default:

@@ -8,7 +8,11 @@
 #include <cassert>
 #include <cstdio>
 
+#include "../dmac/dmac.hpp"
+
 namespace ps2::iop::spu2 {
+
+using Channel = dmac::Channel;
 
 /* --- SPU2 registers --- */
 
@@ -42,6 +46,20 @@ u16 coreATTR[2]; // Core attributes
 u16 coreSTAT[2]; // Core status
 
 u32 spuADDR[2];
+
+void setDMARequest(int coreID, bool drq) {
+    if (drq) {
+        std::printf("[SPU2:CORE%d] DMA request\n", coreID);
+
+        if (coreID == 1) {
+            dmac::setDRQ(Channel::SPU2, true);
+        } else {
+            dmac::setDRQ(Channel::SPU1, true);
+        }
+
+        coreSTAT[coreID] |= static_cast<u16>(CoreStatus::DMAReq);
+    }
+}
 
 u16 read(u32 addr) {
     if ((addr >= 0x1F900760) && (addr < 0x1F9007B0)) {
@@ -208,7 +226,7 @@ void write(u32 addr, u16 data) {
                 case static_cast<u32>(SPU2Reg::COREATTR):
                     std::printf("[SPU2:CORE%d] 16-bit write @ CORE_ATTR = 0x%04X\n", coreID, data);
 
-                    /* TODO: request SPU DMA if ADMA is not running */
+                    setDMARequest(coreID, ((data >> 4) & 3) == 2);
 
                     /* Clear DMA flags in CORE_STAT */
                     if (data & (1 << 15)) coreSTAT[coreID] &= ~(static_cast<u16>(CoreStatus::DMABusy) | static_cast<u16>(CoreStatus::DMAReq));
@@ -274,6 +292,11 @@ void write(u32 addr, u16 data) {
             std::printf("[SPU2:CORE%d] Unhandled 16-bit write @ 0x%08X (Voice) = 0x%04X\n", coreID, addr, data);
         }
     }
+}
+
+/* Clears DMA busy flags */
+void transferEnd(int coreID) {
+    coreSTAT[coreID] &= ~static_cast<u16>(CoreStatus::DMABusy);
 }
 
 }
