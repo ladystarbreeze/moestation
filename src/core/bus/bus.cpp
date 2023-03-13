@@ -13,7 +13,7 @@
 #include "../ee/dmac/dmac.hpp"
 #include "../ee/ipu/ipu.hpp"
 #include "../ee/timer/timer.hpp"
-#include "../gif/gif.hpp"
+#include "../ee/gif/gif.hpp"
 #include "../gs/gs.hpp"
 #include "../iop/cdvd/cdvd.hpp"
 #include "../iop/dmac/dmac.hpp"
@@ -247,6 +247,8 @@ u64 read64(u32 addr) {
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u64));
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::GS), static_cast<u32>(MemorySize::GS))) {
+        return gs::readPriv64(addr);
     } else {
         switch (addr) {
             default:
