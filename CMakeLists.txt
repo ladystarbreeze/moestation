@@ -19,12 +19,12 @@ set(SOURCES
     src/core/ee/cpu/cpu.cpp
     src/core/ee/cpu/fpu.cpp
     src/core/ee/dmac/dmac.cpp
+    src/core/ee/gif/gif.cpp
     src/core/ee/ipu/ipu.cpp
     src/core/ee/timer/timer.cpp
     src/core/ee/vif/vif.cpp
     src/core/ee/vu/vu.cpp
     src/core/ee/vu/vu_int.cpp
-    src/core/gif/gif.cpp
     src/core/gs/gs.cpp
     src/core/iop/cop0.cpp
     src/core/iop/iop.cpp
@@ -48,12 +48,12 @@ set(HEADERS
     src/core/ee/cpu/cpu.hpp
     src/core/ee/cpu/fpu.hpp
     src/core/ee/dmac/dmac.hpp
+    src/core/ee/gif/gif.hpp
     src/core/ee/ipu/ipu.hpp
     src/core/ee/timer/timer.hpp
     src/core/ee/vif/vif.hpp
     src/core/ee/vu/vu.hpp
     src/core/ee/vu/vu_int.hpp
-    src/core/gif/gif.hpp
     src/core/gs/gs.hpp
     src/core/iop/cop0.hpp
     src/core/iop/iop.hpp
