@@ -487,6 +487,18 @@ u32 read(u32 addr) {
                 data |= pcr.cde << 16;
                 data |= pcr.pce << 31;
                 break;
+            case static_cast<u32>(ControlReg::SQWC):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_SQWC\n");
+                return 0;
+            case static_cast<u32>(ControlReg::RBSR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_RBSR\n");
+                return 0;
+            case static_cast<u32>(ControlReg::RBOR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_RBOR\n");
+                return 0;
+            case static_cast<u32>(ControlReg::STADR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D_STADR\n");
+                return 0;
             default:
                 std::printf("[DMAC:EE   ] Unhandled 32-bit control read @ 0x%08X\n", addr);
 
