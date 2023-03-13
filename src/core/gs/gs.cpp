@@ -25,14 +25,21 @@ constexpr i64 SCANLINES_PER_FRAME = 262;
 
 /* --- GS privileged registers --- */
 enum PrivReg {
-    SMODE1 = 0x12000010,
-    SMODE2 = 0x12000020,
-    SRFSH  = 0x12000030,
-    SYNCH1 = 0x12000040,
-    SYNCH2 = 0x12000050,
-    SYNCV  = 0x12000060,
-    CSR    = 0x12001000,
+    PMODE    = 0x12000000,
+    SMODE1   = 0x12000010,
+    SMODE2   = 0x12000020,
+    SRFSH    = 0x12000030,
+    SYNCH1   = 0x12000040,
+    SYNCH2   = 0x12000050,
+    SYNCV    = 0x12000060,
+    DISPFB2  = 0x12000090,
+    DISPLAY2 = 0x120000A0,
+    BGCOLOR  = 0x120000E0,
+    CSR      = 0x12001000,
+    IMR      = 0x12001010,
 };
+
+u64 csr;
 
 i64 lineCounter = 0;
 
@@ -43,11 +50,16 @@ u64 idHBLANK;
 void hblankEvent(i64 c) {
     ee::timer::stepHBLANK();
 
+    csr |= 1 << 2; // HBLANK
+
     ++lineCounter;
 
     if (lineCounter == SCANLINES_PER_VDRAW) {
         intc::sendInterrupt(Interrupt::VBLANKStart);
         intc::sendInterruptIOP(IOPInterrupt::VBLANKStart);
+
+        csr |= 1 << 3;  // VBLANK
+        csr ^= 1 << 13; // FIELD
     } else if (lineCounter == SCANLINES_PER_FRAME) {
         intc::sendInterrupt(Interrupt::VBLANKEnd);
         intc::sendInterruptIOP(IOPInterrupt::VBLANKEnd);
@@ -65,9 +77,24 @@ void init() {
     scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE, true);
 }
 
+u64 readPriv64(u32 addr) {
+    switch (addr) {
+        case PrivReg::CSR:
+            //std::printf("[GS        ] Unhandled 64-bit read @ CSR\n");
+            return csr;
+        default:
+            std::printf("[GS        ] Unhandled 64-bit read @ 0x%08X\n", addr);
+
+            exit(0);
+    }
+}
+
 /* Writes a GS privileged register (64-bit) */
 void writePriv64(u32 addr, u64 data) {
     switch (addr) {
+        case PrivReg::PMODE:
+            std::printf("[GS        ] 64-bit write @ PMODE = 0x%016llX\n", data);
+            break;
         case PrivReg::SMODE1:
             std::printf("[GS        ] 64-bit write @ SMODE1 = 0x%016llX\n", data);
             break;
@@ -86,8 +113,22 @@ void writePriv64(u32 addr, u64 data) {
         case PrivReg::SYNCV:
             std::printf("[GS        ] 64-bit write @ SYNCV = 0x%016llX\n", data);
             break;
+        case PrivReg::DISPFB2:
+            std::printf("[GS        ] 64-bit write @ DISPFB2 = 0x%016llX\n", data);
+            break;
+        case PrivReg::DISPLAY2:
+            std::printf("[GS        ] 64-bit write @ DISPLAY2 = 0x%016llX\n", data);
+            break;
+        case PrivReg::BGCOLOR:
+            std::printf("[GS        ] 64-bit write @ BGCOLOR = 0x%016llX\n", data);
+            break;
         case PrivReg::CSR:
-            std::printf("[GS        ] 64-bit write @ GS_CSR = 0x%016llX\n", data);
+            std::printf("[GS        ] 64-bit write @ CSR = 0x%016llX\n", data);
+
+            csr = data;
+            break;
+        case PrivReg::IMR:
+            std::printf("[GS        ] 64-bit write @ IMR = 0x%016llX\n", data);
             break;
         default:
             std::printf("[GS        ] Unhandled 64-bit write @ 0x%08X = 0x%016llX\n", addr, data);
