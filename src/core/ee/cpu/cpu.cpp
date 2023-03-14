@@ -194,6 +194,8 @@ enum MMI0Opcode {
     PSUBW  = 0x01,
     PSUBB  = 0x09,
     PEXTLW = 0x12,
+    PEXTLH = 0x16,
+    PEXT5  = 0x1E,
 };
 
 enum MMI1Opcode {
@@ -1848,6 +1850,26 @@ void iPCPYUD(u32 instr) {
     }
 }
 
+/* Parallel EXTend Lower Halfword */
+void iPEXTLH(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 4; i++) {
+        res._u16[2 * i + 0] = regs[rt]._u16[i];
+        res._u16[2 * i + 1] = regs[rs]._u16[i];
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PEXTLH %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Parallel EXTend Lower Word */
 void iPEXTLW(u32 instr) {
     const auto rd = getRd(instr);
@@ -1856,15 +1878,38 @@ void iPEXTLW(u32 instr) {
 
     u128 res;
 
-    res._u32[0] = regs[rt]._u32[0];
-    res._u32[1] = regs[rs]._u32[0];
-    res._u32[2] = regs[rt]._u32[1];
-    res._u32[3] = regs[rs]._u32[1];
+    for (int i = 0; i < 2; i++) {
+        res._u32[2 * i + 0] = regs[rt]._u32[i];
+        res._u32[2 * i + 1] = regs[rs]._u32[i];
+    }
 
     set128(rd, res);
 
     if (doDisasm) {
         std::printf("[EE Core   ] PEXTLW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel EXTend from 5 bits */
+void iPEXT5(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 4; i++) {
+        const auto data = (regs[rt]._u32[i] & 0xFFFF);
+
+        res._u32[i]  = ((data >>  0) & 0x1F) << 3;
+        res._u32[i] |= ((data >>  5) & 0x1F) << 11;
+        res._u32[i] |= ((data >> 10) & 0x1F) << 19;
+        res._u32[i] |= ((data >> 15) & 0x01) << 31;
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PEXT5 %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
     }
 }
 
@@ -2700,6 +2745,8 @@ void decodeInstr(u32 instr) {
                                 case MMI0Opcode::PSUBW : iPSUBW(instr); break;
                                 case MMI0Opcode::PSUBB : iPSUBB(instr); break;
                                 case MMI0Opcode::PEXTLW: iPEXTLW(instr); break;
+                                case MMI0Opcode::PEXTLH: iPEXTLH(instr); break;
+                                case MMI0Opcode::PEXT5 : iPEXT5(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI0 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
