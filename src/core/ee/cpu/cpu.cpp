@@ -120,14 +120,17 @@ enum SPECIALOpcode {
     MFLO    = 0x12,
     MTLO    = 0x13,
     DSLLV   = 0x14,
+    DSRLV   = 0x16,
     DSRAV   = 0x17,
     MULT    = 0x18,
+    MULTU   = 0x19,
     DIV     = 0x1A,
     DIVU    = 0x1B,
     ADDU    = 0x21,
     SUBU    = 0x23,
     AND     = 0x24,
     OR      = 0x25,
+    XOR     = 0x26,
     NOR     = 0x27,
     MFSA    = 0x28,
     MTSA    = 0x29,
@@ -137,6 +140,7 @@ enum SPECIALOpcode {
     DSUBU   = 0x2F,
     DSLL    = 0x38,
     DSRL    = 0x3A,
+    DSRA    = 0x3B,
     DSLL32  = 0x3C,
     DSRL32  = 0x3E,
     DSRA32  = 0x3F,
@@ -187,6 +191,7 @@ enum MMIOpcode {
 };
 
 enum MMI0Opcode {
+    PSUBW  = 0x01,
     PSUBB  = 0x09,
     PEXTLW = 0x12,
 };
@@ -1014,6 +1019,20 @@ void iDSLL32(u32 instr) {
     }
 }
 
+/* Doubleword Shift Right Arithmetic */
+void iDSRA(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    const auto shamt = getShamt(instr);
+
+    set64(rd, (i64)regs[rt]._u64[0] >> shamt);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] DSRA %s, %s, %u; %s = 0x%016llX\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* Doubleword Shift Right Arithmetic Variable */
 void iDSRAV(u32 instr) {
     const auto rd = getRd(instr);
@@ -1052,6 +1071,19 @@ void iDSRL(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] DSRL %s, %s, %u; %s = 0x%016llX\n", regNames[rd], regNames[rt], shamt, regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
+/* Doubleword Shift Right Logical Variable */
+void iDSRLV(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set64(rd, regs[rt]._u64[0] >> (regs[rs]._u64[0] & 0x3F));
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] DSRLV %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rt], regNames[rs], regNames[rd], regs[rd]._u64[0]);
     }
 }
 
@@ -1671,6 +1703,24 @@ void iMULT1(u32 instr) {
     }
 }
 
+/* MULTiply Unsigned */
+void iMULTU(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = (u64)regs[rs]._u32[0] * (u64)regs[rt]._u32[0];
+
+    regs[CPUReg::LO]._u64[0] = (i32)res;
+    regs[CPUReg::HI]._u64[0] = (i32)(res >> 32);
+
+    set64(rd, regs[CPUReg::LO]._u64[0]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MULTU %s, %s, %s; %s/LO = 0x%016llX, HI = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[CPUReg::LO]._u64[0], regs[CPUReg::HI]._u64[0]);
+    }
+}
+
 /* NOR */
 void iNOR(u32 instr) {
     const auto rd = getRd(instr);
@@ -1936,6 +1986,25 @@ void iPSUBB(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] PSUBB %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
+/* Parallel SUBtract, Word */
+void iPSUBW(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 4; i++) {
+        res._u32[i] = regs[rs]._u32[i] - regs[rt]._u32[i];
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PSUBW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
     }
 }
 
@@ -2428,6 +2497,19 @@ void iTLBWI() {
     }
 }
 
+/* XOR */
+void iXOR(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    set64(rd, regs[rs]._u64[0] ^ regs[rt]._u64[0]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] XOR %s, %s, %s; %s = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[0]);
+    }
+}
+
 /* XOR Immediate */
 void iXORI(u32 instr) {
     const auto rs = getRs(instr);
@@ -2468,14 +2550,17 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::MFLO   : iMFLO(instr); break;
                     case SPECIALOpcode::MTLO   : iMTLO(instr); break;
                     case SPECIALOpcode::DSLLV  : iDSLLV(instr); break;
+                    case SPECIALOpcode::DSRLV  : iDSRLV(instr); break;
                     case SPECIALOpcode::DSRAV  : iDSRAV(instr); break;
                     case SPECIALOpcode::MULT   : iMULT(instr); break;
+                    case SPECIALOpcode::MULTU  : iMULTU(instr); break;
                     case SPECIALOpcode::DIV    : iDIV(instr); break;
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
                     case SPECIALOpcode::SUBU   : iSUBU(instr); break;
                     case SPECIALOpcode::AND    : iAND(instr); break;
                     case SPECIALOpcode::OR     : iOR(instr); break;
+                    case SPECIALOpcode::XOR    : iXOR(instr); break;
                     case SPECIALOpcode::NOR    : iNOR(instr); break;
                     case SPECIALOpcode::MFSA   : iMFSA(instr); break;
                     case SPECIALOpcode::MTSA   : iMTSA(instr); break;
@@ -2485,6 +2570,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::DSUBU  : iDSUBU(instr); break;
                     case SPECIALOpcode::DSLL   : iDSLL(instr); break;
                     case SPECIALOpcode::DSRL   : iDSRL(instr); break;
+                    case SPECIALOpcode::DSRA   : iDSRA(instr); break;
                     case SPECIALOpcode::DSLL32 : iDSLL32(instr); break;
                     case SPECIALOpcode::DSRL32 : iDSRL32(instr); break;
                     case SPECIALOpcode::DSRA32 : iDSRA32(instr); break;
@@ -2611,6 +2697,7 @@ void decodeInstr(u32 instr) {
                             const auto shamt = getShamt(instr);
 
                             switch (shamt) {
+                                case MMI0Opcode::PSUBW : iPSUBW(instr); break;
                                 case MMI0Opcode::PSUBB : iPSUBB(instr); break;
                                 case MMI0Opcode::PEXTLW: iPEXTLW(instr); break;
                                 default:
