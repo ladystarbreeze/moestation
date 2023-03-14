@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cstdio>
 
+#include "ee/cpu/cop0.hpp"
 #include "iop/cop0.hpp"
 
 namespace ps2::intc {
@@ -55,6 +56,7 @@ u16 intcMASK = 0, intcSTAT = 0;
 u32 iMASK = 0, iSTAT = 0;
 bool iCTRL = false;
 
+void checkInterrupt();
 void checkInterruptIOP();
 
 /* Returns INTC_MASK */
@@ -93,14 +95,14 @@ u32 readCtrlIOP() {
 void writeMask(u16 data) {
     intcMASK ^= (data & 0x7FFF);
 
-    assert(!(intcSTAT & intcMASK));
+    checkInterrupt();
 }
 
 /* Writes INTC_STAT */
 void writeStat(u16 data) {
     intcSTAT &= (~data & 0x7FFF);
 
-    assert(!(intcSTAT & intcMASK));
+    checkInterrupt();
 }
 
 /* Writes I_MASK */
@@ -129,7 +131,7 @@ void sendInterrupt(Interrupt i) {
 
     intcSTAT |= 1 << static_cast<int>(i);
 
-    assert(!(intcSTAT & intcMASK));
+    checkInterrupt();
 }
 
 void sendInterruptIOP(IOPInterrupt i) {
@@ -138,6 +140,12 @@ void sendInterruptIOP(IOPInterrupt i) {
     iSTAT |= 1 << static_cast<int>(i);
 
     checkInterruptIOP();
+}
+
+void checkInterrupt() {
+    //std::printf("[INTC:EE   ] INTC_STAT = 0x%04X, INTC_MASK = 0x%04X\n", intcSTAT, intcMASK);
+
+    ee::cpu::cop0::setInterruptPending(intcSTAT & intcMASK);
 }
 
 void checkInterruptIOP() {

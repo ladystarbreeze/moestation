@@ -9,7 +9,11 @@
 #include <cstdio>
 #include <cstring>
 
+#include "../../intc.hpp"
+
 namespace ps2::ee::timer {
+
+using Interrupt = intc::Interrupt;
 
 /* EE timer registers */
 
@@ -48,6 +52,10 @@ struct Timer {
 };
 
 Timer timers[4];
+
+void sendInterrupt(int tmID) {
+    intc::sendInterrupt(static_cast<Interrupt>(tmID + 9));
+}
 
 void init() {
     memset(&timers, 0, 4 * sizeof(Timer));
@@ -180,7 +188,7 @@ void step(i64 c) {
                     // Checking EQUF is necessary because timer IRQs are edge-triggered
                     timer.mode.equf = true;
 
-                    assert(false);
+                    sendInterrupt(i);
                 }
 
                 if (timer.mode.zret) timer.count = 0;
@@ -189,7 +197,7 @@ void step(i64 c) {
                     // Checking OVFF is necessary because timer IRQs are edge-triggered
                     timer.mode.ovff = true;
 
-                    assert(false);
+                    sendInterrupt(i);
                 }
             }
 
@@ -212,7 +220,7 @@ void stepHBLANK() {
                 // Checking EQUF is necessary because timer IRQs are edge-triggered
                 timer.mode.equf = true;
 
-                assert(false);
+                sendInterrupt(i);
             }
 
             if (timer.mode.zret) timer.count = 0;
@@ -221,7 +229,7 @@ void stepHBLANK() {
                 // Checking OVFF is necessary because timer IRQs are edge-triggered
                 timer.mode.ovff = true;
 
-                assert(false);
+                sendInterrupt(i);
             }
         }
     }
