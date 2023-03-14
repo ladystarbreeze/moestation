@@ -97,8 +97,10 @@ enum Opcode {
     SWR     = 0x2E,
     CACHE   = 0x2F,
     LWC1    = 0x31,
+    LQC2    = 0x36,
     LD      = 0x37,
     SWC1    = 0x39,
+    SQC2    = 0x3E,
     SD      = 0x3F,
 };
 
@@ -1357,6 +1359,33 @@ void iLQ(u32 instr) {
     set128(rt, data);
 }
 
+/* Load Quadword Coprocessor 2 */
+void iLQC2(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] LQC2 %d, 0x%X(%s); %d = [0x%08X]\n", rt, imm, regNames[rs], rt, addr);
+    }
+
+    if (addr & 15) {
+        std::printf("[EE Core   ] LQC2: Unhandled AdEL @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    const auto data = read128(addr);
+
+    vus[0].setVF(rt, 0, *(f32 *)&data._u32[0]);
+    vus[0].setVF(rt, 1, *(f32 *)&data._u32[1]);
+    vus[0].setVF(rt, 2, *(f32 *)&data._u32[2]);
+    vus[0].setVF(rt, 3, *(f32 *)&data._u32[3]);
+}
+
 /* Load Upper Immediate */
 void iLUI(u32 instr) {
     const auto rt = getRt(instr);
@@ -2346,6 +2375,40 @@ void iSQ(u32 instr) {
     write128(addr, data);
 }
 
+/* Store Quadword Coprocessor 2 */
+void iSQC2(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (i32)(i16)getImm(instr);
+
+    const auto addr = regs[rs]._u32[0] + imm;
+
+    u128 data;
+
+    const auto x = vus[0].getVF(rt, 0);
+    const auto y = vus[0].getVF(rt, 1);
+    const auto z = vus[0].getVF(rt, 2);
+    const auto w = vus[0].getVF(rt, 3);
+
+    data._u32[0] = *(u32 *)&x;
+    data._u32[1] = *(u32 *)&y;
+    data._u32[2] = *(u32 *)&z;
+    data._u32[3] = *(u32 *)&w;
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] SQC2 %d, 0x%X(%s); [0x%08X] = 0x%016llX%016llX\n", rt, imm, regNames[rs], addr, data._u64[1], data._u64[0]);
+    }
+
+    if (addr & 15) {
+        std::printf("[EE Core   ] SQC2: Unhandled AdES @ 0x%08X (address = 0x%08X)\n", cpc, addr);
+
+        exit(0);
+    }
+
+    write128(addr, data);
+}
+
 /* Shift Right Arithmetic */
 void iSRA(u32 instr) {
     const auto rd = getRd(instr);
@@ -2835,8 +2898,10 @@ void decodeInstr(u32 instr) {
         case Opcode::SWR  : iSWR(instr); break;
         case Opcode::CACHE: break; // CACHE
         case Opcode::LWC1 : iLWC(1, instr); break;
+        case Opcode::LQC2 : iLQC2(instr); break;
         case Opcode::LD   : iLD(instr); break;
         case Opcode::SWC1 : iSWC(1, instr); break;
+        case Opcode::SQC2 : iSQC2(instr); break;
         case Opcode::SD   : iSD(instr); break;
         default:
             std::printf("[EE Core   ] Unhandled instruction 0x%02X (0x%08X) @ 0x%08X\n", opcode, instr, cpc);
