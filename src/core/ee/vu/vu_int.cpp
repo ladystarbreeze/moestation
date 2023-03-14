@@ -17,11 +17,13 @@ constexpr auto doDisasm = true;
 /* --- VU instructions --- */
 
 enum SPECIAL1Opcode {
+    VADD  = 0x28,
     VSUB  = 0x2C,
     VIADD = 0x30,
 };
 
 enum SPECIAL2Opcode {
+    VMR32 = 0x31,
     VSQI  = 0x35,
     VISWR = 0x3F,
 };
@@ -57,6 +59,23 @@ u32 getT(u32 instr) {
 
 /* --- VU instruction handlers --- */
 
+/* ADD */
+void iADD(VectorUnit *vu, u32 instr) {
+    const auto fd = getD(instr);
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] ADD%s VF%u, VF%u, VF%u\n", vu->vuID, destStr[dest], fd, fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + vu->getVF(ft, i));
+    }
+}
+
 /* Integer ADD */
 void iIADD(VectorUnit *vu, u32 instr) {
     const auto id = getD(instr);
@@ -88,6 +107,22 @@ void iISWR(VectorUnit *vu, u32 instr) {
     if (dest & (1 << 1)) vu->writeData32(addr + 0x8, data);
     if (dest & (1 << 2)) vu->writeData32(addr + 0x4, data);
     if (dest & (1 << 3)) vu->writeData32(addr + 0x0, data);
+}
+
+/* Move Rotate 32 */
+void iMR32(VectorUnit *vu, u32 instr) {
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] MR32%s VF%u, VF%u\n", vu->vuID, destStr[dest], fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF(ft, (i + 1) & 3));
+    }
 }
 
 /* Store Quadword Increment */
@@ -139,6 +174,7 @@ void executeMacro(VectorUnit *vu, u32 instr) {
         const auto opcode = ((instr >> 4) & 0x7C) | (instr & 3);
 
         switch (opcode) {
+            case SPECIAL2Opcode::VMR32: iMR32(vu, instr); break;
             case SPECIAL2Opcode::VSQI : iSQI(vu, instr); break;
             case SPECIAL2Opcode::VISWR: iISWR(vu, instr); break;
             default:
@@ -150,6 +186,7 @@ void executeMacro(VectorUnit *vu, u32 instr) {
         const auto opcode = instr & 0x3F;
 
         switch (opcode) {
+            case SPECIAL1Opcode::VADD : iADD(vu, instr); break;
             case SPECIAL1Opcode::VSUB : iSUB(vu, instr); break;
             case SPECIAL1Opcode::VIADD: iIADD(vu, instr); break;
             default:
