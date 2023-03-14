@@ -21,19 +21,25 @@ struct VectorUnit {
     f32 getVF(u32 idx, int e);
     u16 getVI(u32 idx);
 
+    f32 getQ();
+
     void writeData32(u32 addr, u32 data);
 
     void setControl(u32 idx, u32 data); // VU0 only
     void setVF(u32 idx, int e, f32 data);
     void setVI(u32 idx, u16 data);
+
+    void setQ(f32 data);
     
     int vuID;
 
 private:
     VectorUnit *otherVU;
 
-    f32 vf[32][4]; // Floating-point registers
+    f32 vf[33][4]; // Floating-point registers (+ accumulator)
     u16 vi[16];    // Integer registers
+
+    f32 q;
 };
 
 }

@@ -69,6 +69,11 @@ u16 VectorUnit::getVI(u32 idx) {
     return vi[idx];
 }
 
+/* Returns Q */
+f32 VectorUnit::getQ() {
+    return q;
+}
+
 /* Writes VU mem (32-bit) */
 void VectorUnit::writeData32(u32 addr, u32 data) {
     if (addr > 0x4000) { // VU1 registers are mapped to these addresses (VU0 only)
@@ -148,7 +153,11 @@ void VectorUnit::setControl(u32 idx, u32 data) {
 
 /* Sets a VF register element */
 void VectorUnit::setVF(u32 idx, int e, f32 data) {
-    std::printf("[VU%d       ] VF%u.%s = %f\n", vuID, idx, elementStr[e], data);
+    if (idx == 32) {
+        std::printf("[VU%d       ] ACC.%s = %f\n", vuID, elementStr[e], data);
+    } else {
+        std::printf("[VU%d       ] VF%u.%s = %f\n", vuID, idx, elementStr[e], data);
+    }
 
     vf[idx][e] = data;
 
@@ -162,6 +171,13 @@ void VectorUnit::setVI(u32 idx, u16 data) {
     vi[idx] = data;
 
     vi[0] = 0;
+}
+
+/* Sets Q */
+void VectorUnit::setQ(f32 data) {
+    std::printf("[VU%d       ] Q = %f\n", vuID, data);
+
+    q = data;
 }
 
 }
