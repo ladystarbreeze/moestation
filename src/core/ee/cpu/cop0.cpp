@@ -187,6 +187,14 @@ void set32(u32 idx, u32 data) {
     }
 }
 
+/* Sets IRQ bit in Cause, optionally triggers interrupt */
+void setInterruptPending(bool irq) {
+    cause.ip &= ~1;
+    cause.ip |= irq;
+
+    checkInterrupt();
+}
+
 /* Sets DMAC IRQ bit in Cause, optionally triggers interrupt */
 void setInterruptPendingDMAC(bool irq) {
     cause.ip &= ~2;

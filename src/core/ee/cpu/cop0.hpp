@@ -27,6 +27,7 @@ u32 get32(u32 idx);
 
 void set32(u32 idx, u32 data);
 
+void setInterruptPending(bool irq);
 void setInterruptPendingDMAC(bool irq);
 
 bool isBEV();
