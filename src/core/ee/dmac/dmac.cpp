@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "../cpu/cop0.hpp"
+#include "../gif/gif.hpp"
 #include "../../scheduler.hpp"
 #include "../../sif.hpp"
 #include "../../bus/bus.hpp"
@@ -257,6 +258,48 @@ void decodeDestinationTag(Channel chnID, u64 dmaTag) {
     }
 }
 
+/* Performs PATH3 DMA */
+void doPATH3() {
+    const auto chnID = Channel::PATH3;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    //std::printf("[DMAC:EE   ] PATH3 transfer\n");
+
+    /* PATH3 is always from RAM */
+
+    if (!chn.qwc) {
+        assert(chcr.mod == Mode::Chain); // Should only happen in Chain mode
+
+        std::printf("[DMAC:EE   ] Unhandled PATH3 chain transfer\n");
+
+        exit(0);
+    }
+
+    /* Transfer all data (Normal)/one slice (Chain) */
+
+    auto qwc  = chn.qwc;
+    auto madr = chn.madr;
+
+    assert(qwc);
+
+    for (u32 i = 0; i < qwc; i++) {
+        gif::writePATH3(bus::readDMAC128(madr + 16 * i));
+    }
+
+    /* Update channel registers */
+    chn.qwc  -= qwc;
+    chn.madr += 16 * qwc;
+
+    ///* Clear DRQ */
+    //chn.drq = false;
+
+    if (!chn.qwc && ((chcr.mod != Mode::Chain) || chn.isTagEnd)) {
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, true);
+    }
+}
+
 /* Performs SIF0 DMA */
 void doSIF0() {
     const auto chnID = Channel::SIF0;
@@ -358,8 +401,9 @@ void doSIF1() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::SIF0: doSIF0(); break;
-        case Channel::SIF1: doSIF1(); break;
+        case Channel::PATH3: doPATH3(); break;
+        case Channel::SIF0 : doSIF0(); break;
+        case Channel::SIF1 : doSIF1(); break;
         default:
             std::printf("[DMAC:EE   ] Unhandled channel %d DMA transfer\n", chn);
 
@@ -446,6 +490,9 @@ u32 read(u32 addr) {
                     data |= chcr.tag << 16;
                 }
                 break;
+            case static_cast<u32>(ChannelReg::MADR):
+                std::printf("[DMAC:EE   ] 32-bit read @ D%u_MADR\n", chnID);
+                return chn.madr;
             case static_cast<u32>(ChannelReg::QWC):
                 std::printf("[DMAC:EE   ] 32-bit read @ D%u_QWC\n", chnID);
                 return chn.qwc;
