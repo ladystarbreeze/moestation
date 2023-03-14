@@ -201,6 +201,10 @@ u32 read32(u32 addr) {
         return ee::ipu::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
         return gif::read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
+        return vif[0]->read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
+        return vif[1]->read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::DMAC), static_cast<u32>(MemorySize::DMAC))) {
         return ee::dmac::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {

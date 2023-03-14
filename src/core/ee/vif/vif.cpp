@@ -24,6 +24,18 @@ VectorInterface::VectorInterface(int vifID, VectorUnit *vu) {
     this->vu = vu;
 }
 
+u32 VectorInterface::read(u32 addr) {
+    switch (addr & ~(1 << 10)) {
+        case VIFReg::STAT:
+            std::printf("[VIF%d      ] 32-bit read @ STAT\n", vifID);
+            return 0;
+        default:
+            std::printf("[VIF%d      ] Unhandled 32-bit read @ 0x%08X\n", vifID, addr);
+
+            exit(0);
+    }
+}
+
 void VectorInterface::write(u32 addr, u32 data) {
     switch (addr & ~(1 << 10)) {
         case VIFReg::STAT:
