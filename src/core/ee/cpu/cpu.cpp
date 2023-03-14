@@ -61,6 +61,7 @@ enum Opcode {
     BNE     = 0x05,
     BLEZ    = 0x06,
     BGTZ    = 0x07,
+    ADDI    = 0x08,
     ADDIU   = 0x09,
     SLTI    = 0x0A,
     SLTIU   = 0x0B,
@@ -609,6 +610,31 @@ void raiseLevel1Exception(Exception e) {
 }
 
 /* --- Instruction handlers --- */
+
+/* ADD Immediate */
+void iADDI(u32 instr) {
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto imm = (u32)(i16)getImm(instr);
+
+    const auto res = regs[rs]._u32[0] + imm;
+
+    /* If rs and imm have the same sign and rs and the result have a different sign,
+     * an arithmetic overflow occurred
+     */
+    if (!((regs[rs]._u32[0] ^ imm) & (1 << 31)) && ((regs[rs]._u32[0] ^ res) & (1 << 31))) {
+        std::printf("[EE Core   ] ADDI: Unhandled Arithmetic Overflow\n");
+
+        exit(0);
+    }
+
+    set32(rt, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] ADDI %s, %s, 0x%X; %s = 0x%016llX\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]._u64[0]);
+    }
+}
 
 /* ADD Immediate Unsigned */
 void iADDIU(u32 instr) {
@@ -2711,6 +2737,7 @@ void decodeInstr(u32 instr) {
         case Opcode::BNE  : iBNE(instr); break;
         case Opcode::BLEZ : iBLEZ(instr); break;
         case Opcode::BGTZ : iBGTZ(instr); break;
+        case Opcode::ADDI : iADDI(instr); break;
         case Opcode::ADDIU: iADDIU(instr); break;
         case Opcode::SLTI : iSLTI(instr); break;
         case Opcode::SLTIU: iSLTIU(instr); break;
