@@ -199,6 +199,8 @@ void step(i64 c) {
 
                     sendInterrupt(i);
                 }
+
+                timer.count &= 0xFFFF;
             }
 
             timer.subcount -= timer.prescaler;
