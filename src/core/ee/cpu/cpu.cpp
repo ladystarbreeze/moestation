@@ -26,7 +26,7 @@ constexpr u32 EELOAD = 0x82000;
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
 constexpr auto doDisasm = false;
-constexpr auto doFastBoot = true;
+constexpr auto doFastBoot = false;
 
 /* --- EE Core register definitions --- */
 
@@ -165,11 +165,13 @@ enum COPOpcode {
     MT  = 0x04,
     QMT = 0x05,
     CT  = 0x06,
+    BC  = 0x08,
     CO  = 0x10,
 };
 
 enum COP1Opcode {
     S = 0x10,
+    W = 0x14,
 };
 
 enum COP0Opcode {
@@ -179,7 +181,15 @@ enum COP0Opcode {
     DI    = 0x39,
 };
 
+enum COPBranch {
+    BCF  = 0,
+    BCT  = 1,
+    BCFL = 2,
+    BCTL = 3,
+};
+
 enum MMIOpcode {
+    MADD  = 0x00,
     PLZCW = 0x04,
     MMI0  = 0x08,
     MMI2  = 0x09,
@@ -689,6 +699,90 @@ void iANDI(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] ANDI %s, %s, 0x%llX; %s = 0x%016llX\n", regNames[rt], regNames[rs], imm, regNames[rt], regs[rt]._u64[0]);
+    }
+}
+
+/* Branch on Coprocessor False */
+void iBCF(int copN, u32 instr) {
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    bool cpcond;
+    switch (copN) {
+        case 1: cpcond = fpu::getCPCOND(); break;
+        default:
+            std::printf("[EE Core   ] BCF: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    doBranch(target, !cpcond, CPUReg::R0, false);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BCF%d 0x%08X; CPCOND%d = %d\n", copN, target, copN, cpcond);
+    }
+}
+
+/* Branch on Coprocessor False Likely */
+void iBCFL(int copN, u32 instr) {
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    bool cpcond;
+    switch (copN) {
+        case 1: cpcond = fpu::getCPCOND(); break;
+        default:
+            std::printf("[EE Core   ] BCFL: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    doBranch(target, !cpcond, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BCFL%d 0x%08X; CPCOND%d = %d\n", copN, target, copN, cpcond);
+    }
+}
+
+/* Branch on Coprocessor True Likely */
+void iBCTL(int copN, u32 instr) {
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    bool cpcond;
+    switch (copN) {
+        case 1: cpcond = fpu::getCPCOND(); break;
+        default:
+            std::printf("[EE Core   ] BCTL: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    doBranch(target, cpcond, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BCTL%d 0x%08X; CPCOND%d = %d\n", copN, target, copN, cpcond);
+    }
+}
+
+/* Branch on Coprocessor True */
+void iBCT(int copN, u32 instr) {
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    bool cpcond;
+    switch (copN) {
+        case 1: cpcond = fpu::getCPCOND(); break;
+        default:
+            std::printf("[EE Core   ] BCT: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    doBranch(target, cpcond, CPUReg::R0, false);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BCT%d 0x%08X; CPCOND%d = %d\n", copN, target, copN, cpcond);
     }
 }
 
@@ -1485,7 +1579,7 @@ void iLWC(int copN, u32 instr) {
     const auto data = read32(addr);
 
     switch (copN) {
-        case 1: fpu::set(rt, *(f32 *)&data); break;
+        case 1: fpu::set(rt, data); break;
         default:
             std::printf("[EE Core   ] LWC: Unhandled coprocessor %d\n", copN);
 
@@ -1551,6 +1645,26 @@ void iLWU(u32 instr) {
     }
 
     set64(rt, read32(addr));
+}
+
+/* Multiply-ADD */
+void iMADD(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    auto res = (i64)(i32)regs[rs]._u32[0] * (i64)(i32)regs[rt]._u32[0];
+
+    res += ((u64)(regs[CPUReg::HI]._u32[0]) << 32) | (u64)regs[CPUReg::LO]._u32[0];
+
+    regs[CPUReg::LO]._u64[0] = (i32)res;
+    regs[CPUReg::HI]._u64[0] = (i32)(res >> 32);
+
+    set64(rd, regs[CPUReg::LO]._u64[0]);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] MADD %s, %s, %s; %s/LO = 0x%016llX, HI = 0x%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[CPUReg::LO]._u64[0], regs[CPUReg::HI]._u64[0]);
+    }
 }
 
 /* Move From Coprocessor */
@@ -1673,7 +1787,7 @@ void iMTC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: cop0::set32(rd, data); break;
-        case 1: fpu::set(rd, *(f32 *)&data); break;
+        case 1: fpu::set(rd, data); break;
         default:
             std::printf("[EE Core   ] MTC: Unhandled coprocessor %d\n", copN);
 
@@ -2572,13 +2686,7 @@ void iSWC(int copN, u32 instr) {
 
     u32 data;
     switch (copN) {
-        case 1:
-            {
-                const auto fpr = fpu::get(rt);
-
-                data = *(u32 *)&fpr;
-            }
-            break;
+        case 1: data = fpu::get(rt); break;
         default:
             std::printf("[EE Core   ] SWC: Unhandled coprocessor %d\n", copN);
 
@@ -2819,11 +2927,24 @@ void decodeInstr(u32 instr) {
                     case COPOpcode::CF: iCFC(1, instr); break;
                     case COPOpcode::MT: iMTC(1, instr); break;
                     case COPOpcode::CT: iCTC(1, instr); break;
-                    case COP1Opcode::S:
+                    case COPOpcode::BC:
                         {
-                            fpu::executeSingle(instr);
+                            const auto rt = getRt(instr);
+
+                            switch (rt) {
+                                case COPBranch::BCF : iBCF(1, instr); break;
+                                case COPBranch::BCT : iBCT(1, instr); break;
+                                case COPBranch::BCFL: iBCFL(1, instr); break;
+                                case COPBranch::BCTL: iBCTL(1, instr); break;
+                                default:
+                                    std::printf("[EE Core   ] Unhandled COP1 branch instruction 0x%02X (0x%08X) @ 0x%08X\n", rt, instr, cpc);
+
+                                    exit(0);
+                            }
                         }
                         break;
+                    case COP1Opcode::S: fpu::executeSingle(instr); break;
+                    case COP1Opcode::W: fpu::executeWord(instr); break;
                     default:
                         std::printf("[EE Core   ] Unhandled COP1 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
@@ -2863,6 +2984,7 @@ void decodeInstr(u32 instr) {
                 const auto funct = getFunct(instr);
 
                 switch (funct) {
+                    case MMIOpcode::MADD : iMADD(instr); break;
                     case MMIOpcode::PLZCW: iPLZCW(instr); break;
                     case MMIOpcode::MMI0 :
                         {
