@@ -6,6 +6,7 @@
 #include "fpu.hpp"
 
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 
 namespace ps2::ee::cpu::fpu {
@@ -21,6 +22,7 @@ enum FPUOpcode {
     SUB  = 0x01,
     MUL  = 0x02,
     DIV  = 0x03,
+    SQRT = 0x04,
     MOV  = 0x06,
     NEG  = 0x07,
     ADDA = 0x18,
@@ -36,7 +38,7 @@ const char *condStr[4] = { "F", "EQ", "LT", "LE" };
 
 /* --- FPU registers --- */
 
-f32 fprs[32];
+u32 fprs[32];
 f32 acc;
 
 bool cpcond1;
@@ -62,8 +64,12 @@ void setAcc(f32 data) {
     acc = data;
 }
 
-f32 get(u32 idx) {
+u32 get(u32 idx) {
     return fprs[idx];
+}
+
+f32 getF32(u32 idx) {
+    return *(f32 *)&fprs[idx];
 }
 
 u32 getControl(u32 idx) {
@@ -78,10 +84,16 @@ u32 getControl(u32 idx) {
     }
 }
 
-void set(u32 idx, f32 data) {
-    std::printf("[FPU       ] %u = %f\n", idx, data);
+void set(u32 idx, u32 data) {
+    std::printf("[FPU       ] %u = 0x%08X\n", idx, data);
 
-    fprs[idx] = data;
+    fprs[idx] = *(u32 *)&data;
+}
+
+void set(u32 idx, f32 data) {
+    std::printf("[FPU       ] %u = %f (0x%08X)\n", idx, data, *(u32 *)&data);
+
+    fprs[idx] = *(u32 *)&data;
 }
 
 void setControl(u32 idx, u32 data) {
@@ -96,6 +108,10 @@ void setControl(u32 idx, u32 data) {
     }
 }
 
+bool getCPCOND() {
+    return cpcond1;
+}
+
 /* ADD */
 void iADD(u32 instr) {
     const auto fd = getFd(instr);
@@ -106,7 +122,7 @@ void iADD(u32 instr) {
         std::printf("[FPU       ] ADD $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, get(fs) + get(ft));
+    set(fd, getF32(fs) + getF32(ft));
 }
 
 /* ADD Accumulator */
@@ -118,7 +134,7 @@ void iADDA(u32 instr) {
         std::printf("[FPU       ] ADDA $%u, $%u\n", fs, ft);
     }
 
-    setAcc(get(fs) + get(ft));
+    setAcc(getF32(fs) + getF32(ft));
 }
 
 /* Compare */
@@ -127,8 +143,8 @@ void iC(u32 instr) {
     const auto fs = getFs(instr);
     const auto ft = getFt(instr);
 
-    const auto s = fprs[fs];
-    const auto t = fprs[ft];
+    const auto s = getF32(fs);
+    const auto t = getF32(ft);
 
     if constexpr (cond == Cond::F) {
         cpcond1 = false;
@@ -148,6 +164,20 @@ void iC(u32 instr) {
     }
 }
 
+/* ConVerT to Single */
+void iCVTS(u32 instr) {
+    const auto fd = getFd(instr);
+    const auto fs = getFs(instr);
+
+    if (doDisasm) {
+        std::printf("[FPU       ] CVT.S.W $%u, $%u\n", fd, fs);
+    }
+
+    const auto data = (i32)get(fs);
+
+    set(fd, (f32)data);
+}
+
 /* DIVide */
 void iDIV(u32 instr) {
     const auto fd = getFd(instr);
@@ -158,7 +188,7 @@ void iDIV(u32 instr) {
         std::printf("[FPU       ] DIV $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, get(fs) / get(ft));
+    set(fd, getF32(fs) / getF32(ft));
 }
 
 /* Multiply-ADD */
@@ -171,7 +201,7 @@ void iMADD(u32 instr) {
         std::printf("[FPU       ] MADD $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, get(fs) * get(ft) + acc);
+    set(fd, getF32(fs) * getF32(ft) + acc);
 }
 
 /* MOVe */
@@ -183,7 +213,7 @@ void iMOV(u32 instr) {
         std::printf("[FPU       ] MOV $%u, $%u\n", fd, fs);
     }
 
-    set(fd, get(fs));
+    set(fd, getF32(fs));
 }
 
 /* MULtiply */
@@ -196,7 +226,7 @@ void iMUL(u32 instr) {
         std::printf("[FPU       ] MUL $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, get(fs) * get(ft));
+    set(fd, getF32(fs) * getF32(ft));
 }
 
 /* NEGate */
@@ -208,7 +238,19 @@ void iNEG(u32 instr) {
         std::printf("[FPU       ] NEG $%u, $%u\n", fd, fs);
     }
 
-    set(fd, -get(fs));
+    set(fd, -getF32(fs));
+}
+
+/* SQuare RooT */
+void iSQRT(u32 instr) {
+    const auto fd = getFd(instr);
+    const auto ft = getFt(instr);
+
+    if (doDisasm) {
+        std::printf("[FPU       ] SQRT $%u, $%u\n", fd, ft);
+    }
+
+    set(fd, std::sqrt(getF32(ft)));
 }
 
 /* SUBtract */
@@ -221,7 +263,7 @@ void iSUB(u32 instr) {
         std::printf("[FPU       ] SUB $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, get(fs) - get(ft));
+    set(fd, getF32(fs) - getF32(ft));
 }
 
 void executeSingle(u32 instr) {
@@ -232,6 +274,7 @@ void executeSingle(u32 instr) {
         case FPUOpcode::SUB  : iSUB(instr); break;
         case FPUOpcode::MUL  : iMUL(instr); break;
         case FPUOpcode::DIV  : iDIV(instr); break;
+        case FPUOpcode::SQRT : iSQRT(instr); break;
         case FPUOpcode::MOV  : iMOV(instr); break;
         case FPUOpcode::NEG  : iNEG(instr); break;
         case FPUOpcode::ADDA : iADDA(instr); break;
@@ -245,6 +288,14 @@ void executeSingle(u32 instr) {
 
             exit(0);
     }
+}
+
+void executeWord(u32 instr) {
+    const auto opcode = instr & 0x3F;
+
+    assert(opcode == 0x20); // Only CVT.S.W?
+
+    iCVTS(instr);
 }
 
 }
