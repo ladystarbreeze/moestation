@@ -261,7 +261,7 @@ void write(u32 addr, u16 data) {
                 case static_cast<u32>(SPU2Reg::ADMASTAT):
                     std::printf("[SPU2:CORE%d] 16-bit write @ ADMA_STAT = 0x%04X\n", coreID, data);
 
-                    admaSTAT[coreID] = data;
+                    admaSTAT[coreID] = data & ~3;
 
                     /* TODO: check if ADMA is running */
                     break;
