@@ -15,6 +15,8 @@ namespace ps2::ee::cpu {
 void init();
 void step(i64 c);
 
+u128 readSPRAM128(u32 addr);
+
 void doInterrupt();
 
 VectorUnit *getVU(int vuID);
