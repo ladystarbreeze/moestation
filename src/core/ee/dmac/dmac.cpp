@@ -206,6 +206,14 @@ void readSourceTag(Channel chnID) {
 
             std::printf("[DMAC:EE   ] REFE; MADR = 0x%08X, TADR = 0x%08X\n", chn.madr, chn.tadr);
             break;
+        case STag::CNT:
+            chn.madr = chn.tadr + 16;
+            chn.tadr = chn.madr + 16 * chn.qwc;
+
+            chn.isTagEnd = (dmaTag._u32[0] & (1 << 31)) && chcr.tie;
+
+            std::printf("[DMAC:EE   ] CNT; MADR = 0x%08X, TADR = 0x%08X, isTagEnd = %d\n", chn.madr, chn.tadr, chn.isTagEnd);
+            break;
         case STag::NEXT:
             chn.madr = chn.tadr + 16;
             chn.tadr = dmaTag._u32[1] & ~15;
@@ -399,8 +407,60 @@ void doSIF1() {
     }
 }
 
+/* Performs VIF1 DMA */
+void doVIF1() {
+    const auto chnID = Channel::VIF1;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    //std::printf("[DMAC:EE   ] VIF1 transfer\n");
+
+    assert(chcr.mod == Mode::Chain); // Always in Chain mode?
+    assert(chcr.dir); // No GS downloads for now
+
+    if (!chn.qwc) { // Same as `if (!chn.hasTag)` because VIF1 only runs in Chain mode
+        /* Read and decode DMAtag */
+        readSourceTag(chnID);
+
+        //assert(!chcr.tte); // No tag transfers?
+        
+        if (!chn.qwc) {
+            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1, true);
+
+            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1, true);
+        }
+    }
+
+    /* Transfer up to 16 quadwords at a time */
+
+    auto qwc  = std::min((u16)16, chn.qwc);
+    auto madr = chn.madr;
+
+    assert(qwc);
+
+    for (u32 i = 0; i < qwc; i++) {
+        const auto data = bus::readDMAC128(madr + 16 * i);
+
+        std::printf("[DMAC:EE   ] VIF1 write = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
+    }
+
+    /* Update channel registers */
+    chn.qwc  -= qwc;
+    chn.madr += 16 * qwc;
+
+    /* Clear DRQ */
+    //chn.drq = false;
+    if (!chn.isTagEnd) scheduler::addEvent(idRestart, static_cast<int>(chnID), 4 * qwc, true);
+
+    if (!chn.qwc && chn.isTagEnd) {
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, true);
+    }
+}
+
 void startDMA(Channel chn) {
     switch (chn) {
+        case Channel::VIF1 : doVIF1(); break;
         case Channel::PATH3: doPATH3(); break;
         case Channel::SIF0 : doSIF0(); break;
         case Channel::SIF1 : doSIF1(); break;
