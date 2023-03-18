@@ -233,6 +233,8 @@ void stepHBLANK() {
 
                 sendInterrupt(i);
             }
+
+            timer.count &= 0xFFFF;
         }
     }
 }
