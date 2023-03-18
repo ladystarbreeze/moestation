@@ -370,7 +370,7 @@ u32 readIOP32(u32 addr) {
                 return intc::readCtrlIOP();
             case 0x1F80100C:
             case 0x1F801010: case 0x1F801014:
-            case 0x1F801400:
+            case 0x1F801400: case 0x1F801414:
             case 0x1F801450:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit read @ 0x%08X\n", addr);
                 return 0;
