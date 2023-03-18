@@ -363,10 +363,44 @@ void doSPU1() {
     }
 }
 
+/* Performs SPU2 (core 1) DMA */
+void doSPU2() {
+    const auto chnID = Channel::SPU2;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] SPU2 transfer\n");
+
+    assert(chcr.mod == Mode::Slice);
+
+    assert(!chcr.dec);
+
+    /* TODO: transfer data to SPU2 */
+
+    const auto len = chn.len;
+
+    /* Update channel registers */
+    chn.len  -= len;
+    chn.madr += 4 * len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    if (!chn.len) {
+        /* Clear BCR */
+        chn.count = 0;
+        chn.size  = 0;
+
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+    }
+}
+
 void startDMA(Channel chn) {
     switch (chn) {
         case Channel::CDVD: doCDVD(); break;
         case Channel::SPU1: doSPU1(); break;
+        case Channel::SPU2: doSPU2(); break;
         case Channel::SIF0: doSIF0(); break;
         case Channel::SIF1: doSIF1(); break;
         default:
