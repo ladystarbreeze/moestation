@@ -33,6 +33,7 @@ enum CDVDReg {
     NCMD       = 0x1F402004,
     NCMDSTAT   = 0x1F402005,
     CDVDERROR  = 0x1F402006,
+    BREAK      = 0x1F402007,
     CDVDISTAT  = 0x1F402008,
     DRIVESTAT  = 0x1F40200A,
     SDRIVESTAT = 0x1F40200B,
@@ -147,12 +148,12 @@ void setDriveStatus(u8 stat) {
 }
 
 /* Sends a CDVD interrupt */
-void sendInterrupt() {
+void sendInterrupt(u8 istatBits) {
     setDriveStatus(static_cast<u8>(DriveStatus::PAUSED) | static_cast<u8>(DriveStatus::SPINNING));
 
     ncmdstat = static_cast<u8>(NCMDStatus::READY);
 
-    istat |= 3;
+    istat |= istatBits;
 
     intc::sendInterruptIOP(Interrupt::CDVD);
 }
@@ -502,6 +503,8 @@ u32 readDMAC() {
     u32 data;
     std::memcpy(&data, &readBuf[readIdx], 4);
 
+    //if (ncmd == NCMD::ReadDVD) std::printf("0x%08X\n", data);
+
     readIdx += 4;
 
     if (readIdx == size) {
@@ -512,7 +515,7 @@ u32 readDMAC() {
         if (seekParam.sectorNum == seekParam.num) {
             seekParam.sectorNum = 0;
 
-            sendInterrupt();
+            sendInterrupt(3);
         } else {
             finishSeekEvent();
         }
@@ -537,6 +540,11 @@ void write(u32 addr, u8 data) {
             break;
         case CDVDReg::CDVDERROR:
             std::printf("[CDVD      ] 8-bit write @ 0x1F402006 (Unknown) = 0x%02X\n", data);
+            break;
+        case CDVDReg::BREAK:
+            std::printf("[CDVD      ] 8-bit write @ BREAK = 0x%02X\n", data);
+
+            sendInterrupt(2);
             break;
         case CDVDReg::CDVDISTAT:
             std::printf("[CDVD      ] 8-bit write @ CDVDISTAT = 0x%02X\n", data);
