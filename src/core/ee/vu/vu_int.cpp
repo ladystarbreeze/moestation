@@ -21,6 +21,8 @@ constexpr auto ACC = 32;
 enum SPECIAL1Opcode {
     VADDBC  = 0x00,
     VMADDBC = 0x08,
+    VMULQ   = 0x1C,
+    VADDQ   = 0x20,
     VADD    = 0x28,
     VMUL    = 0x2A,
     VSUB    = 0x2C,
@@ -32,9 +34,13 @@ enum SPECIAL2Opcode {
     VMADDABC = 0x08,
     VMULABC  = 0x18,
     VOPMULA  = 0x2E,
+    VNOP     = 0x2F,
+    VMOVE    = 0x30,
     VMR32    = 0x31,
     VSQI     = 0x35,
+    VDIV     = 0x38,
     VSQRT    = 0x39,
+    VWAITQ   = 0x3B,
     VISWR    = 0x3F,
 };
 
@@ -107,6 +113,41 @@ void iADDbc(VectorUnit *vu, u32 instr) {
     for (int i = 0; i < 4; i++) {
         if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + t);
     }
+}
+
+/* ADD Q */
+void iADDQ(VectorUnit *vu, u32 instr) {
+    const auto fd = getD(instr);
+    const auto fs = getS(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] ADD%s VF%u, VF%u, Q\n", vu->vuID, destStr[dest], fd, fs);
+    }
+
+    const auto q = vu->getQ();
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + q);
+    }
+}
+
+/* DIVide */
+void iDIV(VectorUnit *vu, u32 instr) {
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    const auto fsf = dest & 3;
+    const auto ftf = dest >> 2;
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] DIV Q, VF%u.%s, VF%u.%s\n", vu->vuID, fs, bcStr[fsf], ft, bcStr[ftf]);
+    }
+
+    vu->setQ(vu->getVF(fs, fsf) / vu->getVF(ft, ftf));
 }
 
 /* Integer ADD */
@@ -183,6 +224,22 @@ void iMADDbc(VectorUnit *vu, u32 instr) {
     }
 }
 
+/* MOVE */
+void iMOVE(VectorUnit *vu, u32 instr) {
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] MOVE%s VF%u, VF%u\n", vu->vuID, destStr[dest], fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF(ft, i));
+    }
+}
+
 /* Move Rotate 32 */
 void iMR32(VectorUnit *vu, u32 instr) {
     const auto fs = getS(instr);
@@ -233,6 +290,31 @@ void iMULAbc(VectorUnit *vu, u32 instr) {
 
     for (int i = 0; i < 4; i++) {
         if (dest & (1 << (3 - i))) vu->setVF(ACC, i, vu->getVF(fs, i) * t);
+    }
+}
+
+/* MULtiply Q */
+void iMULQ(VectorUnit *vu, u32 instr) {
+    const auto fd = getD(instr);
+    const auto fs = getS(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] MUL%s VF%u, VF%u, Q\n", vu->vuID, destStr[dest], fd, fs);
+    }
+
+    const auto q = vu->getQ();
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * q);
+    }
+}
+
+/* NOP*/
+void iNOP(VectorUnit *vu) {
+    if (doDisasm) {
+        std::printf("[VU%d       ] NOP\n", vu->vuID);
     }
 }
 
@@ -323,6 +405,13 @@ void iSUB(VectorUnit *vu, u32 instr) {
     }
 }
 
+/* WAIT Q */
+void iWAITQ(VectorUnit *vu) {
+    if (doDisasm) {
+        std::printf("[VU%d       ] WAITQ\n", vu->vuID);
+    }
+}
+
 /* Executes a COP2 instruction (VU0 only) */
 void executeMacro(VectorUnit *vu, u32 instr) {
     assert(!vu->vuID);
@@ -344,9 +433,13 @@ void executeMacro(VectorUnit *vu, u32 instr) {
                 iMULAbc(vu, instr);
                 break;
             case SPECIAL2Opcode::VOPMULA: iOPMULA(vu, instr); break;
+            case SPECIAL2Opcode::VNOP   : iNOP(vu); break;
+            case SPECIAL2Opcode::VMOVE  : iMOVE(vu, instr); break;
             case SPECIAL2Opcode::VMR32  : iMR32(vu, instr); break;
             case SPECIAL2Opcode::VSQI   : iSQI(vu, instr); break;
+            case SPECIAL2Opcode::VDIV   : iDIV(vu, instr); break;
             case SPECIAL2Opcode::VSQRT  : iSQRT(vu, instr); break;
+            case SPECIAL2Opcode::VWAITQ : iWAITQ(vu); break;
             case SPECIAL2Opcode::VISWR  : iISWR(vu, instr); break;
             default:
                 std::printf("[VU%d       ] Unhandled SPECIAL2 macro instruction 0x%02X (0x%08X)\n", vu->vuID, opcode, instr);
@@ -369,6 +462,8 @@ void executeMacro(VectorUnit *vu, u32 instr) {
             case SPECIAL1Opcode::VMADDBC + 3:
                 iMADDbc(vu, instr);
                 break;
+            case SPECIAL1Opcode::VMULQ  : iMULQ(vu, instr); break;
+            case SPECIAL1Opcode::VADDQ  : iADDQ(vu, instr); break;
             case SPECIAL1Opcode::VADD   : iADD(vu, instr); break;
             case SPECIAL1Opcode::VMUL   : iMUL(vu, instr); break;
             case SPECIAL1Opcode::VSUB   : iSUB(vu, instr); break;
