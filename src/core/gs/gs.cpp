@@ -11,6 +11,7 @@
 #include "../intc.hpp"
 #include "../scheduler.hpp"
 #include "../ee/timer/timer.hpp"
+#include "../iop/timer/timer.hpp"
 
 namespace ps2::gs {
 
@@ -49,6 +50,7 @@ u64 idHBLANK;
 /* Handles HBLANK events */
 void hblankEvent(i64 c) {
     ee::timer::stepHBLANK();
+    iop::timer::stepHBLANK();
 
     csr |= 1 << 2; // HBLANK
 

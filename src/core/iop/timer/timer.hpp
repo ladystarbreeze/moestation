@@ -18,5 +18,6 @@ void write16(u32 addr, u16 data);
 void write32(u32 addr, u32 data);
 
 void step(i64 c);
+void stepHBLANK();
 
 }

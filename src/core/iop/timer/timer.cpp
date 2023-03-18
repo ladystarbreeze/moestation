@@ -184,13 +184,13 @@ void write16(u32 addr, u16 data) {
                 mode.intf = true; // Always reset to 1
 
                 if (mode.gate) {
-                    std::printf("[Timer::IOP ] Unhandled timer gate\n");
+                    std::printf("[Timer:IOP ] Unhandled timer gate\n");
 
                     exit(0);
                 }
 
-                if (mode.clks) {
-                    std::printf("[Timer::EE  ] Unhandled clock source\n");
+                if (mode.clks && (chn == 0)) {
+                    std::printf("[Timer:IOP ] Unhandled clock source\n");
 
                     exit(0);
                 }
@@ -212,6 +212,14 @@ void write16(u32 addr, u16 data) {
                 timer.subcount = 0;
                 timer.count = 0;    // Always cleared
             }
+            break;
+        case TimerReg::COMP:
+            std::printf("[Timer:IOP ] 16-bit write @ T%d_COMP = 0x%04X\n", chn, data);
+
+            timer.comp &= ~0xFFFF;
+            timer.comp |= data;
+
+            if (!timer.mode.levl) timer.mode.intf = true;
             break;
         default:
             std::printf("[Timer:IOP ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -286,6 +294,40 @@ void step(i64 c) {
             }
 
             timer.subcount -= timer.prescaler;
+        }
+    }
+}
+
+/* Steps HBLANK timers */
+void stepHBLANK() {
+    /* Only for timers 1 and 3 */
+    for (int i = 1; i <= 3; i += 2) {
+        auto &timer = timers[i];
+
+        if (!timer.mode.clks) continue;
+
+        timer.count++;
+
+        if (timer.count & (1ull << (16 + 16 * (i > 2)))) { // 1 << 16 for timer 1, 1 << 32 for timer 3
+            if (timer.mode.ovfe && !timer.mode.ovff) {
+                // Checking OVFF is necessary because timer IRQs are edge-triggered
+                timer.mode.ovff = true;
+
+                sendInterrupt(i);
+            }
+        }
+
+        if (i == 1) { timer.count &= 0xFFFF; } else { timer.count &= 0xFFFFFFFF; }
+
+        if (timer.count == timer.comp) {
+            if (timer.mode.cmpe && !timer.mode.equf) {
+                // Checking EQUF is necessary because timer IRQs are edge-triggered
+                timer.mode.equf = true;
+
+                sendInterrupt(i);
+            }
+
+            if (timer.mode.zret) timer.count = 0;
         }
     }
 }
