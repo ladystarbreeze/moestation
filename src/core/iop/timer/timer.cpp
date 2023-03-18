@@ -105,6 +105,9 @@ u16 read16(u32 addr) {
     auto &timer = timers[chn];
 
     switch ((addr & ~0xFF0) | (1 << 8)) {
+        case TimerReg::COUNT:
+            std::printf("[Timer:IOP ] 16-bit read @ T%d_COUNT\n", chn);
+            return timer.count;
         case TimerReg::MODE:
             {
                 std::printf("[Timer:IOP ] 16-bit read @ T%d_MODE\n", chn);
@@ -132,7 +135,7 @@ u16 read16(u32 addr) {
             }
             break;
         default:
-            std::printf("[Timer:IOP ] Unhandled 32-bit read @ 0x%08X\n", addr);
+            std::printf("[Timer:IOP ] Unhandled 16-bit read @ 0x%08X\n", addr);
 
             exit(0);
     }
