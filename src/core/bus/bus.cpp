@@ -10,6 +10,7 @@
 #include "rdram.hpp"
 #include "../intc.hpp"
 #include "../sif.hpp"
+#include "../ee/cpu/cpu.hpp"
 #include "../ee/dmac/dmac.hpp"
 #include "../ee/ipu/ipu.hpp"
 #include "../ee/timer/timer.hpp"
@@ -402,6 +403,8 @@ u128 readDMAC128(u32 addr) {
     assert(!(addr & 15));
 
     u128 data;
+
+    if (addr & (1 << 31)) return ee::cpu::readSPRAM128(addr);
 
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u128));
