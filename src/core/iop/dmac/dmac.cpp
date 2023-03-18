@@ -10,6 +10,7 @@
 #include <cstdio>
 
 #include "../cdvd/cdvd.hpp"
+#include "../sio2/sio2.hpp"
 #include "../spu2/spu2.hpp"
 #include "../../intc.hpp"
 #include "../../scheduler.hpp"
@@ -330,6 +331,72 @@ void doSIF1() {
     }
 }
 
+/* Performs SIO2IN DMA */
+void doSIO2IN() {
+    const auto chnID = Channel::SIO2IN;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] SIO2_IN transfer\n");
+
+    assert(chcr.mod == Mode::Slice);
+
+    assert(chn.len);
+    assert(!chcr.dec);
+
+    /* Transfer len */
+    for (u32 i = 0; i < chn.len; i++) {
+        sio2::writeDMAC(bus::read32(chn.madr + 4 * i));
+    }
+
+    /* Update channel registers */
+    chn.madr += 4 * chn.len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+}
+
+/* Performs SIO2OUT DMA */
+void doSIO2OUT() {
+    const auto chnID = Channel::SIO2OUT;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    std::printf("[DMAC:IOP  ] SIO2_OUT transfer\n");
+
+    assert(chcr.mod == Mode::Slice);
+
+    assert(chn.len);
+    assert(!chcr.dec);
+
+    /* Transfer len */
+    for (u32 i = 0; i < chn.len; i++) {
+        bus::write32(chn.madr + 4 * i, sio2::readDMAC());
+    }
+
+    /* Update channel registers */
+    chn.madr += 4 * chn.len;
+
+    /* Clear DRQ */
+    chn.drq = false;
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len, true);
+
+    setDRQ(Channel::SIO2IN, true);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
+}
+
 /* Performs SPU1 (core 0) DMA */
 void doSPU1() {
     const auto chnID = Channel::SPU1;
@@ -398,11 +465,13 @@ void doSPU2() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::CDVD: doCDVD(); break;
-        case Channel::SPU1: doSPU1(); break;
-        case Channel::SPU2: doSPU2(); break;
-        case Channel::SIF0: doSIF0(); break;
-        case Channel::SIF1: doSIF1(); break;
+        case Channel::CDVD   : doCDVD(); break;
+        case Channel::SPU1   : doSPU1(); break;
+        case Channel::SPU2   : doSPU2(); break;
+        case Channel::SIF0   : doSIF0(); break;
+        case Channel::SIF1   : doSIF1(); break;
+        case Channel::SIO2IN : doSIO2IN(); break;
+        case Channel::SIO2OUT: doSIO2OUT(); break;
         default:
             std::printf("[DMAC:IOP  ] Unhandled channel %d (%s) transfer\n", chn, chnNames[static_cast<int>(chn)]);
 
@@ -480,6 +549,9 @@ u32 read32(u32 addr) {
         auto &chn = channels[chnID];
 
         switch (addr & ~(0xFF0)) {
+            case static_cast<u32>(ChannelReg::MADR):
+                std::printf("[DMAC:IOP  ] 32-bit read @ D%d_MADR\n", chnID);
+                return chn.madr;
             case static_cast<u32>(ChannelReg::CHCR):
                 {
                     auto &chcr = chn.chcr;

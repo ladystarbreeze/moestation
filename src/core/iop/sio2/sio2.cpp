@@ -71,6 +71,10 @@ void doCmdChain() {
         }
     }
 
+    while (!in.empty()) { in.pop(); out.push(0); }
+
+    dmac::setDRQ(Channel::SIO2OUT, true);
+
     recv1 = DevStatus::NotConnected;
 
     intc::sendInterruptIOP(IOPInterrupt::SIO2);
@@ -109,6 +113,21 @@ u8 readFIFO() {
     const auto data = out.front();
 
     out.pop();
+
+    return data;
+}
+
+/* Reads data from FIFO_OUT via DMA */
+u32 readDMAC() {
+    assert(out.size() > 3);
+
+    std::printf("[SIO2      ] Read @ FIFO_OUT\n");
+
+    u32 data = out.front(); out.pop();
+
+    data |= out.front() <<  8; out.pop();
+    data |= out.front() << 16; out.pop();
+    data |= out.front() << 24; out.pop();
 
     return data;
 }
@@ -173,6 +192,18 @@ void writeFIFO(u8 data) {
     std::printf("[SIO2      ] Write @ FIFO_IN = 0x%02X\n", data);
 
     in.push(data);
+}
+
+/* Writes data to FIFOIN via DMAC */
+void writeDMAC(u32 data) {
+    assert(in.size() <= (FIFO_SIZE - 4));
+
+    std::printf("[SIO2      ] Write @ FIFO_IN[%lu] = 0x%08X\n", in.size(), data);
+
+    in.push(data);
+    in.push(data >>  8);
+    in.push(data >> 16);
+    in.push(data >> 24);
 }
 
 }

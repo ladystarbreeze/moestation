@@ -15,4 +15,8 @@ u8 readFIFO();
 void write(u32 addr, u32 data);
 void writeFIFO(u8 data);
 
+u32 readDMAC();
+
+void writeDMAC(u32 data);
+
 }
