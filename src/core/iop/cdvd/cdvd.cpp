@@ -58,6 +58,7 @@ enum SCMD {
     Subcommand        = 0x03,
     UpdateStickyFlags = 0x05,
     ReadRTC           = 0x08,
+    ForbidDVD         = 0x15,
 };
 
 enum SubSCMD {
@@ -359,6 +360,14 @@ void doNCMD() {
     }
 }
 
+void scmdForbidDVD() {
+    std::printf("[CDVD      ] ForbidDVD\n");
+
+    scmdData.push(5);
+
+    scmdstat &= ~static_cast<u8>(SCMDStatus::NODATA); // There is data now
+}
+
 void scmdMechaconVersion() {
     std::printf("[CDVD      ] MechaconVersion\n");
 
@@ -417,6 +426,7 @@ void doSCMD() {
             break;
         case SCMD::UpdateStickyFlags: scmdUpdateStickyFlags(); break;
         case SCMD::ReadRTC          : scmdReadRTC(); break;
+        case SCMD::ForbidDVD        : scmdForbidDVD(); break;
         default:
             std::printf("[CDVD      ] Unhandled S command 0x%02X\n", scmd);
 
