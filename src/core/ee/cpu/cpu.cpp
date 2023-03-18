@@ -75,6 +75,7 @@ enum Opcode {
     BEQL    = 0x14,
     BNEL    = 0x15,
     BLEZL   = 0x16,
+    BGTZL   = 0x17,
     DADDIU  = 0x19,
     LDL     = 0x1A,
     LDR     = 0x1B,
@@ -203,6 +204,7 @@ enum MMI0Opcode {
 
 enum MMI1Opcode {
     PADDUW = 0x10,
+    PEXTUW = 0x12,
 };
 
 enum MMI2Opcode {
@@ -759,6 +761,20 @@ void iBGTZ(u32 instr) {
 
     if (doDisasm) {
         std::printf("[EE Core   ] BGTZ %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
+    }
+}
+
+/* Branch if Greater Than Zero Likely */
+void iBGTZL(u32 instr) {
+    const auto rs = getRs(instr);
+
+    const auto offset = (i32)(i16)getImm(instr) << 2;
+    const auto target = pc + offset;
+
+    doBranch(target, (i64)regs[rs]._u64[0] > 0, CPUReg::R0, true);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] BGTZL %s, 0x%08X; %s = 0x%016llX\n", regNames[rs], target, regNames[rs], regs[rs]._u64[0]);
     }
 }
 
@@ -1945,6 +1961,26 @@ void iPEXTLW(u32 instr) {
     }
 }
 
+/* Parallel EXTend Upper Word */
+void iPEXTUW(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    u128 res;
+
+    for (int i = 0; i < 2; i++) {
+        res._u32[2 * i + 0] = regs[rt]._u32[i + 2];
+        res._u32[2 * i + 1] = regs[rs]._u32[i + 2];
+    }
+
+    set128(rd, res);
+
+    if (doDisasm) {
+        std::printf("[EE Core   ] PEXTUW %s, %s, %s; %s = 0x%016llX%016llX\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]._u64[1], regs[rd]._u64[0]);
+    }
+}
+
 /* Parallel EXTend from 5 bits */
 void iPEXT5(u32 instr) {
     const auto rd = getRd(instr);
@@ -2818,6 +2854,7 @@ void decodeInstr(u32 instr) {
         case Opcode::BEQL  : iBEQL(instr); break;
         case Opcode::BNEL  : iBNEL(instr); break;
         case Opcode::BLEZL : iBLEZL(instr); break;
+        case Opcode::BGTZL : iBGTZL(instr); break;
         case Opcode::DADDIU: iDADDIU(instr); break;
         case Opcode::LDL   : iLDL(instr); break;
         case Opcode::LDR   : iLDR(instr); break;
@@ -2874,6 +2911,7 @@ void decodeInstr(u32 instr) {
 
                             switch (shamt) {
                                 case MMI1Opcode::PADDUW: iPADDUW(instr); break;
+                                case MMI1Opcode::PEXTUW: iPEXTUW(instr); break;
                                 default:
                                     std::printf("[EE Core   ] Unhandled MMI1 instruction 0x%02X (0x%08X) @ 0x%08X\n", shamt, instr, cpc);
 
