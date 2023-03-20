@@ -34,6 +34,35 @@ enum Primitive {
     Point, Line, LineStrip, Triangle, TriangleStrip, TriangleFan, Sprite, Prohibited,
 };
 
+/* Pixel storage mode */
+enum PSM {
+    PSMCT32  = 0x00,
+    PSMCT24  = 0x01,
+    PSMCT16  = 0x02,
+    PSMCT16S = 0x0A,
+    PSMCT8   = 0x13,
+    PSMCT4   = 0x14,
+    PSMCT4HL = 0x24,
+    PSMCT4HH = 0x2C,
+    PSMZ32   = 0x30,
+    PSMZ24   = 0x32,
+    PSMZ16   = 0x32,
+    PSMZ16S  = 0x3A,
+};
+
+/* Transmission direction */
+enum TRXDIR {
+    HostToLocal,
+    LocalToHost,
+    LocalToLocal,
+    Deactivated,
+};
+
+/* Z test method */
+enum class ZTest {
+    Never, Always, GEqual, Greater,
+};
+
 struct Vertex {
     /* Coordinates */
 
@@ -130,6 +159,16 @@ enum PrivReg {
     IMR      = 0x12001010,
 };
 
+/* Bit blit buffers */
+struct BITBLTBUF {
+    u32 sbp;  // Source buffer pointer
+    u32 sbw;  // Source buffer width
+    u8  spsm; // Source pixel storage mode
+    u32 dbp;  // Destination buffer pointer
+    u32 dbw;  // Destination buffer width
+    u8  dpsm; // Destination pixel storage mode
+};
+
 /* Frame buffer control */
 struct FRAME {
     u32 fbp;   // Frame buffer pointer
@@ -177,6 +216,21 @@ struct TEST {
     u8   ztst;  // Z test method
 };
 
+/* Transmission area position */
+struct TRXPOS {
+    u32 ssax;
+    u32 ssay;
+    u32 dsax;
+    u32 dsay;
+    u8  dir;
+};
+
+/* Transmission area register */
+struct TRXREG {
+    u32 rrw;
+    u32 rrh;
+};
+
 /* XY offset */
 struct XYOFFSET {
     i64 ofx;
@@ -199,13 +253,25 @@ struct Context {
     ZBUF     zbuf;
 };
 
+/* Transmission info */
+struct TRXInfo {
+    u32 x, y;
+};
+
 Context ctx[2]; // The GS has two drawing environment contexts
 Context *cctx;  // Current context
+
+TRXInfo srcTrx, dstTrx;
 
 PRIM prim, prmode;
 PRIM *cmode; // Current primitive mode
 
 RGBAQ rgbaq;
+
+BITBLTBUF bitbltbuf;
+TRXPOS    trxpos;
+TRXREG    trxreg;
+u8        trxdir;
 
 bool colclamp;
 
@@ -221,6 +287,7 @@ i64 lineCounter = 0;
 /* GS scheduler event IDs */
 u64 idHBLANK;
 
+void doTransmission();
 void drawSprite();
 
 /* Handles HBLANK events */
@@ -325,34 +392,32 @@ void writePriv(u32 addr, u64 data) {
 void write(u8 addr, u64 data) {
     switch (addr) {
         case static_cast<u8>(GSReg::PRIM):
-            {
-                std::printf("[GS        ] Write @ PRIM = 0x%016llX\n", data);
+            std::printf("[GS        ] Write @ PRIM = 0x%016llX\n", data);
 
-                prim.prim = data & 7;
-                prim.iip  = data & (1 << 3);
-                prim.tme  = data & (1 << 4);
-                prim.fge  = data & (1 << 5);
-                prim.abe  = data & (1 << 6);
-                prim.aa1  = data & (1 << 7);
-                prim.fst  = data & (1 << 8);
-                prim.ctxt = data & (1 << 9);
-                prim.fix  = data & (1 << 10);
+            prim.prim = data & 7;
+            prim.iip  = data & (1 << 3);
+            prim.tme  = data & (1 << 4);
+            prim.fge  = data & (1 << 5);
+            prim.abe  = data & (1 << 6);
+            prim.aa1  = data & (1 << 7);
+            prim.fst  = data & (1 << 8);
+            prim.ctxt = data & (1 << 9);
+            prim.fix  = data & (1 << 10);
 
-                cctx = &ctx[cmode->ctxt]; // Set active context
-            }
+            cctx = &ctx[cmode->ctxt]; // Set active context
             break;
         case static_cast<u8>(GSReg::RGBAQ):
             {
-                std::printf("[GS        ] Write @ RGBAQ = 0x%016llX\n", data);
+            std::printf("[GS        ] Write @ RGBAQ = 0x%016llX\n", data);
 
-                rgbaq.r = (data >>  0);
-                rgbaq.g = (data >>  8);
-                rgbaq.b = (data >> 16);
-                rgbaq.a = (data >> 24);
+            rgbaq.r = (data >>  0);
+            rgbaq.g = (data >>  8);
+            rgbaq.b = (data >> 16);
+            rgbaq.a = (data >> 24);
 
-                const auto q = (u32)(data >> 32) & ~0xFF; // Clear low 8 bits of mantissa
+            const auto q = (u32)(data >> 32) & ~0xFF; // Clear low 8 bits of mantissa
 
-                rgbaq.q = *(f32 *)&q;
+            rgbaq.q = *(f32 *)&q;
             }
             break;
         case static_cast<u8>(GSReg::XYZ2):
@@ -390,6 +455,8 @@ void write(u8 addr, u64 data) {
 
                             exit(0);
                     }
+
+                    vtxCount = 0;
                 }
             }
             break;
@@ -419,6 +486,9 @@ void write(u8 addr, u64 data) {
             cmode = (data & 1) ? &prim : &prmode;
 
             cctx = &ctx[cmode->ctxt]; // Set active context
+            break;
+        case static_cast<u8>(GSReg::TEXFLUSH):
+            std::printf("[GS        ] Write @ TEXFLUSH = 0x%016llX\n", data);
             break;
         case static_cast<u8>(GSReg::SCISSOR_1):
             {
@@ -517,7 +587,7 @@ void write(u8 addr, u64 data) {
                 auto &zbuf = ctx[0].zbuf;
 
                 zbuf.zbp  = 2048 * (data & 0x1FF);      // Multiply by 2048 now so we don't have to do this every time we read/write VRAM
-                zbuf.psm  = (data >> 24) & 0xF;
+                zbuf.psm  = 0x30 | ((data >> 24) & 0xF);
                 zbuf.zmsk = data & (1ull << 32);
             }
             break;
@@ -528,8 +598,42 @@ void write(u8 addr, u64 data) {
                 auto &zbuf = ctx[1].zbuf;
 
                 zbuf.zbp  = 2048 * (data & 0x1FF);      // Multiply by 2048 now so we don't have to do this every time we read/write VRAM
-                zbuf.psm  = (data >> 24) & 0xF;
+                zbuf.psm  = 0x30 | ((data >> 24) & 0xF);
                 zbuf.zmsk = data & (1ull << 32);
+            }
+            break;
+        case static_cast<u8>(GSReg::BITBLTBUF):
+            std::printf("[GS        ] Write @ BITBLTBUF = 0x%016llX\n", data);
+
+            bitbltbuf.sbp   = 64 * (data & 0x1FFF);       // Multiply by 2048 now so we don't have to do this every time we read/write VRAM
+            bitbltbuf.sbw   = 64 * ((data >> 16) & 0x3F); // Same as above
+            bitbltbuf.spsm  = (data >> 24) & 0x3F;
+            bitbltbuf.dbp   = 64 * ((data >> 32) & 0x1FFF);
+            bitbltbuf.dbw   = 64 * ((data >> 48) & 0x3F);
+            bitbltbuf.dpsm  = (data >> 56) & 0x3F;
+            break;
+        case static_cast<u8>(GSReg::TRXPOS):
+            std::printf("[GS        ] Write @ TRXPOS = 0x%016llX\n", data);
+
+            trxpos.ssax = (data >>  0) & 0x7FF;
+            trxpos.ssay = (data >> 16) & 0x7FF;
+            trxpos.dsax = (data >> 32) & 0x7FF;
+            trxpos.dsay = (data >> 48) & 0x7FF;
+            trxpos.dir  = (data >> 59) & 3;
+            break;
+        case static_cast<u8>(GSReg::TRXREG):
+            std::printf("[GS        ] Write @ TRXREG = 0x%016llX\n", data);
+
+            trxreg.rrw = (data >>  0) & 0xFFF;
+            trxreg.rrh = (data >> 32) & 0xFFF;
+            break;
+        case static_cast<u8>(GSReg::TRXDIR):
+            {
+                std::printf("[GS        ] Write @ TRXDIR = 0x%016llX\n", data);
+
+                trxdir = data & 3;
+
+                doTransmission();
             }
             break;
         case static_cast<u8>(GSReg::FINISH):
@@ -540,11 +644,6 @@ void write(u8 addr, u64 data) {
 
             exit(0);
     }
-}
-
-/* Writes data to HWREG */
-void writeHWREG(u64 data) {
-    std::printf("[GS        ] Write @ HWREG = 0x%016llX\n", data);
 }
 
 /* Unpacks data to an internal GS register */
@@ -560,9 +659,181 @@ void writePACKED(u8 addr, const u128 &data) {
     }
 }
 
+/* --- VRAM accessors --- */
+
+template <PSM psm>
+u32 readVRAM(u32 base, u32 width, u32 x, u32 y) {
+    u32 addr = base;
+    switch (psm) {
+        case PSM::PSMCT32: case PSM::PSMCT24: case PSM::PSMZ24:
+            addr += x + width * y;
+            break;
+        case PSM::PSMCT16S: case PSM::PSMZ16S:
+            addr += (x >> 1) + ((width * y) >> 1);
+            break;
+        default:
+            std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
+
+            exit(0);
+    }
+
+    addr &= 0xFFFFFF;
+
+    switch (psm) {
+        case PSM::PSMCT32:
+            return vram[addr];
+        case PSM::PSMCT24: case PSM::PSMZ24:
+            return vram[addr] & 0xFFFFFF;
+        case PSM::PSMCT16S: case PSM::PSMZ16S:
+            return (vram[addr] >> (16 * (x & 1))) & 0xFFFF;
+        default:
+            std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
+
+            exit(0);
+    }
+}
+
+template <PSM psm>
+void writeVRAM(u32 base, u32 width, u32 x, u32 y, u32 data) {
+    u32 addr = base;
+    switch (psm) {
+        case PSM::PSMCT32: case PSM::PSMCT24: case PSM::PSMZ24:
+            addr += x + width * y;
+            break;
+        case PSM::PSMCT16S: case PSM::PSMZ16S:
+            addr += (x >> 1) + ((width * y) >> 1);
+            break;
+        default:
+            std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
+
+            exit(0);
+    }
+
+    addr &= 0xFFFFFF;
+
+    switch (psm) {
+        case PSM::PSMCT32:
+            vram[addr] = data;
+            break;
+        case PSM::PSMCT24: case PSM::PSMZ24:
+            vram[addr] = (vram[addr] & ~0xFF) | (data & 0xFFFFFF);
+            break;
+        case PSM::PSMCT16S: case PSM::PSMZ16S:
+            if (x & 1) {
+                vram[addr] &= 0xFFFF;
+                vram[addr] |= data << 16;
+            } else {
+                vram[addr] &= ~0xFFFF;
+                vram[addr] |= data & 0xFFFF;
+            }
+            break;
+        default:
+            std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
+
+            exit(0);
+    }
+}
+
+/* Writes data to HWREG */
+void writeHWREG(u64 data) {
+    std::printf("[GS        ] Write @ HWREG = 0x%016llX\n", data);
+
+    if (trxdir != TRXDIR::HostToLocal) return;
+
+    const auto x = trxpos.dsax + dstTrx.x;
+    const auto y = trxpos.dsay + dstTrx.y;
+
+    /* Unpack data according to PSM */
+
+    switch (bitbltbuf.dpsm) {
+        case PSM::PSMCT32:
+            writeVRAM<PSM::PSMCT32>(bitbltbuf.dbp, bitbltbuf.dbw, x + 0, y, data);
+            writeVRAM<PSM::PSMCT32>(bitbltbuf.dbp, bitbltbuf.dbw, x + 1, y, data);
+
+            dstTrx.x += 2;
+            break;
+        default:
+            std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", bitbltbuf.dpsm);
+
+            exit(0);
+    }
+
+    if (dstTrx.x >= trxreg.rrw) {
+        dstTrx.y++;
+
+        if (dstTrx.y >= trxreg.rrh) {
+            std::printf("[GS        ] Host->Local transmission end\n");
+
+            trxdir = TRXDIR::Deactivated;
+
+            return;
+        }
+
+        dstTrx.x = 0;
+    }
+}
+
+/* Performs a depth test */
+bool depthTest(i64 x, i64 y, i64 z) {
+    if (!cctx->test.zte) return true; // Shouldn't happen
+
+    u32 oldZ;
+    switch (cctx->zbuf.psm) {
+        //case PSM::PSMZ24 : oldZ = readVRAM<PSM::PSMZ24 >(cctx->zbuf.zbp, cctx->frame.fbw, x, y); break;
+        case PSM::PSMZ16S: oldZ = readVRAM<PSM::PSMZ16S>(cctx->zbuf.zbp, cctx->frame.fbw, x, y); break;
+        default:
+            std::printf("[GS        ] Unhandled depth storage mode 0x%02X\n", cctx->zbuf.psm);
+
+            exit(0);
+    }
+
+    switch (cctx->test.ztst) {
+        case static_cast<u8>(ZTest::Never) : return false;
+        case static_cast<u8>(ZTest::Always): break;
+        case static_cast<u8>(ZTest::GEqual):
+            switch (cctx->zbuf.psm) {
+                //case PSM::PSMZ24 : z &= 0xFFFFFF; break;
+                case PSM::PSMZ16S: z &= 0xFFFF; break;
+                default:
+                    std::printf("[GS        ] Unhandled depth storage mode 0x%02X\n", cctx->zbuf.psm);
+
+                    exit(0);
+            }
+
+            if ((u32)z < oldZ) return false;
+            break;
+        case static_cast<u8>(ZTest::Greater):
+            switch (cctx->zbuf.psm) {
+                //case PSM::PSMZ24 : z &= 0xFFFFFF; break;
+                case PSM::PSMZ16S: z &= 0xFFFF; break;
+                default:
+                    std::printf("[GS        ] Unhandled depth storage mode 0x%02X\n", cctx->zbuf.psm);
+
+                    exit(0);
+            }
+
+            if ((u32)z <= oldZ) return false;
+            break;
+    }
+
+    if (!cctx->zbuf.zmsk) { // TODO: check alpha test result
+        switch (cctx->zbuf.psm) {
+            //case PSM::PSMZ24 : writeVRAM<PSM::PSMZ24 >(cctx->zbuf.zbp, cctx->frame.fbw, x, y, z); break;
+            case PSM::PSMZ16S: writeVRAM<PSM::PSMZ16S>(cctx->zbuf.zbp, cctx->frame.fbw, x, y, z); break;
+            default:
+                std::printf("[GS        ] Unhandled depth storage mode 0x%02X\n", cctx->zbuf.psm);
+
+                exit(0);
+        }
+    }
+
+    return true;
+}
+
 void drawSprite() {
     std::printf("Drawing sprite...\n");
 
+    assert(!cmode->iip);
     assert(!cmode->tme); // TODO: add texture mapping
     assert(!cmode->fge); // TODO: add fog
     assert(!cmode->abe); // TODO: add alpha blending
@@ -589,7 +860,44 @@ void drawSprite() {
 
     std::printf("v0 = [%lld, %lld], v1 = [%lld, %lld]\n", v0.x >> 4, v0.y >> 4, v1.x >> 4, v1.y >> 4);
 
-    exit(0);
+    /* Start drawing */
+
+    for (auto y = yMin >> 4; y < (yMax >> 4); y++) {
+        for (auto x = xMin >> 4; x < (xMax >> 4); x++) {
+            u32 color = (v1.a << 24) | (v1.b << 16) | (v1.g << 8) | v1.r;
+
+            /* Skip to next pixel if Z test fails */
+            if (!depthTest(x, y, v1.z)) continue;
+
+            /* Draw pixel */
+            switch (cctx->frame.psm) {
+            case PSM::PSMCT24: writeVRAM<PSM::PSMCT24>(cctx->zbuf.zbp, cctx->frame.fbw, x, y, color); break;
+                default:
+                    std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", cctx->frame.psm);
+
+                    exit(0);
+            }
+        }
+    }
+}
+
+/* --- Transmission handlers --- */
+
+void doTransmission() {
+    switch (trxdir) {
+        case TRXDIR::HostToLocal: // Handled via HWREG writes
+            std::printf("[GS        ] Host->Local transmission\n");
+
+            dstTrx.x = 0;
+            dstTrx.y = 0;
+            break;
+        case TRXDIR::Deactivated:
+            std::printf("[GS        ] Transmission deactivated\n");
+            break;
+        default:
+            std::printf("[GS        ] Unhandled transmission direction %u\n", trxdir);
+            exit(0);
+    }
 }
 
 }

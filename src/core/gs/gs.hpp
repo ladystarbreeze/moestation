@@ -16,6 +16,7 @@ namespace ps2::gs {
     void writePriv(u32 addr, u64 data);
 
     void write(u8 addr, u64 data);
-    void writeHWREG(u64 data);
     void writePACKED(u8 addr, const u128 &data);
+    
+    void writeHWREG(u64 data);
 }
