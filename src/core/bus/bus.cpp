@@ -253,7 +253,7 @@ u64 read64(u32 addr) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         std::memcpy(&data, &ram[addr], sizeof(u64));
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GS), static_cast<u32>(MemorySize::GS))) {
-        return gs::readPriv64(addr);
+        return gs::readPriv(addr);
     } else {
         switch (addr) {
             default:
@@ -526,7 +526,7 @@ void write64(u32 addr, u64 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VU1Code), static_cast<u32>(MemorySize::VU1))) {
         /* TODO: implement VU code1 writes */
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GS), static_cast<u32>(MemorySize::GS))) {
-        gs::writePriv64(addr, data);
+        gs::writePriv(addr, data);
     } else {
         switch (addr) {
             default:

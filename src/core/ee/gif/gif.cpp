@@ -8,6 +8,8 @@
 #include <cassert>
 #include <cstdio>
 
+#include "../../gs/gs.hpp"
+
 namespace ps2::gif {
 
 const char *fmtNames[4] = { "PACKED", "REGLIST", "IMAGE", "IMAGE" };
@@ -75,15 +77,16 @@ void decodeTag(const u128 &data) {
 
     gifTag.hasTag = true;
 
-    /* TODO: initialize GS Q register */
+    gs::initQ();
 }
 
 /* Handles IMAGE transfers */
 void doIMAGE(const u128 &data) {
     if (nloop == gifTag.nloop) std::printf("[GIF       ] IMAGE transfer; NLOOP = %u\n", gifTag.nloop);
 
-    /* TODO: write data to HWREG */
-    std::printf("[GIF       ] IMAGE write = 0x%016llX\n[GIF       ] IMAGE write = 0x%016llX\n", data._u64[0], data._u64[1]);
+    /* Write two dwords to HWREG */
+    gs::writeHWREG(data._u64[0]);
+    gs::writeHWREG(data._u64[1]);
 
     nloop--;
 
@@ -100,8 +103,7 @@ void doPACKED(const u128 &data) {
 
     const auto reg = (gifTag.regs >> (4 * nregs)) & 0xF;
 
-    /* TODO: write data to GS */
-    std::printf("[GIF       ] PACKED write @ 0x%02llX = 0x%016llX%016llX\n", reg, data._u64[1], data._u64[0]);
+    gs::writePACKED(reg, data);
 
     nregs++;
 
@@ -110,6 +112,29 @@ void doPACKED(const u128 &data) {
 
         if (!nloop) {
             std::printf("[GIF       ] PACKED transfer end\n");
+
+            gifTag.hasTag = false;
+        }
+
+        nregs = 0;
+    }
+}
+
+/* Handles REGLIST transfers */
+void doREGLIST(u64 data) {
+    if (!nregs && (nloop == gifTag.nloop)) std::printf("[GIF       ] REGLIST transfer; NREGS = %u, NLOOP = %u\n", gifTag.nregs, gifTag.nloop);
+
+    const auto reg = (gifTag.regs >> (4 * nregs)) & 0xF;
+
+    gs::write(reg, data);
+
+    nregs++;
+
+    if (nregs == gifTag.nregs) {
+        nloop--;
+
+        if (!nloop) {
+            std::printf("[GIF       ] REGLIST transfer end\n");
 
             gifTag.hasTag = false;
         }
@@ -135,8 +160,14 @@ void doCmd(const u128 &data) {
     }
 
     switch (gifTag.fmt) {
-        case Format::PACKED: doPACKED(data); break;
-        case Format::IMAGE : doIMAGE(data); break;
+        case Format::PACKED : doPACKED(data); break;
+        case Format::REGLIST: 
+            doREGLIST(data._u64[0]); 
+            
+            /* Discard second dword if the previous transfer reset NREGS */
+            if (nregs) doREGLIST(data._u64[1]);
+            break;
+        case Format::IMAGE  : doIMAGE(data); break;
         default:
             std::printf("[GIF       ] Unhandled %s format\n", fmtNames[gifTag.fmt]);
 

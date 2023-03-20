@@ -5,8 +5,11 @@
 
 #include "gs.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <queue>
+#include <vector>
 
 #include "../intc.hpp"
 #include "../scheduler.hpp"
@@ -24,7 +27,34 @@ constexpr i64 CYCLES_PER_SCANLINE = 2 * 9370; // NTSC, converted to EE clock
 constexpr i64 SCANLINES_PER_VDRAW = 240;
 constexpr i64 SCANLINES_PER_FRAME = 262;
 
-/* --- GS internal registers --- */
+static const i32 primVertexCount[8] = { 1, 2, 2, 3, 3, 3, 2, 1 };
+
+/* GS primitives */
+enum Primitive {
+    Point, Line, LineStrip, Triangle, TriangleStrip, TriangleFan, Sprite, Prohibited,
+};
+
+struct Vertex {
+    /* Coordinates */
+
+    i64 x, y, z;
+
+    /* Colors */
+
+    i64 r, g, b, a, f;
+
+    /* Texel coordinates */
+
+    i64 u, v;
+
+    /* Texture coordinates */
+
+    f32 s, t, q;
+};
+
+/* --- GS registers --- */
+
+/* GS internal registers */
 enum class GSReg {
     PRIM       = 0x00,
     RGBAQ      = 0x01,
@@ -84,7 +114,7 @@ enum class GSReg {
     LABEL      = 0x62,
 };
 
-/* --- GS privileged registers --- */
+/* GS privileged registers */
 enum PrivReg {
     PMODE    = 0x12000000,
     SMODE1   = 0x12000010,
@@ -181,10 +211,17 @@ bool colclamp;
 
 u64 csr;
 
+std::vector<u32> vram;
+
+Vertex vtxQueue[3];
+i32 vtxCount;
+
 i64 lineCounter = 0;
 
 /* GS scheduler event IDs */
 u64 idHBLANK;
+
+void drawSprite();
 
 /* Handles HBLANK events */
 void hblankEvent(i64 c) {
@@ -213,9 +250,15 @@ void hblankEvent(i64 c) {
 
 /* Registers GS events */
 void init() {
+    vram.resize(2048 * 2048 / 4); // 4 MB
+
     idHBLANK = scheduler::registerEvent([](int, i64 c) { hblankEvent(c); });
 
     scheduler::addEvent(idHBLANK, 0, CYCLES_PER_SCANLINE, true);
+}
+
+void initQ() {
+    rgbaq.q = 1.0;
 }
 
 u64 readPriv(u32 addr) {
@@ -298,6 +341,58 @@ void write(u8 addr, u64 data) {
                 cctx = &ctx[cmode->ctxt]; // Set active context
             }
             break;
+        case static_cast<u8>(GSReg::RGBAQ):
+            {
+                std::printf("[GS        ] Write @ RGBAQ = 0x%016llX\n", data);
+
+                rgbaq.r = (data >>  0);
+                rgbaq.g = (data >>  8);
+                rgbaq.b = (data >> 16);
+                rgbaq.a = (data >> 24);
+
+                const auto q = (u32)(data >> 32) & ~0xFF; // Clear low 8 bits of mantissa
+
+                rgbaq.q = *(f32 *)&q;
+            }
+            break;
+        case static_cast<u8>(GSReg::XYZ2):
+            {
+                std::printf("[GS        ] Write @ XYZ2 = 0x%016llX\n", data);
+
+                assert(vtxCount < 4);
+
+                Vertex vtx;
+
+                vtx.x = (i64)((data >>  0) & 0xFFFF);
+                vtx.y = (i64)((data >> 16) & 0xFFFF);
+
+                vtx.z = (i64)(data >> 32);
+
+                vtx.r = rgbaq.r;
+                vtx.g = rgbaq.g;
+                vtx.b = rgbaq.b;
+                vtx.a = rgbaq.a;
+
+                //vtx.u = uv.u;
+                //vtx.v = uv.v;
+
+                //vtx.s = st.s;
+                //vtx.t = st.t;
+                vtx.q = rgbaq.q;
+
+                vtxQueue[vtxCount++] = vtx;
+
+                if (vtxCount == primVertexCount[prim.prim]) {
+                    switch (prim.prim) {
+                        case Primitive::Sprite: drawSprite(); break;
+                        default:
+                            std::printf("[GS        ] Unhandled primitive %u\n", prim.prim);
+
+                            exit(0);
+                    }
+                }
+            }
+            break;
         case static_cast<u8>(GSReg::XYOFFSET_1):
             {
                 std::printf("[GS        ] Write @ XYOFFSET1 = 0x%016llX\n", data);
@@ -343,10 +438,12 @@ void write(u8 addr, u64 data) {
 
                 auto &scissor = ctx[1].scissor;
 
-                scissor.scax0 = (i64)((data >>  0) & 0x7FF);
-                scissor.scax1 = (i64)((data >> 16) & 0x7FF);
-                scissor.scay0 = (i64)((data >> 32) & 0x7FF);
-                scissor.scay1 = (i64)((data >> 48) & 0x7FF);
+                /* Multiply by 16 so we don't have to do this later */
+
+                scissor.scax0 = (i64)((data >>  0) & 0x7FF) << 4;
+                scissor.scax1 = (i64)((data >> 16) & 0x7FF) << 4;
+                scissor.scay0 = (i64)((data >> 32) & 0x7FF) << 4;
+                scissor.scay1 = (i64)((data >> 48) & 0x7FF) << 4;
             }
             break;
         case static_cast<u8>(GSReg::DTHE):
@@ -435,6 +532,9 @@ void write(u8 addr, u64 data) {
                 zbuf.zmsk = data & (1ull << 32);
             }
             break;
+        case static_cast<u8>(GSReg::FINISH):
+            std::printf("[GS        ] Write @ FINISH = 0x%016llX\n", data);
+            break;
         default:
             std::printf("[GS        ] Unhandled write @ 0x%02X = 0x%016llX\n", addr, data);
 
@@ -458,6 +558,38 @@ void writePACKED(u8 addr, const u128 &data) {
 
             exit(0);
     }
+}
+
+void drawSprite() {
+    std::printf("Drawing sprite...\n");
+
+    assert(!cmode->tme); // TODO: add texture mapping
+    assert(!cmode->fge); // TODO: add fog
+    assert(!cmode->abe); // TODO: add alpha blending
+    assert(!cmode->fst);
+
+    /* Get two vertices */
+
+    Vertex v0 = vtxQueue[0];
+    Vertex v1 = vtxQueue[1];
+
+    /* Offset coordinates */
+
+    v0.x -= cctx->xyoffset.ofx;
+    v0.y -= cctx->xyoffset.ofy;
+    v1.x -= cctx->xyoffset.ofx;
+    v1.y -= cctx->xyoffset.ofy;
+
+    /* Calculate "bounding box" */
+
+    const auto xMin = (std::max(std::min(v0.x, v1.x), cctx->scissor.scax0) >> 4) << 4;
+    const auto xMax = (std::min(std::max(v0.x, v1.x), (cctx->scissor.scax1 + 0x10)) >> 4) << 4;
+    const auto yMin = (std::max(std::min(v0.y, v1.y), cctx->scissor.scay0) >> 4) << 4;
+    const auto yMax = (std::min(std::max(v0.y, v1.y), (cctx->scissor.scay1 + 0x10)) >> 4) << 4;
+
+    std::printf("v0 = [%lld, %lld], v1 = [%lld, %lld]\n", v0.x >> 4, v0.y >> 4, v1.x >> 4, v1.y >> 4);
+
+    exit(0);
 }
 
 }

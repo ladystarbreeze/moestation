@@ -9,8 +9,13 @@
 
 namespace ps2::gs {
     void init();
+    void initQ();
 
-    u64 readPriv64(u32 addr);
+    u64 readPriv(u32 addr);
 
-    void writePriv64(u32 addr, u64 data);
+    void writePriv(u32 addr, u64 data);
+
+    void write(u8 addr, u64 data);
+    void writeHWREG(u64 data);
+    void writePACKED(u8 addr, const u128 &data);
 }
