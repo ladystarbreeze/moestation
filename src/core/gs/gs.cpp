@@ -665,10 +665,16 @@ template <PSM psm>
 u32 readVRAM(u32 base, u32 width, u32 x, u32 y) {
     u32 addr = base;
     switch (psm) {
-        case PSM::PSMCT32: case PSM::PSMCT24: case PSM::PSMZ24:
+        case PSM::PSMCT32 :
+        case PSM::PSMCT24 :
+        case PSM::PSMCT4HL:
+        case PSM::PSMCT4HH:
+        case PSM::PSMZ24  :
             addr += x + width * y;
             break;
-        case PSM::PSMCT16S: case PSM::PSMZ16S:
+        case PSM::PSMCT16 :
+        case PSM::PSMCT16S:
+        case PSM::PSMZ16S :
             addr += (x >> 1) + ((width * y) >> 1);
             break;
         default:
@@ -682,10 +688,19 @@ u32 readVRAM(u32 base, u32 width, u32 x, u32 y) {
     switch (psm) {
         case PSM::PSMCT32:
             return vram[addr];
-        case PSM::PSMCT24: case PSM::PSMZ24:
+        case PSM::PSMCT24:
+        case PSM::PSMZ24 :
             return vram[addr] & 0xFFFFFF;
-        case PSM::PSMCT16S: case PSM::PSMZ16S:
+        case PSM::PSMCT16 :
+        case PSM::PSMCT16S:
+        case PSM::PSMZ16S :
             return (vram[addr] >> (16 * (x & 1))) & 0xFFFF;
+        case PSM::PSMCT4HL:
+            return (vram[addr] >> 24) & 0xF;
+            break;
+        case PSM::PSMCT4HH:
+            return vram[addr] >> 28;
+            break;
         default:
             std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
 
@@ -697,10 +712,16 @@ template <PSM psm>
 void writeVRAM(u32 base, u32 width, u32 x, u32 y, u32 data) {
     u32 addr = base;
     switch (psm) {
-        case PSM::PSMCT32: case PSM::PSMCT24: case PSM::PSMZ24:
+        case PSM::PSMCT32 :
+        case PSM::PSMCT24 :
+        case PSM::PSMCT4HL:
+        case PSM::PSMCT4HH:
+        case PSM::PSMZ24  :
             addr += x + width * y;
             break;
-        case PSM::PSMCT16S: case PSM::PSMZ16S:
+        case PSM::PSMCT16 :
+        case PSM::PSMCT16S:
+        case PSM::PSMZ16S :
             addr += (x >> 1) + ((width * y) >> 1);
             break;
         default:
@@ -715,10 +736,13 @@ void writeVRAM(u32 base, u32 width, u32 x, u32 y, u32 data) {
         case PSM::PSMCT32:
             vram[addr] = data;
             break;
-        case PSM::PSMCT24: case PSM::PSMZ24:
+        case PSM::PSMCT24:
+        case PSM::PSMZ24 :
             vram[addr] = (vram[addr] & ~0xFF) | (data & 0xFFFFFF);
             break;
-        case PSM::PSMCT16S: case PSM::PSMZ16S:
+        case PSM::PSMCT16 :
+        case PSM::PSMCT16S:
+        case PSM::PSMZ16S :
             if (x & 1) {
                 vram[addr] &= 0xFFFF;
                 vram[addr] |= data << 16;
@@ -726,6 +750,12 @@ void writeVRAM(u32 base, u32 width, u32 x, u32 y, u32 data) {
                 vram[addr] &= ~0xFFFF;
                 vram[addr] |= data & 0xFFFF;
             }
+            break;
+        case PSM::PSMCT4HL:
+            vram[addr] = (vram[addr] & ~(0xF << 24)) | (data << 24);
+            break;
+        case PSM::PSMCT4HH:
+            vram[addr] = (vram[addr] & ~(0xF << 28)) | (data << 28);
             break;
         default:
             std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", psm);
@@ -751,6 +781,27 @@ void writeHWREG(u64 data) {
             writeVRAM<PSM::PSMCT32>(bitbltbuf.dbp, bitbltbuf.dbw, x + 1, y, data);
 
             dstTrx.x += 2;
+            break;
+        case PSM::PSMCT16:
+            for (int i = 0; i < 4; i++) {
+                writeVRAM<PSM::PSMCT16>(bitbltbuf.dbp, bitbltbuf.dbw, x + i, y, (data >> (16 * i)) & 0xFFFF);
+            }
+
+            dstTrx.x += 4;
+            break;
+        case PSM::PSMCT4HL:
+            for (int i = 0; i < 16; i++) {
+                writeVRAM<PSM::PSMCT4HL>(bitbltbuf.dbp, bitbltbuf.dbw, x + i, y, (data >> (4 * i)) & 0xF);
+            }
+
+            dstTrx.x += 16;
+            break;
+        case PSM::PSMCT4HH:
+            for (int i = 0; i < 16; i++) {
+                writeVRAM<PSM::PSMCT4HH>(bitbltbuf.dbp, bitbltbuf.dbw, x + i, y, (data >> (4 * i)) & 0xF);
+            }
+
+            dstTrx.x += 16;
             break;
         default:
             std::printf("[GS        ] Unhandled pixel storage mode 0x%02X\n", bitbltbuf.dpsm);
