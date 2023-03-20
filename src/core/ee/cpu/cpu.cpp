@@ -26,7 +26,7 @@ constexpr u32 EELOAD = 0x82000;
 constexpr u32 RESET_VECTOR = 0xBFC00000;
 
 constexpr auto doDisasm = false;
-constexpr auto doFastBoot = false;
+constexpr auto doFastBoot = true;
 
 /* --- EE Core register definitions --- */
 
@@ -1516,10 +1516,10 @@ void iLQC2(u32 instr) {
 
     const auto data = read128(addr);
 
-    vus[0].setVF(rt, 0, *(f32 *)&data._u32[0]);
-    vus[0].setVF(rt, 1, *(f32 *)&data._u32[1]);
-    vus[0].setVF(rt, 2, *(f32 *)&data._u32[2]);
-    vus[0].setVF(rt, 3, *(f32 *)&data._u32[3]);
+    vus[0].setVF(rt, 0, data._u32[0]);
+    vus[0].setVF(rt, 1, data._u32[1]);
+    vus[0].setVF(rt, 2, data._u32[2]);
+    vus[0].setVF(rt, 3, data._u32[3]);
 }
 
 /* Load Upper Immediate */
@@ -2288,15 +2288,10 @@ void iQMFC(int copN, u32 instr) {
     switch (copN) {
         case 2:
             {
-                const auto x = vus[0].getVF(rd, 0);
-                const auto y = vus[0].getVF(rd, 1);
-                const auto z = vus[0].getVF(rd, 2);
-                const auto w = vus[0].getVF(rd, 3);
-
-                data._u32[0] = *(u32 *)&x;
-                data._u32[1] = *(u32 *)&y;
-                data._u32[2] = *(u32 *)&z;
-                data._u32[3] = *(u32 *)&w;
+                data._u32[0] = vus[0].getVF(rd, 0);
+                data._u32[1] = vus[0].getVF(rd, 1);
+                data._u32[2] = vus[0].getVF(rd, 2);
+                data._u32[3] = vus[0].getVF(rd, 3);
             }
             break;
         default:
@@ -2323,10 +2318,10 @@ void iQMTC(int copN, u32 instr) {
 
     switch (copN) {
         case 2:
-            vus[0].setVF(rd, 0, *(f32 *)&regs[rt]._u32[0]);
-            vus[0].setVF(rd, 1, *(f32 *)&regs[rt]._u32[1]);
-            vus[0].setVF(rd, 2, *(f32 *)&regs[rt]._u32[2]);
-            vus[0].setVF(rd, 3, *(f32 *)&regs[rt]._u32[3]);
+            vus[0].setVF(rd, 0, regs[rt]._u32[0]);
+            vus[0].setVF(rd, 1, regs[rt]._u32[1]);
+            vus[0].setVF(rd, 2, regs[rt]._u32[2]);
+            vus[0].setVF(rd, 3, regs[rt]._u32[3]);
             break;
         default:
             std::printf("[EE Core   ] QMTC: Unhandled coprocessor %d\n", copN);
@@ -2563,15 +2558,10 @@ void iSQC2(u32 instr) {
 
     u128 data;
 
-    const auto x = vus[0].getVF(rt, 0);
-    const auto y = vus[0].getVF(rt, 1);
-    const auto z = vus[0].getVF(rt, 2);
-    const auto w = vus[0].getVF(rt, 3);
-
-    data._u32[0] = *(u32 *)&x;
-    data._u32[1] = *(u32 *)&y;
-    data._u32[2] = *(u32 *)&z;
-    data._u32[3] = *(u32 *)&w;
+    data._u32[0] = vus[0].getVF(rt, 0);
+    data._u32[1] = vus[0].getVF(rt, 1);
+    data._u32[2] = vus[0].getVF(rt, 2);
+    data._u32[3] = vus[0].getVF(rt, 3);
 
     if (doDisasm) {
         std::printf("[EE Core   ] SQC2 %d, 0x%X(%s); [0x%08X] = 0x%016llX%016llX\n", rt, imm, regNames[rs], addr, data._u64[1], data._u64[0]);

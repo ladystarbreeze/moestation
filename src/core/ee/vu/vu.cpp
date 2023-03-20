@@ -63,8 +63,13 @@ u32 VectorUnit::getControl(u32 idx) {
 }
 
 /* Returns VF register element */
-f32 VectorUnit::getVF(u32 idx, int e) {
+u32 VectorUnit::getVF(u32 idx, int e) {
     return vf[idx][e];
+}
+
+/* Returns VF register element */
+f32 VectorUnit::getVF_F32(u32 idx, int e) {
+    return *(f32 *)&vf[idx][e];
 }
 
 /* Returns an integer register */
@@ -155,16 +160,29 @@ void VectorUnit::setControl(u32 idx, u32 data) {
 }
 
 /* Sets a VF register element */
-void VectorUnit::setVF(u32 idx, int e, f32 data) {
+void VectorUnit::setVF(u32 idx, int e, u32 data) {
     if (idx == 32) {
-        std::printf("[VU%d       ] ACC.%s = %f\n", vuID, elementStr[e], data);
+        std::printf("[VU%d       ] ACC.%s = 0x%08X (%f)\n", vuID, elementStr[e], data, *(f32 *)&data);
     } else {
-        std::printf("[VU%d       ] VF%u.%s = %f (0x%08X)\n", vuID, idx, elementStr[e], data, *(u32 *)&data);
+        std::printf("[VU%d       ] VF%u.%s = 0x%08X (%f)\n", vuID, idx, elementStr[e], data, *(f32 *)&data);
     }
 
     vf[idx][e] = data;
 
     vf[0][e] = vf0Data[e];
+}
+
+/* Sets a VF register element */
+void VectorUnit::setVF(u32 idx, int e, f32 data) {
+    if (idx == 32) {
+        std::printf("[VU%d       ] ACC.%s = %f (0x%08X)\n", vuID, elementStr[e], data, *(u32 *)&data);
+    } else {
+        std::printf("[VU%d       ] VF%u.%s = %f (0x%08X)\n", vuID, idx, elementStr[e], data, *(u32 *)&data);
+    }
+
+    vf[idx][e] = *(u32 *)&data;
+
+    vf[0][e] = *(u32 *)&vf0Data[e];
 }
 
 /* Sets a VI register */

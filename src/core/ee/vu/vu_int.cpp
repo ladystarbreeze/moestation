@@ -93,7 +93,7 @@ void iADD(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + vu->getVF(ft, i));
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) + vu->getVF_F32(ft, i));
     }
 }
 
@@ -107,14 +107,14 @@ void iADDbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] ADD%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + t);
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) + t);
     }
 }
 
@@ -132,7 +132,7 @@ void iADDQ(VectorUnit *vu, u32 instr) {
     const auto q = vu->getQ();
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) + q);
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) + q);
     }
 }
 
@@ -150,7 +150,7 @@ void iDIV(VectorUnit *vu, u32 instr) {
         std::printf("[VU%d       ] DIV Q, VF%u.%s, VF%u.%s\n", vu->vuID, fs, bcStr[fsf], ft, bcStr[ftf]);
     }
 
-    vu->setQ(vu->getVF(fs, fsf) / vu->getVF(ft, ftf));
+    vu->setQ(vu->getVF_F32(fs, fsf) / vu->getVF_F32(ft, ftf));
 }
 
 /* Float to Integer (28:)4 */
@@ -165,7 +165,9 @@ void iFTOI4(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(ft, i, (i32)std::round((vu->getVF(fs, (i + 1) & 3)) * 16.0));
+        const auto data = (i32)std::round((vu->getVF_F32(fs, (i + 1) & 3)) * 16.0);
+        
+        if (dest & (1 << (3 - i))) vu->setVF(ft, i, *(u32 *)&data);
     }
 }
 
@@ -211,14 +213,14 @@ void iMADDAbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] MADDA%s%s ACC, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(ACC, i, vu->getVF(fs, i) * t + vu->getVF(ACC, i));
+        if (dest & (1 << (3 - i))) vu->setVF(ACC, i, vu->getVF_F32(fs, i) * t + vu->getVF_F32(ACC, i));
     }
 }
 
@@ -232,14 +234,14 @@ void iMADDbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] MADD%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * t + vu->getVF(ACC, i));
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) * t + vu->getVF_F32(ACC, i));
     }
 }
 
@@ -255,7 +257,7 @@ void iMOVE(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF(ft, i));
+        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF_F32(ft, i));
     }
 }
 
@@ -271,7 +273,7 @@ void iMR32(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF(ft, (i + 1) & 3));
+        if (dest & (1 << (3 - i))) vu->setVF(fs, i, vu->getVF_F32(ft, (i + 1) & 3));
     }
 }
 
@@ -288,7 +290,7 @@ void iMUL(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * vu->getVF(ft, i));
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) * vu->getVF_F32(ft, i));
     }
 }
 
@@ -301,14 +303,14 @@ void iMULAbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] MULA%s%s ACC, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(ACC, i, vu->getVF(fs, i) * t);
+        if (dest & (1 << (3 - i))) vu->setVF(ACC, i, vu->getVF_F32(fs, i) * t);
     }
 }
 
@@ -322,14 +324,14 @@ void iMULbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] MUL%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * t);
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) * t);
     }
 }
 
@@ -347,7 +349,7 @@ void iMULQ(VectorUnit *vu, u32 instr) {
     const auto q = vu->getQ();
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * q);
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) * q);
     }
 }
 
@@ -370,9 +372,9 @@ void iOPMSUB(VectorUnit *vu, u32 instr) {
         std::printf("[VU%d       ] OPMSUB%s VF%u, VF%u, VF%u\n", vu->vuID, destStr[dest], fd, fs, ft);
     }
 
-    vu->setVF(fd, 0, vu->getVF(ACC, 0) - vu->getVF(fs, 1) * vu->getVF(ft, 2));
-    vu->setVF(fd, 1, vu->getVF(ACC, 1) - vu->getVF(fs, 2) * vu->getVF(ft, 0));
-    vu->setVF(fd, 2, vu->getVF(ACC, 2) - vu->getVF(fs, 0) * vu->getVF(ft, 1));
+    vu->setVF(fd, 0, vu->getVF_F32(ACC, 0) - vu->getVF_F32(fs, 1) * vu->getVF_F32(ft, 2));
+    vu->setVF(fd, 1, vu->getVF_F32(ACC, 1) - vu->getVF_F32(fs, 2) * vu->getVF_F32(ft, 0));
+    vu->setVF(fd, 2, vu->getVF_F32(ACC, 2) - vu->getVF_F32(fs, 0) * vu->getVF_F32(ft, 1));
 }
 
 /* Outer Product MULtiply to Accumulator */
@@ -386,9 +388,9 @@ void iOPMULA(VectorUnit *vu, u32 instr) {
         std::printf("[VU%d       ] OPMULA%s ACC, VF%u, VF%u\n", vu->vuID, destStr[dest], fs, ft);
     }
 
-    vu->setVF(ACC, 0, vu->getVF(fs, 1) * vu->getVF(ft, 2));
-    vu->setVF(ACC, 1, vu->getVF(fs, 2) * vu->getVF(ft, 0));
-    vu->setVF(ACC, 2, vu->getVF(fs, 0) * vu->getVF(ft, 1));
+    vu->setVF(ACC, 0, vu->getVF_F32(fs, 1) * vu->getVF_F32(ft, 2));
+    vu->setVF(ACC, 1, vu->getVF_F32(fs, 2) * vu->getVF_F32(ft, 0));
+    vu->setVF(ACC, 2, vu->getVF_F32(fs, 0) * vu->getVF_F32(ft, 1));
 }
 
 /* Store Quadword Increment */
@@ -406,7 +408,7 @@ void iSQI(VectorUnit *vu, u32 instr) {
 
     for (int i = 0; i < 4; i++) {
         if (dest & (1 << (3 - i))) {
-            const auto data = vu->getVF(fs, i);
+            const auto data = vu->getVF_F32(fs, i);
 
             vu->writeData32(addr + 4 * i, *(u32 *)&data);
         }
@@ -425,7 +427,7 @@ void iSQRT(VectorUnit *vu, u32 instr) {
         std::printf("[VU%d       ] SQRT Q, VF%u.%s\n", vu->vuID, ft, bcStr[ftf]);
     }
 
-    vu->setQ(std::sqrtf(vu->getVF(ft, ftf)));
+    vu->setQ(std::sqrtf(vu->getVF_F32(ft, ftf)));
 }
 
 /* SUBtract */
@@ -441,7 +443,7 @@ void iSUB(VectorUnit *vu, u32 instr) {
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) - vu->getVF(ft, i));
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) - vu->getVF_F32(ft, i));
     }
 }
 
@@ -455,14 +457,14 @@ void iSUBbc(VectorUnit *vu, u32 instr) {
 
     const auto bc = instr & 3;
 
-    const auto t = vu->getVF(ft, bc);
+    const auto t = vu->getVF_F32(ft, bc);
 
     if (doDisasm) {
         std::printf("[VU%d       ] SUB%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
     }
 
     for (int i = 0; i < 4; i++) {
-        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) - t);
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF_F32(fs, i) - t);
     }
 }
 
