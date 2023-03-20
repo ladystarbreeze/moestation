@@ -20,7 +20,9 @@ constexpr auto ACC = 32;
 
 enum SPECIAL1Opcode {
     VADDBC  = 0x00,
+    VSUBBC  = 0x04,
     VMADDBC = 0x08,
+    VMULBC  = 0x18,
     VMULQ   = 0x1C,
     VADDQ   = 0x20,
     VADD    = 0x28,
@@ -32,6 +34,7 @@ enum SPECIAL1Opcode {
 
 enum SPECIAL2Opcode {
     VMADDABC = 0x08,
+    VFTOI4   = 0x15,
     VMULABC  = 0x18,
     VOPMULA  = 0x2E,
     VNOP     = 0x2F,
@@ -148,6 +151,22 @@ void iDIV(VectorUnit *vu, u32 instr) {
     }
 
     vu->setQ(vu->getVF(fs, fsf) / vu->getVF(ft, ftf));
+}
+
+/* Float to Integer (28:)4 */
+void iFTOI4(VectorUnit *vu, u32 instr) {
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] FTOI4%s VF%u, VF%u\n", vu->vuID, destStr[dest], fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(ft, i, (i32)std::round((vu->getVF(fs, (i + 1) & 3)) * 16.0));
+    }
 }
 
 /* Integer ADD */
@@ -293,6 +312,27 @@ void iMULAbc(VectorUnit *vu, u32 instr) {
     }
 }
 
+/* MULtiply with BroadCast */
+void iMULbc(VectorUnit *vu, u32 instr) {
+    const auto fd = getD(instr);
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    const auto bc = instr & 3;
+
+    const auto t = vu->getVF(ft, bc);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] MUL%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) * t);
+    }
+}
+
 /* MULtiply Q */
 void iMULQ(VectorUnit *vu, u32 instr) {
     const auto fd = getD(instr);
@@ -405,6 +445,27 @@ void iSUB(VectorUnit *vu, u32 instr) {
     }
 }
 
+/* SUBtract with BroadCast */
+void iSUBbc(VectorUnit *vu, u32 instr) {
+    const auto fd = getD(instr);
+    const auto fs = getS(instr);
+    const auto ft = getT(instr);
+
+    const auto dest = getDest(instr);
+
+    const auto bc = instr & 3;
+
+    const auto t = vu->getVF(ft, bc);
+
+    if (doDisasm) {
+        std::printf("[VU%d       ] SUB%s%s VF%u, VF%u, VF%u\n", vu->vuID, bcStr[bc], destStr[dest], fd, fs, ft);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (dest & (1 << (3 - i))) vu->setVF(fd, i, vu->getVF(fs, i) - t);
+    }
+}
+
 /* WAIT Q */
 void iWAITQ(VectorUnit *vu) {
     if (doDisasm) {
@@ -426,6 +487,7 @@ void executeMacro(VectorUnit *vu, u32 instr) {
             case SPECIAL2Opcode::VMADDABC + 3:
                 iMADDAbc(vu, instr);
                 break;
+            case SPECIAL2Opcode::VFTOI4     : iFTOI4(vu, instr); break;
             case SPECIAL2Opcode::VMULABC + 0:
             case SPECIAL2Opcode::VMULABC + 1:
             case SPECIAL2Opcode::VMULABC + 2:
@@ -456,11 +518,23 @@ void executeMacro(VectorUnit *vu, u32 instr) {
             case SPECIAL1Opcode::VADDBC + 3:
                 iADDbc(vu, instr);
                 break;
+            case SPECIAL1Opcode::VSUBBC + 0:
+            case SPECIAL1Opcode::VSUBBC + 1:
+            case SPECIAL1Opcode::VSUBBC + 2:
+            case SPECIAL1Opcode::VSUBBC + 3:
+                iSUBbc(vu, instr);
+                break;
             case SPECIAL1Opcode::VMADDBC + 0:
             case SPECIAL1Opcode::VMADDBC + 1:
             case SPECIAL1Opcode::VMADDBC + 2:
             case SPECIAL1Opcode::VMADDBC + 3:
                 iMADDbc(vu, instr);
+                break;
+            case SPECIAL1Opcode::VMULBC + 0:
+            case SPECIAL1Opcode::VMULBC + 1:
+            case SPECIAL1Opcode::VMULBC + 2:
+            case SPECIAL1Opcode::VMULBC + 3:
+                iMULbc(vu, instr);
                 break;
             case SPECIAL1Opcode::VMULQ  : iMULQ(vu, instr); break;
             case SPECIAL1Opcode::VADDQ  : iADDQ(vu, instr); break;
