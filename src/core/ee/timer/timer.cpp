@@ -138,7 +138,7 @@ void write32(u32 addr, u32 data) {
                 if (data & (1 << 11)) mode.ovff = false;
 
                 if (mode.gate) {
-                    std::printf("[Timer::EE  ] Unhandled timer gate\n");
+                    std::printf("[Timer:EE  ] Unhandled timer gate\n");
 
                     exit(0);
                 }
