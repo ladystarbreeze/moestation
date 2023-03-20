@@ -21,7 +21,10 @@
 #include "iop/cdvd/cdvd.hpp"
 #include "iop/dmac/dmac.hpp"
 #include "iop/timer/timer.hpp"
-#include "../common/types.hpp"
+
+#include <SDL2/SDL.h>
+
+#undef main
 
 namespace ps2 {
 
@@ -31,9 +34,32 @@ using VectorInterface = ee::vif::VectorInterface;
 
 constexpr i64 EE_CYCLES = 16;
 
+/* SDL2 */
+SDL_Renderer *renderer;
+SDL_Window   *window;
+SDL_Texture  *texture;
+
+SDL_Event e;
+
 VectorInterface vif[2] = {VectorInterface(0, ee::cpu::getVU(0)), VectorInterface(1, ee::cpu::getVU(1))};
 
 char execPath[256];
+
+bool isRunning = true;
+
+/* Initializes SDL */
+void initSDL() {
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_SetHint(SDL_HINT_RENDER_VSYNC, "1");
+
+    SDL_CreateWindowAndRenderer(640, 480, 0, &window, &renderer);
+    SDL_SetWindowSize(window, 640, 480);
+    SDL_RenderSetLogicalSize(renderer, 640, 480);
+    SDL_SetWindowResizable(window, SDL_FALSE);
+    SDL_SetWindowTitle(window, "moestation");
+
+    texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 480);
+}
 
 void init(const char *biosPath, const char *path) {
     std::printf("BIOS path: \"%s\"\nExec path: \"%s\"\n", biosPath, path);
@@ -54,10 +80,12 @@ void init(const char *biosPath, const char *path) {
     iop::cdvd::init(execPath);
     iop::dmac::init();
     iop::timer::init();
+
+    initSDL();
 }
 
 void run() {
-    while (true) {
+    while (isRunning) {
         /* Step EE hardware */
 
         ee::cpu::step(EE_CYCLES);
@@ -70,6 +98,8 @@ void run() {
 
         scheduler::processEvents(EE_CYCLES);
     }
+
+    SDL_Quit();
 }
 
 /* Fast boots an ISO or ELF */
@@ -114,6 +144,19 @@ void fastBoot() {
 
         exit(0);
     }
+}
+
+void update(const u8 *fb) {
+    SDL_PollEvent(&e);
+
+    switch (e.type) {
+        case SDL_QUIT: isRunning = false; break;
+        default: break;
+    }
+
+    SDL_UpdateTexture(texture, nullptr, fb, 4 * 640);
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer);
 }
 
 }

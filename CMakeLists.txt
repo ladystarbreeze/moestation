@@ -64,4 +64,8 @@ set(HEADERS
     src/core/iop/timer/timer.hpp
 )
 
+find_package(SDL2 REQUIRED)
+include_directories(moestation ${SDL2_INCLUDE_DIRS})
+
 add_executable(moestation ${SOURCES} ${HEADERS})
+target_link_libraries(moestation ${SDL2_LIBRARIES})

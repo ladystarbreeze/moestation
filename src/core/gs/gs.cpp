@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "../intc.hpp"
+#include "../moestation.hpp"
 #include "../scheduler.hpp"
 #include "../ee/timer/timer.hpp"
 #include "../iop/timer/timer.hpp"
@@ -330,6 +331,8 @@ void hblankEvent(i64 c) {
 
         csr |= 1 << 3;  // VBLANK
         csr ^= 1 << 13; // FIELD
+
+        update((u8 *)vram.data());
     } else if (lineCounter == SCANLINES_PER_FRAME) {
         intc::sendInterrupt(Interrupt::VBLANKEnd);
         intc::sendInterruptIOP(IOPInterrupt::VBLANKEnd);
