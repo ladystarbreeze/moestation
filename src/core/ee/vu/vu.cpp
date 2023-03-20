@@ -46,6 +46,9 @@ u32 VectorUnit::getControl(u32 idx) {
     if (idx < 16) return vi[idx];
 
     switch (idx) {
+        case static_cast<u32>(ControlReg::SF):
+            std::printf("[VU%d       ] Read @ SF\n", vuID);
+            return 0;
         case static_cast<u32>(ControlReg::FBRST):
             std::printf("[VU%d       ] Read @ FBRST\n", vuID);
             return 0;
@@ -156,7 +159,7 @@ void VectorUnit::setVF(u32 idx, int e, f32 data) {
     if (idx == 32) {
         std::printf("[VU%d       ] ACC.%s = %f\n", vuID, elementStr[e], data);
     } else {
-        std::printf("[VU%d       ] VF%u.%s = %f\n", vuID, idx, elementStr[e], data);
+        std::printf("[VU%d       ] VF%u.%s = %f (0x%08X)\n", vuID, idx, elementStr[e], data, *(u32 *)&data);
     }
 
     vf[idx][e] = data;
