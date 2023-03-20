@@ -27,6 +27,7 @@ enum FPUOpcode {
     NEG  = 0x07,
     ADDA = 0x18,
     MADD = 0x1C,
+    CVTW = 0x24,
     C    = 0x30,
 };
 
@@ -85,9 +86,9 @@ u32 getControl(u32 idx) {
 }
 
 void set(u32 idx, u32 data) {
-    std::printf("[FPU       ] %u = 0x%08X\n", idx, data);
+    std::printf("[FPU       ] %u = 0x%08X (%f)\n", idx, data, *(f32 *)&data);
 
-    fprs[idx] = *(u32 *)&data;
+    fprs[idx] = data;
 }
 
 void set(u32 idx, f32 data) {
@@ -176,6 +177,20 @@ void iCVTS(u32 instr) {
     const auto data = (i32)get(fs);
 
     set(fd, (f32)data);
+}
+
+/* ConVerT to Word */
+void iCVTW(u32 instr) {
+    const auto fd = getFd(instr);
+    const auto fs = getFs(instr);
+
+    if (doDisasm) {
+        std::printf("[FPU       ] CVT.W.S $%u, $%u\n", fd, fs);
+    }
+
+    const auto data = getF32(fs);
+
+    set(fd, (u32)(i32)data);
 }
 
 /* DIVide */
@@ -279,6 +294,7 @@ void executeSingle(u32 instr) {
         case FPUOpcode::NEG  : iNEG(instr); break;
         case FPUOpcode::ADDA : iADDA(instr); break;
         case FPUOpcode::MADD : iMADD(instr); break;
+        case FPUOpcode::CVTW : iCVTW(instr); break;
         case FPUOpcode::C + 0: iC<Cond::F>(instr); break;
         case FPUOpcode::C + 2: iC<Cond::EQ>(instr); break;
         case FPUOpcode::C + 4: iC<Cond::LT>(instr); break;
