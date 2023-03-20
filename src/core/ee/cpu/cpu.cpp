@@ -1680,6 +1680,7 @@ void iMFC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: data = cop0::get32(rd); break;
+        case 1: data = fpu::get(rd); break;
         default:
             std::printf("[EE Core   ] MFC: Unhandled coprocessor %d\n", copN);
 
@@ -2924,6 +2925,7 @@ void decodeInstr(u32 instr) {
                 const auto rs = getRs(instr);
 
                 switch (rs) {
+                    case COPOpcode::MF: iMFC(1, instr); break;
                     case COPOpcode::CF: iCFC(1, instr); break;
                     case COPOpcode::MT: iMTC(1, instr); break;
                     case COPOpcode::CT: iCTC(1, instr); break;
