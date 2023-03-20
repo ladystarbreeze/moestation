@@ -432,30 +432,29 @@ void doVIF1() {
         }
     }
 
-    /* Transfer up to 16 quadwords at a time */
+    /* Transfer all quadwords */
 
-    auto qwc  = std::min((u16)16, chn.qwc);
+    assert(chn.qwc);
+
     auto madr = chn.madr;
 
-    assert(qwc);
-
-    for (u32 i = 0; i < qwc; i++) {
+    for (u32 i = 0; i < chn.qwc; i++) {
         const auto data = bus::readDMAC128(madr + 16 * i);
 
         std::printf("[DMAC:EE   ] VIF1 write = 0x%016llX%016llX\n", data._u64[1], data._u64[0]);
     }
 
     /* Update channel registers */
-    chn.qwc  -= qwc;
-    chn.madr += 16 * qwc;
+    chn.madr += 16 * chn.qwc;
+
+    chn.qwc = 0;
 
     /* Clear DRQ */
     //chn.drq = false;
-    if (!chn.isTagEnd) scheduler::addEvent(idRestart, static_cast<int>(chnID), 4 * qwc, true);
 
-    if (!chn.qwc && chn.isTagEnd) {
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, true);
-    }
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.qwc, true);
+
+    chn.qwc = 0;
 }
 
 void startDMA(Channel chn) {
