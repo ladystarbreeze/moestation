@@ -37,7 +37,7 @@ union u128 {
     u64 _u64[2];
     u32 _u32[4];
     u16 _u16[8];
-    u8  _u8[8];
+    u8  _u8[16];
 
     /* Conversion from u64 (zero-extended) */
     static u128 from64(u64 src) {
