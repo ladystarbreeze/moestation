@@ -216,6 +216,22 @@ struct TEST {
     u8   ztst;  // Z test method
 };
 
+/* Texture */
+struct TEX {
+    u32  tbp0; // Texture base pointer
+    u32  tbw;  // Texture base width
+    u8   psm;  // Pixel storage mode
+    u8   tw;   // Texture width
+    u8   th;   // Texture height
+    bool tcc;  // Texture color component
+    u8   tfx;  // Texture function
+    u32  cbp;  // CLUT base pointer
+    u8   cpsm; // CLUT pixel storage mode
+    bool csm;  // CLUT storage mode
+    u32  csa;  // CLUT entry offset
+    u8   cld;  // CLUT load control
+};
+
 /* Transmission area position */
 struct TRXPOS {
     u32 ssax;
@@ -229,6 +245,12 @@ struct TRXPOS {
 struct TRXREG {
     u32 rrw;
     u32 rrh;
+};
+
+/* Texel coordinates */
+struct UV {
+    i64 u;
+    i64 v;
 };
 
 /* XY offset */
@@ -249,6 +271,7 @@ struct Context {
     FRAME    frame;
     SCISSOR  scissor;
     TEST     test;
+    TEX      tex0;
     XYOFFSET xyoffset;
     ZBUF     zbuf;
 };
@@ -267,6 +290,8 @@ PRIM prim, prmode;
 PRIM *cmode; // Current primitive mode
 
 RGBAQ rgbaq;
+
+UV uv;
 
 BITBLTBUF bitbltbuf;
 TRXPOS    trxpos;
@@ -408,17 +433,23 @@ void write(u8 addr, u64 data) {
             break;
         case static_cast<u8>(GSReg::RGBAQ):
             {
-            std::printf("[GS        ] Write @ RGBAQ = 0x%016llX\n", data);
+                std::printf("[GS        ] Write @ RGBAQ = 0x%016llX\n", data);
 
-            rgbaq.r = (data >>  0);
-            rgbaq.g = (data >>  8);
-            rgbaq.b = (data >> 16);
-            rgbaq.a = (data >> 24);
+                rgbaq.r = (data >>  0);
+                rgbaq.g = (data >>  8);
+                rgbaq.b = (data >> 16);
+                rgbaq.a = (data >> 24);
 
-            const auto q = (u32)(data >> 32) & ~0xFF; // Clear low 8 bits of mantissa
+                const auto q = (u32)(data >> 32) & ~0xFF; // Clear low 8 bits of mantissa
 
-            rgbaq.q = *(f32 *)&q;
+                rgbaq.q = *(f32 *)&q;
             }
+            break;
+        case static_cast<u8>(GSReg::UV):
+            std::printf("[GS        ] Write @ UV = 0x%016llX\n", data);
+
+            uv.u = (i64)((data >>  0) & 0x3FFF);
+            uv.v = (i64)((data >> 16) & 0x3FFF);
             break;
         case static_cast<u8>(GSReg::XYZ2):
             {
@@ -438,8 +469,8 @@ void write(u8 addr, u64 data) {
                 vtx.b = rgbaq.b;
                 vtx.a = rgbaq.a;
 
-                //vtx.u = uv.u;
-                //vtx.v = uv.v;
+                vtx.u = uv.u;
+                vtx.v = uv.v;
 
                 //vtx.s = st.s;
                 //vtx.t = st.t;
@@ -458,6 +489,46 @@ void write(u8 addr, u64 data) {
 
                     vtxCount = 0;
                 }
+            }
+            break;
+        case static_cast<u8>(GSReg::TEX0_1):
+            {
+                std::printf("[GS        ] Write @ TEX0_1 = 0x%016llX\n", data);
+
+                auto &tex0 = ctx[0].tex0;
+
+                tex0.tbp0 = 64 * (data & 0x3FFF);
+                tex0.tbw  = 64 * ((data >> 14) & 0x3F);
+                tex0.psm  = (data >> 20) & 0x3F;
+                tex0.tw   = (data >> 26) & 0xF;
+                tex0.th   = (data >> 30) & 0xF;
+                tex0.tcc  = data & (1ull << 34);
+                tex0.tfx  = (data >> 35) & 3;
+                tex0.cbp  = 64 * ((data >> 37) & 0x3FFF);
+                tex0.cpsm = (data >> 51) & 0xF;
+                tex0.csm  = data & (1ull << 55);
+                tex0.csa  = 16 * ((data >> 56) & 0x1F);
+                tex0.cld  = (data > 61) & 3;
+            }
+            break;
+        case static_cast<u8>(GSReg::TEX0_2):
+            {
+                std::printf("[GS        ] Write @ TEX0_2 = 0x%016llX\n", data);
+
+                auto &tex0 = ctx[1].tex0;
+
+                tex0.tbp0 = 64 * (data & 0x3FFF);
+                tex0.tbw  = 64 * ((data >> 14) & 0x3F);
+                tex0.psm  = (data >> 20) & 0x3F;
+                tex0.tw   = (data >> 26) & 0xF;
+                tex0.th   = (data >> 30) & 0xF;
+                tex0.tcc  = data & (1ull << 34);
+                tex0.tfx  = (data >> 35) & 3;
+                tex0.cbp  = 64 * ((data >> 37) & 0x3FFF);
+                tex0.cpsm = (data >> 51) & 0xF;
+                tex0.csm  = data & (1ull << 55);
+                tex0.csa  = 16 * ((data >> 56) & 0x1F);
+                tex0.cld  = (data > 61) & 3;
             }
             break;
         case static_cast<u8>(GSReg::XYOFFSET_1):
