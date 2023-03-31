@@ -250,6 +250,55 @@ void write32(u32 addr, u32 data) {
 
             if (chn < 4) timer.count &= 0xFFFF;
             break;
+        case TimerReg::MODE:
+            {
+                auto &mode = timer.mode;
+
+                std::printf("[Timer:IOP ] 32-bit write @ T%d_MODE = 0x%04X\n", chn, data);
+
+                mode.gate = data & 1;
+                mode.gats = (data >> 1) & 3;
+                mode.zret = data & (1 << 3);
+                mode.cmpe = data & (1 << 4);
+                mode.ovfe = data & (1 << 5);
+                mode.rept = data & (1 << 6);
+                mode.levl = data & (1 << 7);
+                mode.clks = data & (1 << 8);
+                mode.pre2 = data & (1 << 9);
+                mode.pre4 = (data >> 13) & 3;
+
+                mode.intf = true; // Always reset to 1
+
+                if (mode.gate) {
+                    std::printf("[Timer:IOP ] Unhandled timer gate\n");
+
+                    exit(0);
+                }
+
+                if (mode.clks && (chn == 0)) {
+                    std::printf("[Timer:IOP ] Unhandled clock source\n");
+
+                    exit(0);
+                }
+
+                // Set prescaler
+                if ((chn == 2) && mode.pre2) {
+                    timer.prescaler = 8;
+                } else if ((chn >= 4)) {
+                    switch (mode.pre4) {
+                        case 0: timer.prescaler = 1;
+                        case 1: timer.prescaler = 8;
+                        case 2: timer.prescaler = 16;
+                        case 3: timer.prescaler = 256;
+                    }
+                } else {
+                    timer.prescaler = 1;
+                }
+
+                timer.subcount = 0;
+                timer.count = 0;    // Always cleared
+            }
+            break;
         case TimerReg::COMP:
             std::printf("[Timer:IOP ] 32-bit write @ T%d_COMP = 0x%08X\n", chn, data);
 
