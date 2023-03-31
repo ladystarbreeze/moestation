@@ -91,7 +91,7 @@ void set(u32 idx, u32 data) {
     fprs[idx] = data;
 }
 
-void set(u32 idx, f32 data) {
+void setF32(u32 idx, f32 data) {
     std::printf("[FPU       ] %u = %f (0x%08X)\n", idx, data, *(u32 *)&data);
 
     fprs[idx] = *(u32 *)&data;
@@ -123,7 +123,7 @@ void iADD(u32 instr) {
         std::printf("[FPU       ] ADD $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, getF32(fs) + getF32(ft));
+    setF32(fd, getF32(fs) + getF32(ft));
 }
 
 /* ADD Accumulator */
@@ -174,9 +174,7 @@ void iCVTS(u32 instr) {
         std::printf("[FPU       ] CVT.S.W $%u, $%u\n", fd, fs);
     }
 
-    const auto data = (i32)get(fs);
-
-    set(fd, (f32)data);
+    setF32(fd, (f32)(i32)get(fs));
 }
 
 /* ConVerT to Word */
@@ -188,9 +186,7 @@ void iCVTW(u32 instr) {
         std::printf("[FPU       ] CVT.W.S $%u, $%u\n", fd, fs);
     }
 
-    const auto data = getF32(fs);
-
-    set(fd, (u32)(i32)data);
+    set(fd, (u32)(i32)std::rintf(getF32(fs)));
 }
 
 /* DIVide */
@@ -203,7 +199,7 @@ void iDIV(u32 instr) {
         std::printf("[FPU       ] DIV $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, getF32(fs) / getF32(ft));
+    setF32(fd, getF32(fs) / getF32(ft));
 }
 
 /* Multiply-ADD */
@@ -216,7 +212,7 @@ void iMADD(u32 instr) {
         std::printf("[FPU       ] MADD $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, getF32(fs) * getF32(ft) + acc);
+    setF32(fd, getF32(fs) * getF32(ft) + acc);
 }
 
 /* MOVe */
@@ -228,7 +224,7 @@ void iMOV(u32 instr) {
         std::printf("[FPU       ] MOV $%u, $%u\n", fd, fs);
     }
 
-    set(fd, getF32(fs));
+    setF32(fd, getF32(fs));
 }
 
 /* MULtiply */
@@ -241,7 +237,7 @@ void iMUL(u32 instr) {
         std::printf("[FPU       ] MUL $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, getF32(fs) * getF32(ft));
+    setF32(fd, getF32(fs) * getF32(ft));
 }
 
 /* NEGate */
@@ -253,7 +249,7 @@ void iNEG(u32 instr) {
         std::printf("[FPU       ] NEG $%u, $%u\n", fd, fs);
     }
 
-    set(fd, -getF32(fs));
+    setF32(fd, -getF32(fs));
 }
 
 /* SQuare RooT */
@@ -265,7 +261,7 @@ void iSQRT(u32 instr) {
         std::printf("[FPU       ] SQRT $%u, $%u\n", fd, ft);
     }
 
-    set(fd, std::sqrt(getF32(ft)));
+    setF32(fd, std::sqrt(getF32(ft)));
 }
 
 /* SUBtract */
@@ -278,7 +274,7 @@ void iSUB(u32 instr) {
         std::printf("[FPU       ] SUB $%u, $%u, $%u\n", fd, fs, ft);
     }
 
-    set(fd, getF32(fs) - getF32(ft));
+    setF32(fd, getF32(fs) - getF32(ft));
 }
 
 void executeSingle(u32 instr) {

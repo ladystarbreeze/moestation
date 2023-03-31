@@ -169,11 +169,11 @@ void VectorUnit::setVF(u32 idx, int e, u32 data) {
 
     vf[idx][e] = data;
 
-    vf[0][e] = vf0Data[e];
+    vf[0][e] = *(u32 *)&vf0Data[e];
 }
 
 /* Sets a VF register element */
-void VectorUnit::setVF(u32 idx, int e, f32 data) {
+void VectorUnit::setVF_F32(u32 idx, int e, f32 data) {
     if (idx == 32) {
         std::printf("[VU%d       ] ACC.%s = %f (0x%08X)\n", vuID, elementStr[e], data, *(u32 *)&data);
     } else {

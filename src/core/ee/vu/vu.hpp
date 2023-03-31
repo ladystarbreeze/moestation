@@ -28,7 +28,7 @@ struct VectorUnit {
 
     void setControl(u32 idx, u32 data); // VU0 only
     void setVF(u32 idx, int e, u32 data);
-    void setVF(u32 idx, int e, f32 data);
+    void setVF_F32(u32 idx, int e, f32 data);
     void setVI(u32 idx, u16 data);
 
     void setQ(f32 data);
