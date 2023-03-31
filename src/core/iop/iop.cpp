@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "cop0.hpp"
+#include "gte.hpp"
 #include "../bus/bus.hpp"
 
 namespace ps2::iop {
@@ -67,6 +68,7 @@ enum Opcode {
     XORI    = 0x0E,
     LUI     = 0x0F,
     COP0    = 0x10,
+    COP2    = 0x12,
     LB      = 0x20,
     LH      = 0x21,
     LWL     = 0x22,
@@ -118,7 +120,9 @@ enum REGIMMOpcode {
 
 enum COPOpcode {
     MF  = 0x00,
+    CF  = 0x02,
     MT  = 0x04,
+    CT  = 0x06,
     CO  = 0x10,
 };
 
@@ -517,6 +521,56 @@ void iBNE(u32 instr) {
     }
 }
 
+/* Coprocessor move From Control */
+void iCFC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    u32 data;
+
+    switch (copN) {
+        case 2: data = gte::getControl(rd); break;
+        default:
+            std::printf("[IOP       ] CFC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    set(rt, data);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] CFC%d %s, %d; %s = 0x%08X\n", copN, regNames[rt], rd, regNames[rt], regs[rt]);
+    }
+}
+
+/* Coprocessor move To Control */
+void iCTC(int copN, u32 instr) {
+    assert((copN >= 0) && (copN < 4));
+
+    const auto rd = getRd(instr);
+    const auto rt = getRt(instr);
+
+    /* TODO: add COP usable check */
+
+    const auto data = regs[rt];
+
+    switch (copN) {
+        case 2: gte::setControl(rd, data); break;
+        default:
+            std::printf("[IOP       ] CTC: Unhandled coprocessor %d\n", copN);
+
+            exit(0);
+    }
+
+    if (doDisasm) {
+        std::printf("[IOP       ] CTC%d %s, %d; %d = 0x%08X\n", copN, regNames[rt], rd, rd, regs[rt]);
+    }
+}
+
 /* DIVide */
 void iDIV(u32 instr) {
     const auto rs = getRs(instr);
@@ -774,6 +828,7 @@ void iMFC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: data = cop0::get(rd); break;
+        case 2: data = gte::get(rd); break;
         default:
             std::printf("[IOP       ] MFC: Unhandled coprocessor %d\n", copN);
 
@@ -822,6 +877,7 @@ void iMTC(int copN, u32 instr) {
 
     switch (copN) {
         case 0: cop0::set(rd, data); break;
+        case 2: gte::set(rd, data); break;
         default:
             std::printf("[IOP       ] MTC: Unhandled coprocessor %d\n", copN);
 
@@ -1352,6 +1408,26 @@ void decodeInstr(u32 instr) {
                         std::printf("[IOP       ] Unhandled COP0 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
 
                         exit(0);
+                }
+            }
+            break;
+        case Opcode::COP2:
+            {
+                const auto rs = getRs(instr);
+
+                if (rs >= COPOpcode::CO) {
+                    gte::doCmd(instr & 0x1FFFFFF);
+                } else {
+                    switch (rs) {
+                        case COPOpcode::MF: iMFC(2, instr); break;
+                        case COPOpcode::CF: iCFC(2, instr); break;
+                        case COPOpcode::MT: iMTC(2, instr); break;
+                        case COPOpcode::CT: iCTC(2, instr); break;
+                        default:
+                            std::printf("[IOP       ] Unhandled COP2 instruction 0x%02X (0x%08X) @ 0x%08X\n", rs, instr, cpc);
+
+                            exit(0);
+                    }
                 }
             }
             break;
