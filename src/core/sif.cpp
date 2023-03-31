@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <queue>
 
-#include "iop/iop.hpp"
+#include "moestation.hpp"
 
 namespace ps2::sif {
 
@@ -139,7 +139,7 @@ void write(u32 addr, u32 data) {
             std::printf("[SIF:EE    ] 32-bit write @ CTRL = 0x%08X\n", data);
 
             if (data & (1 << 19)) {
-                iop::enterPS1Mode();
+                enterPS1Mode();
             }
             break;
         case SIFReg::BD6:
