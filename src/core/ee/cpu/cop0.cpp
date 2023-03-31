@@ -127,6 +127,8 @@ u32 get32(u32 idx) {
         case static_cast<u32>(COP0Reg::BadPAddr): return 0;
         case static_cast<u32>(COP0Reg::Debug   ): return 0;
         case static_cast<u32>(COP0Reg::Perf    ): return 0;
+        case static_cast<u32>(COP0Reg::TagLo   ): return 0;
+        case static_cast<u32>(COP0Reg::TagHi   ): return 0;
         case static_cast<u32>(COP0Reg::ErrorEPC): return errorEPC;
         default:
             std::printf("[COP0:EE   ] Unhandled register read @ %u\n", idx);
