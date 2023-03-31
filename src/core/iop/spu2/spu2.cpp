@@ -164,6 +164,12 @@ u16 read(u32 addr) {
     }
 }
 
+u16 readPS1(u32 addr) {
+    //std::printf("[SPU1      ] 16-bit read @ 0x%08X\n", addr);
+
+    return 0;
+}
+
 void write(u32 addr, u16 data) {
     if ((addr >= 0x1F900760) && (addr < 0x1F9007B0)) {
         const auto coreID = (int)(addr >= 0x1F900788);
@@ -295,7 +301,7 @@ void write(u32 addr, u16 data) {
 }
 
 void writePS1(u32 addr, u16 data) {
-    std::printf("[SPU1      ] 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
+    //std::printf("[SPU1      ] 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
 
     return;
 }

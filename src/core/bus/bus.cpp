@@ -319,6 +319,8 @@ u16 readIOP16(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer0), static_cast<u32>(MemorySizeIOP::Timer)) ||
                inRange(addr, static_cast<u32>(MemoryBaseIOP::Timer1), static_cast<u32>(MemorySizeIOP::Timer))) {
         return iop::timer::read16(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU), static_cast<u32>(MemorySizeIOP::SPU))) {
+        return iop::spu2::readPS1(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU2), static_cast<u32>(MemorySizeIOP::SPU2))) {
         return iop::spu2::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::BIOS), static_cast<u32>(MemorySize::BIOS))) {
@@ -327,6 +329,12 @@ u16 readIOP16(u32 addr) {
         std::memcpy(&data, &iopSPRAM[addr - spramStart], sizeof(u16));
     } else {
         switch (addr) {
+            case 0x1F801070:
+                //std::printf("[Bus:IOP   ] 32-bit read @ I_STAT\n");
+                return intc::readStatIOP();
+            case 0x1F801074:
+                std::printf("[Bus:IOP   ] 32-bit read @ I_MASK\n");
+                return intc::readMaskIOP();
             default:
                 std::printf("[Bus:IOP   ] Unhandled 16-bit read @ 0x%08X\n", addr);
 
@@ -617,6 +625,12 @@ void writeIOP16(u32 addr, u16 data) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u16));
     } else {
         switch (addr) {
+            case 0x1F801070:
+                std::printf("[Bus:IOP   ] 16-bit write @ I_STAT = 0x%08X\n", data);
+                return intc::writeStatIOP((intc::readStatIOP() & 0xFFFF0000) | data);
+            case 0x1F801074:
+                std::printf("[Bus:IOP   ] 16-bit write @ I_MASK = 0x%08X\n", data);
+                return intc::writeMaskIOP((intc::readMaskIOP() & 0xFFFF0000) | data);
             default:
                 std::printf("[Bus:IOP   ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
 

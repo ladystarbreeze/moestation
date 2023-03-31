@@ -10,6 +10,7 @@
 namespace ps2::iop::spu2 {
 
 u16 read(u32 addr);
+u16 readPS1(u32 addr);
 
 void write(u32 addr, u16 data);
 void writePS1(u32 addr, u16 data);
