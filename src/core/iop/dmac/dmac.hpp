@@ -13,7 +13,7 @@ namespace ps2::iop::dmac {
 enum class Channel {
     MDECIN,
     MDECOUT,
-    SIF2,
+    PGIF,
     CDVD,
     SPU1,
     PIO,
