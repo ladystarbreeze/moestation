@@ -21,12 +21,14 @@ set(SOURCES
     src/core/ee/dmac/dmac.cpp
     src/core/ee/gif/gif.cpp
     src/core/ee/ipu/ipu.cpp
+    src/core/ee/pgif/pgif.cpp
     src/core/ee/timer/timer.cpp
     src/core/ee/vif/vif.cpp
     src/core/ee/vu/vu.cpp
     src/core/ee/vu/vu_int.cpp
     src/core/gs/gs.cpp
     src/core/iop/cop0.cpp
+    src/core/iop/gte.cpp
     src/core/iop/iop.cpp
     src/core/iop/cdrom/cdrom.cpp
     src/core/iop/cdvd/cdvd.cpp
@@ -51,12 +53,14 @@ set(HEADERS
     src/core/ee/dmac/dmac.hpp
     src/core/ee/gif/gif.hpp
     src/core/ee/ipu/ipu.hpp
+    src/core/ee/pgif/pgif.hpp
     src/core/ee/timer/timer.hpp
     src/core/ee/vif/vif.hpp
     src/core/ee/vu/vu.hpp
     src/core/ee/vu/vu_int.hpp
     src/core/gs/gs.hpp
     src/core/iop/cop0.hpp
+    src/core/iop/gte.hpp
     src/core/iop/iop.hpp
     src/core/iop/cdrom/cdrom.hpp
     src/core/iop/cdvd/cdvd.hpp

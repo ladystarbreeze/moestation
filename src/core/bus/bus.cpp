@@ -15,6 +15,7 @@
 #include "../ee/ipu/ipu.hpp"
 #include "../ee/timer/timer.hpp"
 #include "../ee/gif/gif.hpp"
+#include "../ee/pgif/pgif.hpp"
 #include "../gs/gs.hpp"
 #include "../iop/cdrom/cdrom.hpp"
 #include "../iop/cdvd/cdvd.hpp"
@@ -38,6 +39,7 @@ enum class MemoryBase {
     VIF1    = 0x10003C00,
     DMAC    = 0x10008000,
     SIF     = 0x1000F200,
+    PGIF    = 0x1000F300,
     RDRAM   = 0x1000F430,
     VU0Code = 0x11000000,
     VU0Data = 0x11004000,
@@ -204,7 +206,7 @@ u32 read32(u32 addr) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
         return ee::ipu::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
-        return gif::read(addr);
+        return ee::gif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
         return vif[0]->read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
@@ -213,6 +215,8 @@ u32 read32(u32 addr) {
         return ee::dmac::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
         return sif::read(addr);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::PGIF), static_cast<u32>(MemorySize::GIF))) {
+        return ee::pgif::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::read(addr);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -235,8 +239,6 @@ u32 read32(u32 addr) {
                 std::printf("[Bus:EE    ] 32-bit read @ D_ENABLER\n");
                 return ee::dmac::readEnable();
             case 0x1000F130:
-            case 0x1000F300:
-            case 0x1000F380:
             case 0x1000F400:
             case 0x1000F410:
                 //std::printf("[Bus:EE    ] Unhandled 32-bit read @ 0x%08X\n", addr);
@@ -384,6 +386,11 @@ u32 readIOP32(u32 addr) {
             case 0x1F801078:
                 //std::printf("[Bus:IOP   ] 32-bit read @ I_CTRL\n");
                 return intc::readCtrlIOP();
+            case 0x1F801810:
+                //std::printf("[Bus:IOP   ] 32-bit read @ GPUDATA\n");
+                return 0;
+            case 0x1F801814:
+                return ee::pgif::readGPUSTAT();
             case 0x1F80100C:
             case 0x1F801010: case 0x1F801014:
             case 0x1F801400: case 0x1F801414:
@@ -487,7 +494,7 @@ void write32(u32 addr, u32 data) {
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IPU), static_cast<u32>(MemorySize::IPU))) {
         return ee::ipu::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::GIF), static_cast<u32>(MemorySize::GIF))) {
-        return gif::write(addr, data);
+        return ee::gif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF0), static_cast<u32>(MemorySize::VIF))) {
         return vif[0]->write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::VIF1), static_cast<u32>(MemorySize::VIF))) {
@@ -496,6 +503,8 @@ void write32(u32 addr, u32 data) {
         return ee::dmac::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::SIF), static_cast<u32>(MemorySize::SIF))) {
         return sif::write(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBase::PGIF), static_cast<u32>(MemorySize::GIF))) {
+        return ee::pgif::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::RDRAM), static_cast<u32>(MemorySize::RDRAM))) {
         return rdram::write(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPRAM), static_cast<u32>(MemorySize::IOPRAM))) {
@@ -663,28 +672,6 @@ void writeIOP32(u32 addr, u32 data) {
         memcpy(&iopSPRAM[addr - spramStart], &data, sizeof(u32));
     } else {
         switch (addr) {
-            case 0x1F801070:
-                std::printf("[Bus:IOP   ] 32-bit write @ I_STAT = 0x%08X\n", data);
-                return intc::writeStatIOP(data);
-            case 0x1F801074:
-                std::printf("[Bus:IOP   ] 32-bit write @ I_MASK = 0x%08X\n", data);
-                return intc::writeMaskIOP(data);
-            case 0x1F801078:
-                //std::printf("[Bus:IOP   ] 32-bit write @ I_CTRL = 0x%08X\n", data);
-                return intc::writeCtrlIOP(data);
-            case 0x1FFE0130:
-                std::printf("[Bus:IOP   ] 32-bit write @ Cache Control = 0x%08X\n", data);
-                break;
-            case 0x1FFE0140:
-                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM End = 0x%08X\n", data);
-
-                spramEnd = data;
-                break;
-            case 0x1FFE0144:
-                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM Start = 0x%08X\n", data);
-
-                spramStart = data;
-                break;
             case 0x1F801000:
                 std::printf("[Bus:IOP   ] 32-bit write @ EXP1_BASE = 0x%08X\n", data);
                 break;
@@ -715,8 +702,34 @@ void writeIOP32(u32 addr, u32 data) {
             case 0x1F801060:
                 std::printf("[Bus:IOP   ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
                 break;
+            case 0x1F801070:
+                std::printf("[Bus:IOP   ] 32-bit write @ I_STAT = 0x%08X\n", data);
+                return intc::writeStatIOP(data);
+            case 0x1F801074:
+                std::printf("[Bus:IOP   ] 32-bit write @ I_MASK = 0x%08X\n", data);
+                return intc::writeMaskIOP(data);
+            case 0x1F801078:
+                //std::printf("[Bus:IOP   ] 32-bit write @ I_CTRL = 0x%08X\n", data);
+                return intc::writeCtrlIOP(data);
+            case 0x1F801810:
+                return ee::pgif::writeGP0(data);
+            case 0x1F801814:
+                return ee::pgif::writeGP1(data);
             case 0x1F802070:
                 std::printf("[Bus:IOP   ] 32-bit write @ POST2 = 0x%08X\n", data);
+                break;
+            case 0x1FFE0130:
+                std::printf("[Bus:IOP   ] 32-bit write @ Cache Control = 0x%08X\n", data);
+                break;
+            case 0x1FFE0140:
+                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM End = 0x%08X\n", data);
+
+                spramEnd = data;
+                break;
+            case 0x1FFE0144:
+                std::printf("[Bus:IOP   ] 32-bit write @ SPRAM Start = 0x%08X\n", data);
+
+                spramStart = data;
                 break;
             case 0x1F801400: case 0x1F801404: case 0x1F801408: case 0x1F80140C:
             case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
