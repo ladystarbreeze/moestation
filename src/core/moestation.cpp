@@ -43,7 +43,7 @@ VectorInterface vif[2] = {VectorInterface(0, ee::cpu::getVU(0)), VectorInterface
 
 char execPath[256];
 
-bool isRunning = true;
+bool isRunning = true, psxFastBoot = false;
 
 /* Initializes SDL */
 void initSDL() {
@@ -59,8 +59,10 @@ void initSDL() {
     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_XBGR8888, SDL_TEXTUREACCESS_STREAMING, 640, 480);
 }
 
-void init(const char *biosPath, const char *path) {
+void init(const char *biosPath, const char *path, const char *psxmode) {
     std::printf("BIOS path: \"%s\"\nExec path: \"%s\"\n", biosPath, path);
+
+    if (psxmode && (std::strncmp(psxmode, "-PSXMODE", 8) == 0)) psxFastBoot = true;
 
     std::strncpy(execPath, path, 256);
 
@@ -130,8 +132,14 @@ void fastBoot() {
         ext[i] = tolower(ext[i]);
     }
 
-    if (std::strncmp(ext, ".iso", 4) == 0) {
+    if ((std::strncmp(ext, ".iso", 4) == 0) || std::strncmp(ext, ".bin", 4) == 0) {
         std::printf("[moestation] Loading ISO...\n");
+
+        if (psxFastBoot) {
+            std::printf("[moestation] PSX fast boot\n");
+
+            return bus::setPathEELOAD("rom0:PS1DRV");
+        }
 
         /* Get executable path from the ISO and replace it with the OSDSYS string in memory */
         char dvdPath[23] = "cdrom0:\\\\XXXX_000.00;1";

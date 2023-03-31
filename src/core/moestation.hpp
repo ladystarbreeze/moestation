@@ -9,7 +9,7 @@
 
 namespace ps2 {
 
-void init(const char *biosPath, const char *execPath);
+void init(const char *biosPath, const char *execPath, const char *psxmode);
 void run();
 
 void fastBoot();

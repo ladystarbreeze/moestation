@@ -10,13 +10,13 @@
 int main(int argc, char **argv) {
     std::printf("[moestation] PlayStation 2 emulator\n");
 
-    if (argc < 2) {
-        std::printf("Usage: moestation /path/to/bios /path/to/executable\n");
+    if (argc < 3) {
+        std::printf("Usage: moestation /path/to/bios /path/to/executable [-PSXMODE]\n");
 
         return -1;
     }
 
-    ps2::init(argv[1], argv[2]);
+    ps2::init(argv[1], argv[2], (argc == 4) ? argv[3] : NULL);
     ps2::run();
 
     return 0;

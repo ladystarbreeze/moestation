@@ -59,6 +59,8 @@ struct Status {
 Cause cause;
 Status status;
 
+u32 prid = 0x1F; // Probably not correct, but good enough for the BIOS
+
 u32 epc; // Exception program counter
 
 void checkInterrupt() {
@@ -101,7 +103,7 @@ u32 get(u32 idx) {
             data |= cause.bd << 31;
             break;
         case static_cast<u32>(COP0Reg::EPC ): return epc;
-        case static_cast<u32>(COP0Reg::PRId): return 0x1F; // Probably not correct, but good enough for the BIOS
+        case static_cast<u32>(COP0Reg::PRId): return prid;
         default:
             std::printf("[COP0:IOP  ] Unhandled register read @ %u\n", idx);
 
@@ -208,6 +210,10 @@ void setBD(bool bd) {
 /* Sets the exception program counter */
 void setEPC(u32 pc) {
     epc = pc;
+}
+
+void setID(u32 id) {
+    prid = id;
 }
 
 }

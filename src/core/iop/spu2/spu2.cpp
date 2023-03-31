@@ -294,6 +294,12 @@ void write(u32 addr, u16 data) {
     }
 }
 
+void writePS1(u32 addr, u16 data) {
+    std::printf("[SPU1      ] 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
+
+    return;
+}
+
 /* Clears DMA busy flags */
 void transferEnd(int coreID) {
     coreSTAT[coreID] &= ~static_cast<u16>(CoreStatus::DMABusy);

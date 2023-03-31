@@ -36,4 +36,6 @@ bool isCacheIsolated();
 void setBD(bool bd);
 void setEPC(u32 pc);
 
+void setID(u32 id);
+
 }

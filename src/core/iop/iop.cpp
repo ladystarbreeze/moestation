@@ -101,6 +101,7 @@ enum SPECIALOpcode {
     DIVU    = 0x1B,
     ADD     = 0x20,
     ADDU    = 0x21,
+    SUB     = 0x22,
     SUBU    = 0x23,
     AND     = 0x24,
     OR      = 0x25,
@@ -302,7 +303,7 @@ void doBranch(u32 target, bool isCond, u32 rd) {
 
 /* Raises a CPU exception */
 void raiseException(Exception e) {
-    std::printf("[IOP       ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
+    //std::printf("[IOP       ] %s exception @ 0x%08X\n", cop0::eNames[e], cpc);
 
     cop0::enterException(e); // Set exception code, save 
 
@@ -1114,6 +1115,30 @@ void iSRLV(u32 instr) {
     }
 }
 
+/* SUBtract */
+void iSUB(u32 instr) {
+    const auto rd = getRd(instr);
+    const auto rs = getRs(instr);
+    const auto rt = getRt(instr);
+
+    const auto res = regs[rs] - regs[rt];
+
+    /* If rs and imm have different signs and rs and the result have a different sign,
+     * an arithmetic overflow occurred
+     */
+    if (((regs[rs] ^ regs[rt]) & (1 << 31)) && ((regs[rs] ^ res) & (1 << 31))) {
+        std::printf("[IOP       ] SUB: Unhandled Arithmetic Overflow\n");
+
+        exit(0);
+    }
+
+    set(rd, res);
+
+    if (doDisasm) {
+        std::printf("[IOP       ] SUB %s, %s, %s; %s = 0x%08X\n", regNames[rd], regNames[rs], regNames[rt], regNames[rd], regs[rd]);
+    }
+}
+
 /* SUBtract Unsigned */
 void iSUBU(u32 instr) {
     const auto rd = getRd(instr);
@@ -1258,6 +1283,7 @@ void decodeInstr(u32 instr) {
                     case SPECIALOpcode::DIVU   : iDIVU(instr); break;
                     case SPECIALOpcode::ADD    : iADD(instr); break;
                     case SPECIALOpcode::ADDU   : iADDU(instr); break;
+                    case SPECIALOpcode::SUB    : iSUB(instr); break;
                     case SPECIALOpcode::SUBU   : iSUBU(instr); break;
                     case SPECIALOpcode::AND    : iAND(instr); break;
                     case SPECIALOpcode::OR     : iOR(instr); break;
@@ -1386,6 +1412,14 @@ void step(i64 c) {
 
         decodeInstr(fetchInstr());
     }
+}
+
+void enterPS1Mode() {
+    std::printf("[IOP       ] Entering PS1 mode\n");
+
+    cop0::setID(0xE);
+
+    init();
 }
 
 void doInterrupt() {

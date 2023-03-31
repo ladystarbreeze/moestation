@@ -12,6 +12,8 @@ namespace ps2::iop {
 void init();
 void step(i64 c);
 
+void enterPS1Mode();
+
 void doInterrupt();
 
 }

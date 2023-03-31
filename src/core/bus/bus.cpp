@@ -56,6 +56,7 @@ enum class MemoryBaseIOP {
     Timer1 = 0x1F801480,
     DMA1   = 0x1F801500,
     SIO2   = 0x1F808200,
+    SPU    = 0x1F801C00,
     SPU2   = 0x1F900000,
 };
 
@@ -84,6 +85,7 @@ enum class MemorySizeIOP {
     DMA   = 0x000080,
     Timer = 0x000030,
     SIO2  = 0x000084,
+    SPU   = 0x000400,
     SPU2  = 0x002800,
 };
 
@@ -232,6 +234,8 @@ u32 read32(u32 addr) {
                 std::printf("[Bus:EE    ] 32-bit read @ D_ENABLER\n");
                 return ee::dmac::readEnable();
             case 0x1000F130:
+            case 0x1000F300:
+            case 0x1000F380:
             case 0x1000F400:
             case 0x1000F410:
                 //std::printf("[Bus:EE    ] Unhandled 32-bit read @ 0x%08X\n", addr);
@@ -424,6 +428,9 @@ u128 readDMAC128(u32 addr) {
 void write8(u32 addr, u8 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         ram[addr] = data;
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::CDVD), static_cast<u32>(MemorySizeIOP::CDVD))) {
+        std::printf("[Bus:EE    ] CDVD access from EE\n");
+        return iop::cdvd::write(addr, data);
     } else {
         switch (addr) {
             case 0x1000F180: std::printf("%c", (char)data); break;
@@ -439,15 +446,15 @@ void write8(u32 addr, u8 data) {
 void write16(u32 addr, u16 data) {
     if (inRange(addr, static_cast<u32>(MemoryBase::RAM), static_cast<u32>(MemorySize::RAM))) {
         memcpy(&ram[addr], &data, sizeof(u16));
+    } else if (inRange(addr, 0x1F000000, 0x80000)) {
+        // Using MemorySize::BIOS works because the IOP I/O has the same size
+        std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X (IOP EXP1) = 0x%04X\n", addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBase::IOPIO), static_cast<u32>(MemorySize::BIOS))) {
         // Using MemorySize::BIOS works because the IOP I/O has the same size
         std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X (IOP I/O) = 0x%04X\n", addr, data);
     } else {
         switch (addr) {
-            case 0x1A000000:
-            case 0x1A000002:
-            case 0x1A000004:
-            case 0x1A000006:
+            case 0x1A000000: case 0x1A000002: case 0x1A000004: case 0x1A000006:
             case 0x1A000008:
             case 0x1A000010:
                 std::printf("[Bus:EE    ] Unhandled 16-bit write @ 0x%08X = 0x%04X\n", addr, data);
@@ -496,19 +503,15 @@ void write32(u32 addr, u32 data) {
             case 0x1000F590:
                 std::printf("[Bus:EE    ] 32-bit write @ D_ENABLEW = 0x%08X\n", data);
                 return ee::dmac::writeEnable(data);
-            case 0x1000F100:
-            case 0x1000F120:
-            case 0x1000F140:
-            case 0x1000F150:
-            case 0x1000F400:
-            case 0x1000F410:
-            case 0x1000F420:
-            case 0x1000F450:
-            case 0x1000F460:
-            case 0x1000F480:
-            case 0x1000F490:
-            case 0x1000F500:
-            case 0x1000F510:
+            case 0x1000F100: case 0x1000F120:
+            case 0x1000F140: case 0x1000F150:
+            case 0x1000F300: case 0x1000F310: case 0x1000F320: case 0x1000F330:
+            case 0x1000F340:
+            case 0x1000F380:
+            case 0x1000F400: case 0x1000F410: case 0x1000F420:
+            case 0x1000F450: case 0x1000F460:
+            case 0x1000F480: case 0x1000F490:
+            case 0x1000F500: case 0x1000F510:
                 std::printf("[Bus:EE    ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
                 break;
             default:
@@ -582,7 +585,10 @@ void writeIOP8(u32 addr, u8 data) {
             case 0x1F808260:
                 return iop::sio2::writeFIFO(data);
             case 0x1F802070:
-                std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
+                std::printf("[Bus:IOP   ] 8-bit write @ POST2 = 0x%08X\n", data);
+                break;
+            case 0x1FA00000:
+                std::printf("[Bus:IOP   ] 8-bit write @ POST3 = 0x%08X\n", data);
                 break;
             default:
                 std::printf("[Bus:IOP   ] Unhandled 8-bit write @ 0x%08X = 0x%02X\n", addr, data);
@@ -603,6 +609,8 @@ void writeIOP16(u32 addr, u16 data) {
         return iop::timer::write16(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::DMA1), static_cast<u32>(MemorySizeIOP::DMA))) {
         return iop::dmac::write16(addr, data);
+    } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU), static_cast<u32>(MemorySizeIOP::SPU))) { // PSX mode
+        return iop::spu2::writePS1(addr, data);
     } else if (inRange(addr, static_cast<u32>(MemoryBaseIOP::SPU2), static_cast<u32>(MemorySizeIOP::SPU2))) {
         return iop::spu2::write(addr, data);
     } else if ((addr >= spramStart) && (addr < spramEnd)) {
@@ -658,16 +666,44 @@ void writeIOP32(u32 addr, u32 data) {
 
                 spramStart = data;
                 break;
-            case 0x1F801004: case 0x1F80100C:
-            case 0x1F801010: case 0x1F801014: case 0x1F801018: case 0x1F80101C:
+            case 0x1F801000:
+                std::printf("[Bus:IOP   ] 32-bit write @ EXP1_BASE = 0x%08X\n", data);
+                break;
+            case 0x1F801004:
+                std::printf("[Bus:IOP   ] 32-bit write @ EXP2_BASE = 0x%08X\n", data);
+                break;
+            case 0x1F801008:
+                std::printf("[Bus:IOP   ] 32-bit write @ EXP1_DELAY = 0x%08X\n", data);
+                break;
+            case 0x1F80100C:
+                std::printf("[Bus:IOP   ] 32-bit write @ EXP3_DELAY = 0x%08X\n", data);
+                break;
+            case 0x1F801010:
+                std::printf("[Bus:IOP   ] 32-bit write @ BIOS_ROM = 0x%08X\n", data);
+                break;
+            case 0x1F801014:
+                std::printf("[Bus:IOP   ] 32-bit write @ SPU_DELAY = 0x%08X\n", data);
+                break;
+            case 0x1F801018:
+                std::printf("[Bus:IOP   ] 32-bit write @ CDROM_DELAY = 0x%08X\n", data);
+                break;
+            case 0x1F80101C:
+                std::printf("[Bus:IOP   ] 32-bit write @ EXP2_DELAY = 0x%08X\n", data);
+                break;
             case 0x1F801020:
+                std::printf("[Bus:IOP   ] 32-bit write @ COM_DELAY = 0x%08X\n", data);
+                break;
             case 0x1F801060:
+                std::printf("[Bus:IOP   ] 32-bit write @ RAM_SIZE = 0x%08X\n", data);
+                break;
+            case 0x1F802070:
+                std::printf("[Bus:IOP   ] 32-bit write @ POST2 = 0x%08X\n", data);
+                break;
             case 0x1F801400: case 0x1F801404: case 0x1F801408: case 0x1F80140C:
             case 0x1F801410: case 0x1F801414: case 0x1F801418: case 0x1F80141C:
             case 0x1F801420:
             case 0x1F801450:
             case 0x1F8015F0:
-            case 0x1F802070:
                 std::printf("[Bus:IOP   ] Unhandled 32-bit write @ 0x%08X = 0x%08X\n", addr, data);
                 break;
             default:

@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <queue>
 
+#include "iop/iop.hpp"
+
 namespace ps2::sif {
 
 /* --- SIF constants --- */
@@ -135,6 +137,10 @@ void write(u32 addr, u32 data) {
             break;
         case SIFReg::CTRL:
             std::printf("[SIF:EE    ] 32-bit write @ CTRL = 0x%08X\n", data);
+
+            if (data & (1 << 19)) {
+                iop::enterPS1Mode();
+            }
             break;
         case SIFReg::BD6:
             std::printf("[SIF:EE    ] 32-bit write @ BD6 = 0x%08X\n", data);
