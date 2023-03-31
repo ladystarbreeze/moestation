@@ -10,7 +10,7 @@
 
 #include "../../gs/gs.hpp"
 
-namespace ps2::gif {
+namespace ps2::ee::gif {
 
 const char *fmtNames[4] = { "PACKED", "REGLIST", "IMAGE", "IMAGE" };
 

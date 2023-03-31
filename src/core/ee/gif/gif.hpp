@@ -7,7 +7,7 @@
 
 #include "../../../common/types.hpp"
 
-namespace ps2::gif {
+namespace ps2::ee::gif {
 
 u32 read(u32 addr);
 
