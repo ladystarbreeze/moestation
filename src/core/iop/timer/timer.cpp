@@ -167,6 +167,11 @@ void write16(u32 addr, u16 data) {
     auto &timer = timers[chn];
 
     switch ((addr & ~0xFF0) | (1 << 8)) {
+        case TimerReg::COUNT:
+            std::printf("[Timer:IOP ] 16-bit write @ T%d_COUNT = 0x%04X\n", chn, data);
+
+            timer.count = data;
+            break;
         case TimerReg::MODE:
             {
                 auto &mode = timer.mode;
