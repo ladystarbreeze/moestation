@@ -590,6 +590,9 @@ void write(u32 addr, u8 data) {
 
             istat &= ~data;
             break;
+        case 0x1F402014:
+            std::printf("[CDVD      ] 8-bit write @ 0x1F402014 (Unknown) = 0x%02X\n", data);
+            break;
         case CDVDReg::SCMD:
             std::printf("[CDVD      ] 8-bit write @ SCMD = 0x%02X\n", data);
 
