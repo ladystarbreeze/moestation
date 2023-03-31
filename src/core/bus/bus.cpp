@@ -16,6 +16,7 @@
 #include "../ee/timer/timer.hpp"
 #include "../ee/gif/gif.hpp"
 #include "../gs/gs.hpp"
+#include "../iop/cdrom/cdrom.hpp"
 #include "../iop/cdvd/cdvd.hpp"
 #include "../iop/dmac/dmac.hpp"
 #include "../iop/sio2/sio2.hpp"
@@ -300,6 +301,8 @@ u8 readIOP8(u32 addr) {
         return iopSPRAM[addr - spramStart];
     } else {
         switch (addr) {
+            case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
+                return iop::cdrom::read(addr);
             case 0x1F808264:
                 return iop::sio2::readFIFO();
             default:
@@ -590,6 +593,8 @@ void writeIOP8(u32 addr, u8 data) {
         iopSPRAM[addr] = data;
     } else {
         switch (addr) {
+            case 0x1F801800: case 0x1F801801: case 0x1F801802: case 0x1F801803:
+                return iop::cdrom::write(addr, data);
             case 0x1F808260:
                 return iop::sio2::writeFIFO(data);
             case 0x1F802070:

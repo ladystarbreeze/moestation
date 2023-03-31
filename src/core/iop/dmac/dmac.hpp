@@ -36,4 +36,6 @@ void write32(u32 addr, u32 data);
 
 void setDRQ(Channel chn, bool drq);
 
+void enterPS1Mode();
+
 }

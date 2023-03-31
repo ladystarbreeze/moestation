@@ -18,6 +18,7 @@
 #include "ee/vif/vif.hpp"
 #include "gs/gs.hpp"
 #include "iop/iop.hpp"
+#include "iop/cdrom/cdrom.hpp"
 #include "iop/cdvd/cdvd.hpp"
 #include "iop/dmac/dmac.hpp"
 #include "iop/timer/timer.hpp"
@@ -77,9 +78,11 @@ void init(const char *biosPath, const char *path, const char *psxmode) {
     gs::init();
 
     iop::init();
-    iop::cdvd::init(execPath);
     iop::dmac::init();
     iop::timer::init();
+
+    iop::cdvd::init(execPath);
+    iop::cdrom::init(execPath);
 
     scheduler::flush();
 
@@ -106,6 +109,11 @@ void run() {
     }
 
     SDL_Quit();
+}
+
+void enterPS1Mode() {
+    iop::enterPS1Mode();
+    iop::dmac::enterPS1Mode();
 }
 
 /* Fast boots an ISO or ELF */

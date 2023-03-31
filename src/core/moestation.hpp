@@ -12,6 +12,8 @@ namespace ps2 {
 void init(const char *biosPath, const char *execPath, const char *psxmode);
 void run();
 
+void enterPS1Mode();
+
 void fastBoot();
 
 void update(const u8 *fb);

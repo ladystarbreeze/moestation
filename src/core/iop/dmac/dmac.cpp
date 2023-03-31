@@ -9,6 +9,7 @@
 #include <cassert>
 #include <cstdio>
 
+#include "../cdrom/cdrom.hpp"
 #include "../cdvd/cdvd.hpp"
 #include "../sio2/sio2.hpp"
 #include "../spu2/spu2.hpp"
@@ -114,6 +115,8 @@ bool mid = false; // Master interrupt disable
 /* DMAC scheduler event IDs */
 u32 idTransferEnd, idSIF0Start, idSIF1Start;
 
+bool inPS1Mode;
+
 void checkInterrupt();
 
 void transferEndEvent(int chnID) {
@@ -171,6 +174,33 @@ Channel getChannel(u32 addr) {
 
             return Channel::Unknown;
     }
+}
+
+/* Handles CDROM DMA */
+void doCDROM() {
+    const auto chnID = Channel::CDVD;
+
+    auto &chn  = channels[static_cast<int>(chnID)];
+    auto &chcr = chn.chcr;
+
+    //std::printf("[DMAC      ] CDROM transfer\n");
+
+    assert(!chcr.dir); // Always to RAM
+    assert(chcr.mod == Mode::Burst); // Always burst?
+    assert(!chcr.dec); // Always incrementing?
+    assert(chn.size);
+
+    for (int i = 0; i < chn.size; i++) {
+        bus::write32(chn.madr, cdrom::readDMAC());
+
+        chn.madr += 4;
+    }
+
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 24 * chn.size);
+
+    /* Clear BCR */
+    chn.count = 0;
+    chn.size  = 0;
 }
 
 /* Performs CDVD DMA */
@@ -465,7 +495,7 @@ void doSPU2() {
 
 void startDMA(Channel chn) {
     switch (chn) {
-        case Channel::CDVD   : doCDVD(); break;
+        case Channel::CDVD   : (inPS1Mode) ? doCDROM() : doCDVD(); break;
         case Channel::SPU1   : doSPU1(); break;
         case Channel::SPU2   : doSPU2(); break;
         case Channel::SIF0   : doSIF0(); break;
@@ -538,6 +568,8 @@ void init() {
     idTransferEnd = scheduler::registerEvent([](int chnID) { transferEndEvent(chnID); });
     idSIF0Start = scheduler::registerEvent([](int) { sif0StartEvent(); });
     idSIF1Start = scheduler::registerEvent([](int) { sif1StartEvent(); });
+
+    inPS1Mode = false;
 }
 
 u32 read32(u32 addr) {
@@ -752,6 +784,10 @@ void setDRQ(Channel chn, bool drq) {
     channels[static_cast<int>(chn)].drq = drq;
 
     checkRunning(chn);
+}
+
+void enterPS1Mode() {
+    inPS1Mode = true;
 }
 
 }
