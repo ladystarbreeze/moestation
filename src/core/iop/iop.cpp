@@ -136,6 +136,8 @@ bool inDelaySlot[2]; // Branch delay helper
 
 u32 msgAddr;
 
+bool inPS1Mode = false;
+
 /* --- Register accessors --- */
 
 /* Sets a CPU register */
@@ -1388,15 +1390,7 @@ void step(i64 c) {
     for (int i = c; i != 0; i--) {
         cpc = pc; // Save current PC
 
-        if (cpc == 0x8EE0) {
-            doNewPrintf = true;
-
-            msgAddr = regs[CPUReg::SP] + 0x14;
-        } else if (cpc == 0x9664) {
-            doNewPrintf = false;
-        }
-
-        if (doPrintf && ((cpc == 0x12C48) || (cpc == 0x1420C) || (cpc == 0x1430C))) {
+        if (!inPS1Mode && doPrintf && ((cpc == 0x12C48) || (cpc == 0x1420C) || (cpc == 0x1430C))) {
             auto ptr = regs[5];
 
             for (auto ctr = regs[6]; ctr > 0; ctr--) {
@@ -1410,6 +1404,21 @@ void step(i64 c) {
         inDelaySlot[0] = inDelaySlot[1];
         inDelaySlot[1] = false;
 
+        /* Hook into BIOS functions */
+        if (inPS1Mode && ((cpc == 0xA0) || (cpc == 0xB0) || (cpc == 0xC0))) {
+            /* Get BIOS function */
+            const auto funct = regs[CPUReg::T1];
+
+            if ((cpc == 0xA0) && (funct == 0x40)) {
+                std::printf("[CPU        ] SystemErrorUnresolvedException()\n"); // Bad.
+
+                exit(0);
+            } else if ((cpc == 0xB0) && (funct == 0x3D)) {
+                /* putc */
+                std::printf("%c", (char)regs[CPUReg::A0]);
+            }
+        }
+
         decodeInstr(fetchInstr());
     }
 }
@@ -1420,6 +1429,8 @@ void enterPS1Mode() {
     cop0::setID(0xE);
 
     init();
+
+    inPS1Mode = true;
 }
 
 void doInterrupt() {
