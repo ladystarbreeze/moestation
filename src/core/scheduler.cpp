@@ -74,6 +74,17 @@ void addEvent(u64 id, int param, i64 cyclesUntilEvent) {
     nextEvents.emplace(Event{id, param, cyclesUntilEvent});
 }
 
+/* Removes all scheduler events of a certain ID */
+void removeEvent(u64 id) {
+    for (auto event = events.begin(); event != events.end();) {
+        if (event->id == id) {
+            event = events.erase(event);
+        } else {
+            event++;
+        }
+    }
+}
+
 void processEvents(i64 elapsedCycles) {
     assert(!events.empty());
 
