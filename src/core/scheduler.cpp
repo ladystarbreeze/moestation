@@ -5,12 +5,18 @@
 
 #include "scheduler.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <deque>
+#include <queue>
 #include <vector>
 
 namespace ps2::scheduler {
+
+/* --- Scheduler constants --- */
+
+constexpr i64 MAX_RUN_CYCLES = 64;
 
 /* Scheduler event */
 struct Event {
@@ -20,11 +26,12 @@ struct Event {
     i64 cyclesUntilEvent;
 };
 
-std::deque<Event> events; // Event queue
+std::deque<Event> events;     // Event queue
+std::queue<Event> nextEvents;
 
-std::vector<std::function<void(int, i64)>> registeredFuncs;
+std::vector<std::function<void(int)>> registeredFuncs;
 
-i64 cycleCount, cyclesUntilNextEvent;
+i64 cyclesUntilNextEvent;
 
 /* Finds the next event */
 void reschedule() {
@@ -38,11 +45,19 @@ void reschedule() {
 }
 
 void init() {
-    cycleCount = cyclesUntilNextEvent = 0;
+    cyclesUntilNextEvent = INT64_MAX;
+}
+
+void flush() {
+    if (nextEvents.empty()) return reschedule();
+
+    while (!nextEvents.empty()) { events.push_back(nextEvents.front()); nextEvents.pop(); }
+
+    reschedule();
 }
 
 /* Registers an event, returns event ID */
-u64 registerEvent(std::function<void(int, i64)> func) {
+u64 registerEvent(std::function<void(int)> func) {
     static u64 idPool;
 
     registeredFuncs.push_back(func);
@@ -51,42 +66,39 @@ u64 registerEvent(std::function<void(int, i64)> func) {
 }
 
 /* Adds a scheduler event */
-void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule) {
+void addEvent(u64 id, int param, i64 cyclesUntilEvent) {
     assert(cyclesUntilEvent >= 0);
 
     //std::printf("[Scheduler ] Adding event %llu, cycles until event: %lld\n", id, cyclesUntilEvent);
 
-    events.push_front(Event{id, param, cyclesUntilEvent});
-
-    if (doReschedule) reschedule();
+    nextEvents.emplace(Event{id, param, cyclesUntilEvent});
 }
 
 void processEvents(i64 elapsedCycles) {
     assert(!events.empty());
 
-    cycleCount += elapsedCycles;
-
-    if (cycleCount < cyclesUntilNextEvent) return;
+    cyclesUntilNextEvent -= elapsedCycles;
 
     for (auto event = events.begin(); event != events.end();) {
-        event->cyclesUntilEvent -= cycleCount;
+        event->cyclesUntilEvent -= elapsedCycles;
 
-        if (event->cyclesUntilEvent <= 0) {
+        assert(event->cyclesUntilEvent >= 0);
+
+        if (!event->cyclesUntilEvent) {
             const auto id = event->id;
             const auto param = event->param;
-            const auto cyclesUntilEvent = event->cyclesUntilEvent;
 
             event = events.erase(event);
 
-            registeredFuncs[id](param, cyclesUntilEvent);
+            registeredFuncs[id](param);
         } else {
             event++;
         }
     }
+}
 
-    cycleCount -= cyclesUntilNextEvent;
-
-    reschedule();
+i64 getRunCycles() {
+    return std::min((i64)MAX_RUN_CYCLES, cyclesUntilNextEvent);
 }
 
 }

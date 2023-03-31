@@ -117,7 +117,7 @@ u8 istat = 0;
 
 SeekParam seekParam;
 
-/* GS scheduler event IDs */
+/* CDVD scheduler event IDs */
 u64 idFinishSeek, idRequestDMA;
 
 i64 getBlockTiming(bool);
@@ -136,8 +136,7 @@ void finishSeekEvent() {
         doReadCD();
     }
 
-    //scheduler::addEvent(idRequestDMA, 0, 8 * getBlockTiming(isDVD), false);
-    scheduler::addEvent(idRequestDMA, 0, getBlockTiming(isDVD), false); // Speed hack
+    scheduler::addEvent(idRequestDMA, 0, getBlockTiming(isDVD));
 }
 
 void requestDMAEvent() {
@@ -191,7 +190,7 @@ void doSeek() {
     }
 
     /* Schedule seek */
-    scheduler::addEvent(idFinishSeek, 0, 8 * seekCycles, true);
+    scheduler::addEvent(idFinishSeek, 0, 8 * seekCycles);
 
     if (delta) {
         setDriveStatus(static_cast<u8>(DriveStatus::SEEKING) | static_cast<u8>(DriveStatus::SPINNING));
@@ -479,8 +478,8 @@ void init(const char *path) {
     file.unsetf(std::ios::skipws);
 
     /* Register CDVD events */
-    idFinishSeek = scheduler::registerEvent([](int, i64) { finishSeekEvent(); });
-    idRequestDMA = scheduler::registerEvent([](int, i64) { requestDMAEvent(); });
+    idFinishSeek = scheduler::registerEvent([](int) { finishSeekEvent(); });
+    idRequestDMA = scheduler::registerEvent([](int) { requestDMAEvent(); });
 }
 
 u8 read(u32 addr) {
@@ -615,9 +614,9 @@ void getExecPath(char *path) {
 
     char buf[64];
 
-    // Check the beginning of the first 512 DVD sectors for the BOOT2 string
-    for (int i = 0; i < 512; i++) {
-        file.seekg(2048 * i, std::ios_base::beg);
+    // Check the beginning of the first 2048 DVD sectors for the BOOT2 string
+    for (int i = 0; i < 2048 * 2048; i++) {
+        file.seekg(i, std::ios_base::beg);
         file.read(buf, sizeof(buf));
 
         if (std::strncmp(buf, boot2Str, 16) != 0) continue;

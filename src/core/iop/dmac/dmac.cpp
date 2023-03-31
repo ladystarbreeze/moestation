@@ -205,7 +205,7 @@ void doCDVD() {
         chn.count = 0;
         chn.size  = 0;
 
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 2 * len);
     }
 }
 
@@ -263,11 +263,11 @@ void doSIF0() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idSIF0Start, 0, 16 * len, true);
+    scheduler::addEvent(idSIF0Start, 0, 16 * len);
 
     if (!chn.len && chn.isTagEnd) {
         /* NOTE: no need to reschedule because the SIF0 Start event happens at the same time */
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, false);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len);
     }
 }
 
@@ -323,11 +323,11 @@ void doSIF1() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idSIF1Start, 0, 16 * len, true);
+    scheduler::addEvent(idSIF1Start, 0, 16 * len);
 
     if (!chn.len && chn.isTagEnd) {
         /* NOTE: no need to reschedule because the SIF1 Start event happens at the same time */
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, false);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len);
     }
 }
 
@@ -356,7 +356,7 @@ void doSIO2IN() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len);
 
     /* Clear BCR */
     chn.count = 0;
@@ -388,7 +388,7 @@ void doSIO2OUT() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * chn.len);
 
     setDRQ(Channel::SIO2IN, true);
 
@@ -426,7 +426,7 @@ void doSPU1() {
         chn.count = 0;
         chn.size  = 0;
 
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len);
     }
 }
 
@@ -459,7 +459,7 @@ void doSPU2() {
         chn.count = 0;
         chn.size  = 0;
 
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len, true);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 16 * len);
     }
 }
 
@@ -535,9 +535,9 @@ void init() {
 
     /* Register scheduler events */
 
-    idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
-    idSIF0Start = scheduler::registerEvent([](int, i64) { sif0StartEvent(); });
-    idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
+    idTransferEnd = scheduler::registerEvent([](int chnID) { transferEndEvent(chnID); });
+    idSIF0Start = scheduler::registerEvent([](int) { sif0StartEvent(); });
+    idSIF1Start = scheduler::registerEvent([](int) { sif1StartEvent(); });
 }
 
 u32 read32(u32 addr) {

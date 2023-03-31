@@ -304,7 +304,7 @@ void doPATH3() {
     //chn.drq = false;
 
     if (!chn.qwc && ((chcr.mod != Mode::Chain) || chn.isTagEnd)) {
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, true);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc);
     }
 }
 
@@ -348,11 +348,11 @@ void doSIF0() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idSIF0Start, 0, 4 * qwc, true);
+    scheduler::addEvent(idSIF0Start, 0, 4 * qwc);
 
     if (!chn.qwc && chn.isTagEnd) {
         /* NOTE: no need to reschedule because the SIF0 Start event happens at the same time */
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, false);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc);
     }
 }
 
@@ -375,9 +375,9 @@ void doSIF1() {
         assert(!chcr.tte); // No tag transfers?
         
         if (!chn.qwc) {
-            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1, true);
+            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1);
 
-            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1, true);
+            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1);
         }
     }
 
@@ -399,11 +399,11 @@ void doSIF1() {
     /* Clear DRQ */
     chn.drq = false;
 
-    scheduler::addEvent(idSIF1Start, 0, 4 * qwc, true);
+    scheduler::addEvent(idSIF1Start, 0, 4 * qwc);
 
     if (!chn.qwc && chn.isTagEnd) {
         /* NOTE: no need to reschedule because the SIF1 Start event happens at the same time */
-        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc, false);
+        scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * qwc);
     }
 }
 
@@ -426,9 +426,9 @@ void doVIF1() {
         //assert(!chcr.tte); // No tag transfers?
         
         if (!chn.qwc) {
-            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1, true);
+            if (!chn.isTagEnd) return scheduler::addEvent(idRestart, static_cast<int>(chnID), 1);
 
-            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1, true);
+            return scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 1);
         }
     }
 
@@ -452,7 +452,7 @@ void doVIF1() {
     /* Clear DRQ */
     //chn.drq = false;
 
-    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.qwc, true);
+    scheduler::addEvent(idTransferEnd, static_cast<int>(chnID), 4 * chn.qwc);
 
     chn.qwc = 0;
 }
@@ -519,10 +519,10 @@ void init() {
 
     /* Register scheduler events */
 
-    idTransferEnd = scheduler::registerEvent([](int chnID, i64) { transferEndEvent(chnID); });
-    idRestart   = scheduler::registerEvent([](int chnID, i64) { restartEvent(chnID); });
-    idSIF0Start = scheduler::registerEvent([](int, i64) { sif0StartEvent(); });
-    idSIF1Start = scheduler::registerEvent([](int, i64) { sif1StartEvent(); });
+    idTransferEnd = scheduler::registerEvent([](int chnID) { transferEndEvent(chnID); });
+    idRestart   = scheduler::registerEvent([](int chnID) { restartEvent(chnID); });
+    idSIF0Start = scheduler::registerEvent([](int) { sif0StartEvent(); });
+    idSIF1Start = scheduler::registerEvent([](int) { sif1StartEvent(); });
 }
 
 u32 read(u32 addr) {

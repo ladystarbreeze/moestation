@@ -32,8 +32,6 @@ using VectorInterface = ee::vif::VectorInterface;
 
 /* --- moestation constants --- */
 
-constexpr i64 EE_CYCLES = 16;
-
 /* SDL2 */
 SDL_Renderer *renderer;
 SDL_Window   *window;
@@ -81,22 +79,28 @@ void init(const char *biosPath, const char *path) {
     iop::dmac::init();
     iop::timer::init();
 
+    scheduler::flush();
+
     initSDL();
 }
 
 void run() {
     while (isRunning) {
+        const auto runCycles = scheduler::getRunCycles();
+
+        scheduler::processEvents(runCycles);
+
         /* Step EE hardware */
 
-        ee::cpu::step(EE_CYCLES);
-        ee::timer::step(EE_CYCLES >> 1);
+        ee::cpu::step(runCycles);
+        ee::timer::step(runCycles >> 1);
 
         /* Step IOP hardware */
 
-        iop::step(EE_CYCLES >> 3);
-        iop::timer::step(EE_CYCLES >> 3);
+        iop::step(runCycles >> 3);
+        iop::timer::step(runCycles >> 3);
 
-        scheduler::processEvents(EE_CYCLES);
+        scheduler::flush();
     }
 
     SDL_Quit();

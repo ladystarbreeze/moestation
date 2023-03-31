@@ -13,9 +13,13 @@ namespace ps2::scheduler {
 
 void init();
 
-u64 registerEvent(std::function<void(int, i64)> func);
+void flush();
 
-void addEvent(u64 id, int param, i64 cyclesUntilEvent, bool doReschedule);
+u64 registerEvent(std::function<void(int)> func);
+
+void addEvent(u64 id, int param, i64 cyclesUntilEvent);
 void processEvents(i64 elapsedCycles);
+
+i64 getRunCycles();
 
 }
