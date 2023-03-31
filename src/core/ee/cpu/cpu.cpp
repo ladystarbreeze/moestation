@@ -1422,7 +1422,7 @@ void iLDR(u32 instr) {
     }
 
     const auto shift = 8 * (addr & 7);
-    const auto mask = ~(~0ull >> shift);
+    const auto mask = 0xFFFFFF00ull << (56 - shift);
 
     set64(rt, (regs[rt]._u64[0] & mask) | (read64(addr & ~7) >> shift));
 }
@@ -1620,7 +1620,7 @@ void iLWR(u32 instr) {
     }
 
     const auto shift = 8 * (addr & 3);
-    const auto mask = ~(~0 >> shift);
+    const auto mask = 0xFFFFFF00 << (24 - shift);
 
     set32(rt, (regs[rt]._u32[0] & mask) | (read32(addr & ~3) >> shift));
 }
@@ -2383,10 +2383,10 @@ void iSDL(u32 instr) {
 
     const auto addr = regs[rs]._u32[0] + imm;
 
-    const auto shift = 56 - 8 * (addr & 7);
-    const auto mask  = ~(~0ull >> shift);
+    const auto shift = 8 * (addr & 7);
+    const auto mask  = 0xFFFFFF00ull << shift;
 
-    const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] >> shift);
+    const auto data = (read64(addr & ~7) & mask) | (regs[rt]._u64[0] >> (56 - shift));
 
     if (doDisasm) {
         std::printf("[EE Core   ] SDL %s, 0x%X(%s); [0x%08X] = 0x%016llX\n", regNames[rt], imm, regNames[rs], addr, data);
@@ -2706,10 +2706,10 @@ void iSWL(u32 instr) {
 
     const auto addr = regs[rs]._u32[0] + imm;
 
-    const auto shift = 24 - 8 * (addr & 3);
-    const auto mask  = ~(~0 >> shift);
+    const auto shift = 8 * (addr & 3);
+    const auto mask  = 0xFFFFFF00 << shift;
 
-    const auto data = (read32(addr & ~3) & mask) | (regs[rt]._u32[0] >> shift);
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt]._u32[0] >> (24 - shift));
 
     if (doDisasm) {
         std::printf("[EE Core   ] SWL %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);

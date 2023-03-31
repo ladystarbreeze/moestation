@@ -753,7 +753,7 @@ void iLWR(u32 instr) {
     }
 
     const auto shift = 8 * (addr & 3);
-    const auto mask = ~(~0 >> shift);
+    const auto mask = 0xFFFFFF00 << (24 - shift);
 
     set(rt, (regs[rt] & mask) | (read32(addr & ~3) >> shift));
 }
@@ -1161,10 +1161,10 @@ void iSWL(u32 instr) {
 
     const auto addr = regs[rs] + imm;
 
-    const auto shift = 24 - 8 * (addr & 3);
-    const auto mask  = ~(~0 >> shift);
+    const auto shift = 8 * (addr & 3);
+    const auto mask  = 0xFFFFFF00 << shift;
 
-    const auto data = (read32(addr & ~3) & mask) | (regs[rt] >> shift);
+    const auto data = (read32(addr & ~3) & mask) | (regs[rt] >> (24 - shift));
 
     if (doDisasm) {
         std::printf("[IOP       ] SWL %s, 0x%X(%s); [0x%08X] = 0x%08X\n", regNames[rt], imm, regNames[rs], addr, data);
